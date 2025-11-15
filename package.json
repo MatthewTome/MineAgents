@@ -3,11 +3,11 @@
   "private": true,
   "version": "0.0.0",
   "description": "Monorepo for MineAgents capstone",
-  "packageManager": "pnpm@9",
-  "workspaces": ["apps/*","packages/*"],
+  "workspaces": ["apps/*", "packages/*"],
+  "packageManager": "pnpm@10.22.0",
   "scripts": {
-    "dev:bot": "echo ^\"TBD: start bot\"",
-    "dev:dash": "echo ^\"TBD: start dashboard\"",
-    "lint": "echo ^\"TBD: lint all workspaces\""
+    "dev:bot": "pnpm -C apps/bot dev",
+    "build:bot": "pnpm -C apps/bot build",
+    "lint": "echo \"(add eslint later)\""
   }
 }
