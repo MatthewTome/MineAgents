@@ -8,6 +8,7 @@
   "scripts": {
     "dev:bot": "pnpm -C apps/bot dev",
     "build:bot": "pnpm -C apps/bot build",
+    "test:bot": "pnpm --filter @mineagents/bot test",
     "lint": "echo \"(add eslint later)\""
   }
 }
