@@ -1,0 +1,13 @@
+{
+    "python.analysis.extraPaths": [
+        "./py/agent"
+    ],
+    "terminal.integrated.env.windows": {
+        "PYTHONPATH": "${workspaceFolder}/py/agent"
+    },
+    "python.testing.pytestArgs": [
+        "py/agent/tests"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true
+}
