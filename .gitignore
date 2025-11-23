@@ -404,6 +404,5 @@ FodyWeavers.xsd
 /dist
 logs
 .env
-/mcserver
-/demos
-/bot/config/
+/extras
+/apps/bot/config/
