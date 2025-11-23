@@ -406,3 +406,4 @@ logs
 .env
 /mcserver
 /demos
+/bot/config/

@@ -1,0 +1,17 @@
+# MineAgents bot configuration
+# Copy this file to config/bot.config.yaml (or set BOT_CONFIG to a custom path)
+# and tweak the values to match your server.
+connection:
+  host: 127.0.0.1
+  port: 25565
+  username: MineAgent
+  version: "1.21"
+
+perception:
+  # Samples per second for perception snapshots.
+  hz: 5
+  nearbyRange: 12
+  blockSampleRadiusXY: 2
+  blockSampleHalfHeight: 1
+  maxNearbyEntities: 24
+  chatBuffer: 10

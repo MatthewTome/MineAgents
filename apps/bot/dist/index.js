@@ -1,21 +1,49 @@
 import mineflayer from "mineflayer";
-import { PerceptionCollector } from "./perception";
-function createBot() {
+import path from "node:path";
+import fs from "node:fs";
+import { loadBotConfig, ConfigError } from "./config.js";
+import { PerceptionCollector } from "./perception.js";
+import { runSetupWizard } from "./setup.js";
+async function createBot() {
+    const defaultPath = path.join(process.cwd(), "config", "bot.config.yaml");
+    const configPath = process.env.BOT_CONFIG ?? defaultPath;
+    if (!fs.existsSync(configPath) && !process.env.BOT_CONFIG) {
+        try {
+            await runSetupWizard(configPath);
+        }
+        catch (err) {
+            console.error("Setup failed:", err);
+            process.exit(1);
+        }
+    }
+    let cfg;
+    try {
+        cfg = loadBotConfig(configPath);
+    }
+    catch (err) {
+        if (err instanceof ConfigError) {
+            console.error(`[config] ${err.message}`);
+        }
+        else {
+            console.error("[config] Unexpected error", err);
+        }
+        process.exit(1);
+    }
     const bot = mineflayer.createBot({
-        host: "127.0.0.1",
-        port: 25565,
-        username: "MineAgent",
-        version: "1.21",
+        host: cfg.connection.host,
+        port: cfg.connection.port,
+        username: cfg.connection.username,
+        version: cfg.connection.version,
     });
     bot.once("spawn", () => {
         console.log("[bot] spawned");
         const perception = new PerceptionCollector(bot, {
-            hz: 5,
-            nearbyRange: 12,
-            blockSampleRadiusXY: 2,
-            blockSampleHalfHeight: 1,
-            maxNearbyEntities: 24,
-            chatBuffer: 10
+            hz: cfg.perception.hz,
+            nearbyRange: cfg.perception.nearbyRange,
+            blockSampleRadiusXY: cfg.perception.blockSampleRadiusXY,
+            blockSampleHalfHeight: cfg.perception.blockSampleHalfHeight,
+            maxNearbyEntities: cfg.perception.maxNearbyEntities,
+            chatBuffer: cfg.perception.chatBuffer
         });
         let lastLog = 0;
         perception.start((snap) => {
@@ -48,4 +76,4 @@ function createBot() {
     });
     return bot;
 }
-createBot();
+createBot().catch(console.error);

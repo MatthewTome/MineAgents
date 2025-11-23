@@ -270,7 +270,6 @@ export class PerceptionCollector {
         };
     }
     biomeNameAt(pos) {
-        // World → biome id lookup (some versions expect y=0 for columns)
         const x = Math.floor(pos.x);
         const z = Math.floor(pos.z);
         const y = 0;
@@ -278,12 +277,10 @@ export class PerceptionCollector {
         if (biomeId == null) {
             return undefined;
         }
-        // Try to map id → name via registry (Mineflayer exposes prismarine-registry here)
         const biomes = this.bot?.registry?.biomes;
         if (biomes && biomes[biomeId] && biomes[biomeId].name) {
             return biomes[biomeId].name;
         }
-        // Fallback: return the numeric id as a string
         return String(biomeId);
     }
 }
