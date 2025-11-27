@@ -5,6 +5,9 @@ import { loadBotConfig, ConfigError } from "./config.js";
 import { PerceptionCollector } from "./perception.js";
 import { PerceptionSnapshot } from "./types.js";
 import { runSetupWizard } from "./setup.js";
+import { ActionExecutor } from "./action-executor.js";
+import { wireChatBridge } from "./chat-commands.js";
+import { ReflectionLogger } from "./reflection-log.js";
 
 async function createBot()
 {
@@ -52,6 +55,17 @@ async function createBot()
     {
         console.log("[bot] spawned");
 
+        const reflection = new ReflectionLogger();
+        const executor = new ActionExecutor(bot, undefined,
+        {
+            logger: (entry) =>
+            {
+                reflection.record(entry);
+                const reason = entry.reason ? ` (${entry.reason})` : "";
+                console.log(`[action] ${entry.action}#${entry.id} -> ${entry.status}${reason}`);
+            }
+        });
+        
         const perception = new PerceptionCollector(bot,
         {
             hz: cfg.perception.hz,
@@ -63,6 +77,8 @@ async function createBot()
         });
 
         let lastLog = 0;
+
+        const unwireChat = wireChatBridge(bot, executor);
 
         perception.start((snap: PerceptionSnapshot) =>
         {
@@ -91,6 +107,9 @@ async function createBot()
         bot.on("end", () =>
         {
             perception.stop();
+            unwireChat();
+            const summaryPath = reflection.writeSummaryFile();
+            console.log(`[reflection] summary written to ${summaryPath}`);
         });
     });
 

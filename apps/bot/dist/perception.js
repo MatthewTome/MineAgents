@@ -7,6 +7,7 @@ const DEFAULTS = {
     maxNearbyEntities: 24,
     chatBuffer: 10
 };
+
 export class PerceptionCollector {
     bot;
     cfg;
@@ -42,6 +43,7 @@ export class PerceptionCollector {
     getSnapshot() {
         return this.buildSnapshot();
     }
+
     // —— internals ———————————————————————————————————————————————————
     wireEvents() {
         this.bot.on("move", () => this.markDirty());
@@ -284,6 +286,7 @@ export class PerceptionCollector {
         return String(biomeId);
     }
 }
+
 // —— helpers ————————————————————————————————————————————————————————
 function classifyEntity(name, type) {
     const n = (name ?? "").toLowerCase();

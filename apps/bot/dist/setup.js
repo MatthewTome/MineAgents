@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
 import { dump as dumpYaml } from "js-yaml";
+
 export async function runSetupWizard(destinationPath) {
     console.clear();
     console.log("\n" + "=".repeat(60));

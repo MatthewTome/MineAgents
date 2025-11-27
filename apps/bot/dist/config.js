@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { load as loadYaml, YAMLException } from "js-yaml";
 import { z } from "zod";
+
 export class ConfigError extends Error {
     line;
     field;
@@ -29,6 +30,7 @@ const configSchema = z.object({
         chatBuffer: z.number().int().positive().default(10)
     }).default({})
 });
+
 export function loadBotConfig(configPath) {
     const resolved = path.resolve(configPath);
     if (!fs.existsSync(resolved)) {
@@ -76,10 +78,12 @@ export function loadBotConfig(configPath) {
     const withDefaults = result.data;
     return withDefaults;
 }
+
 function offsetToLine(raw, offset) {
     const upToOffset = raw.slice(0, offset);
     return upToOffset.split(/\r?\n/).length;
 }
+
 function lineForKey(raw, path) {
     const key = path[path.length - 1];
     if (typeof key !== "string") {
