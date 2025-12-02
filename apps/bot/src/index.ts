@@ -6,6 +6,7 @@ import { PerceptionCollector } from "./perception.js";
 import { PerceptionSnapshot } from "./types.js";
 import { runSetupWizard } from "./setup.js";
 import { ActionExecutor } from "./action-executor.js";
+import { createDefaultActionHandlers } from "./action-handlers.js";
 import { wireChatBridge } from "./chat-commands.js";
 import { ReflectionLogger } from "./reflection-log.js";
 
@@ -56,7 +57,8 @@ async function createBot()
         console.log("[bot] spawned");
 
         const reflection = new ReflectionLogger();
-        const executor = new ActionExecutor(bot, undefined,
+        const handlers = createDefaultActionHandlers();
+        const executor = new ActionExecutor(bot, handlers,
         {
             logger: (entry) =>
             {

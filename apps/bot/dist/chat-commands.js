@@ -16,7 +16,6 @@ export async function handleChatCommand(bot, executor, username, message, option
     }
     return false;
 }
-
 export function wireChatBridge(bot, executor, options) {
     const listener = async (username, message) => {
         if (username === bot.username) {
@@ -36,7 +35,6 @@ export function wireChatBridge(bot, executor, options) {
     bot.on("chat", listener);
     return () => bot.removeListener("chat", listener);
 }
-
 async function handleSay(bot, executor, username, trimmed, sayCmd) {
     const withoutCmd = trimmed.replace(new RegExp(`^${escapeRegExp(sayCmd)}\\s*`), "");
     if (!withoutCmd) {
@@ -53,7 +51,6 @@ async function handleSay(bot, executor, username, trimmed, sayCmd) {
     await executeAndReport(bot, executor, step);
     return true;
 }
-
 async function handleAct(bot, executor, username, trimmed, actCmd) {
     const rest = trimmed.replace(new RegExp(`^${escapeRegExp(actCmd)}\\s*`), "").trim();
     if (!rest) {
@@ -95,7 +92,6 @@ async function handleAct(bot, executor, username, trimmed, actCmd) {
     await executeAndReport(bot, executor, step);
     return true;
 }
-
 function parseIdAndPayload(input) {
     const tokens = input.trim().split(" ");
     if (tokens[0]?.startsWith("id=")) {
@@ -104,7 +100,6 @@ function parseIdAndPayload(input) {
     }
     return { payload: input };
 }
-
 async function executeAndReport(bot, executor, step) {
     const results = await executor.executePlan([step]);
     const result = results[0];
@@ -115,7 +110,6 @@ async function executeAndReport(bot, executor, step) {
     const reason = result.reason ? ` (${result.reason})` : "";
     bot.chat(`[${result.status}] ${result.action}#${result.id}${reason}`);
 }
-
 function escapeRegExp(str) {
     return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

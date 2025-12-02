@@ -5,9 +5,9 @@ import { loadBotConfig, ConfigError } from "./config.js";
 import { PerceptionCollector } from "./perception.js";
 import { runSetupWizard } from "./setup.js";
 import { ActionExecutor } from "./action-executor.js";
+import { createDefaultActionHandlers } from "./action-handlers.js";
 import { wireChatBridge } from "./chat-commands.js";
 import { ReflectionLogger } from "./reflection-log.js";
-
 async function createBot() {
     const defaultPath = path.join(process.cwd(), "config", "bot.config.yaml");
     const configPath = process.env.BOT_CONFIG ?? defaultPath;
@@ -42,7 +42,8 @@ async function createBot() {
     bot.once("spawn", () => {
         console.log("[bot] spawned");
         const reflection = new ReflectionLogger();
-        const executor = new ActionExecutor(bot, undefined, {
+        const handlers = createDefaultActionHandlers();
+        const executor = new ActionExecutor(bot, handlers, {
             logger: (entry) => {
                 reflection.record(entry);
                 const reason = entry.reason ? ` (${entry.reason})` : "";

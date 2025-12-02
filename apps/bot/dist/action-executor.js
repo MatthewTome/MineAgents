@@ -12,7 +12,6 @@ const BUILT_IN_HANDLERS = {
         bot.chat(message);
     }
 };
-
 export class ActionExecutor {
     bot;
     handlers;
