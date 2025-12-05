@@ -8,13 +8,14 @@
   "scripts": {
     "dev": "node --import tsx src/index.ts",
     "build": "tsc -p tsconfig.json",
-    "prestart": "pnpm build", 
+    "prestart": "pnpm build",
     "start": "node dist/index.js",
     "test": "vitest",
     "test:watch": "vitest --watch",
     "coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "dotenv": "^17.2.3",
     "js-yaml": "^4.1.1",
     "mineflayer": "github:PrismarineJS/mineflayer",
     "vec3": "^0.1.10",

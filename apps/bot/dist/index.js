@@ -1,3 +1,4 @@
+import "dotenv/config";
 import mineflayer from "mineflayer";
 import path from "node:path";
 import fs from "node:fs";
@@ -8,9 +9,14 @@ import { ActionExecutor } from "./action-executor.js";
 import { createDefaultActionHandlers } from "./action-handlers.js";
 import { wireChatBridge } from "./chat-commands.js";
 import { ReflectionLogger } from "./reflection-log.js";
+import { HuggingFacePlanner } from "./planner.js";
 async function createBot() {
     const defaultPath = path.join(process.cwd(), "config", "bot.config.yaml");
     const configPath = process.env.BOT_CONFIG ?? defaultPath;
+    const hfToken = process.env.HF_TOKEN;
+    if (!hfToken) {
+        console.warn("[init] WARNING: HF_TOKEN not found in .env. Planning will not work.");
+    }
     if (!fs.existsSync(configPath) && !process.env.BOT_CONFIG) {
         try {
             await runSetupWizard(configPath);
@@ -42,6 +48,12 @@ async function createBot() {
     bot.once("spawn", () => {
         console.log("[bot] spawned");
         const reflection = new ReflectionLogger();
+        let planner = null;
+        if (hfToken) {
+            planner = new HuggingFacePlanner(hfToken);
+        }
+        let currentGoal = null;
+        let isPlanning = false;
         const handlers = createDefaultActionHandlers();
         const executor = new ActionExecutor(bot, handlers, {
             logger: (entry) => {
@@ -60,7 +72,39 @@ async function createBot() {
         });
         let lastLog = 0;
         const unwireChat = wireChatBridge(bot, executor);
-        perception.start((snap) => {
+        bot.on("chat", (username, message) => {
+            if (username === bot.username)
+                return;
+            if (message.startsWith("!goal ")) {
+                const newGoal = message.replace("!goal ", "").trim();
+                console.log(`[bot] Goal received via chat: "${newGoal}"`);
+                currentGoal = newGoal;
+            }
+        });
+        perception.start(async (snap) => {
+            if (currentGoal && !isPlanning && planner) {
+                isPlanning = true;
+                console.log(`[planner] Contacting Qwen LLM for goal: "${currentGoal}"...`);
+                try {
+                    const plan = await planner.createPlan({
+                        goal: currentGoal,
+                        perception: snap,
+                        context: "You are currently in the game. React immediately."
+                    });
+                    console.log(`[planner] Plan generated! Intent: ${plan.intent}`);
+                    console.log(`[planner] Raw steps:`, plan.steps);
+                    // TODO: Need to send plan.steps to the executor
+                    // For now, we just clear the goal so we don't loop forever
+                    currentGoal = null;
+                }
+                catch (error) {
+                    console.error(`[planner] Error generating plan:`, error);
+                    currentGoal = null;
+                }
+                finally {
+                    isPlanning = false;
+                }
+            }
             const now = Date.now();
             if (now - lastLog > 1000) {
                 lastLog = now;
@@ -68,6 +112,8 @@ async function createBot() {
                     tickId: snap.tickId,
                     pos: snap.pose.position,
                     day: snap.environment.dayCycle,
+                    currentGoal: currentGoal ?? "None",
+                    isPlanning: isPlanning,
                     dim: snap.environment.dimension,
                     health: snap.pose.health,
                     food: snap.pose.food,
