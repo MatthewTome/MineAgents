@@ -14,13 +14,16 @@ export class HuggingFacePlanner {
     constructor(options) {
         this.options =
             {
-                model: options?.model ?? "Xenova/Qwen2.5-1.5B-Instruct",
+                model: options?.model ?? "onnx-community/Qwen2.5-0.5B-Instruct",
                 temperature: options?.temperature ?? 0.2,
                 maxTokens: options?.maxTokens ?? 256,
                 cacheDir: options?.cacheDir,
                 device: options?.device ?? "auto",
                 token: options?.token,
-                inferenceEndpoint: options?.inferenceEndpoint
+                inferenceEndpoint: options?.inferenceEndpoint,
+                backend: options?.backend ?? "auto",
+                quantized: options?.quantized ?? true,
+                remoteMode: options?.remoteMode ?? "inference_api"
             };
         this.generatorPromise = this.buildGenerator();
     }
@@ -44,17 +47,27 @@ export class HuggingFacePlanner {
         };
     }
     async buildGenerator() {
-        try {
-            const local = await this.buildLocalGenerator();
-            if (local) {
-                return { ...local, backend: "local" };
+        const preferLocal = this.options.backend !== "remote";
+        const preferRemote = this.options.backend === "remote";
+        if (preferLocal) {
+            try {
+                const local = await this.buildLocalGenerator();
+                if (local) {
+                    return { ...local, backend: "local" };
+                }
+            }
+            catch (err) {
+                console.warn("[planner] Local transformers pipeline unavailable, falling back to remote inference:", err);
+                if (this.options.backend === "local") {
+                    throw err;
+                }
             }
         }
-        catch (err) {
-            console.warn("[planner] Local transformers pipeline unavailable, falling back to remote inference:", err);
+        if (preferRemote || this.options.backend === "auto") {
+            const remote = await this.buildRemoteGenerator();
+            return { ...remote, backend: "remote" };
         }
-        const remote = await this.buildRemoteGenerator();
-        return { ...remote, backend: "remote" };
+        throw new Error("No available planner backend.");
     }
     async buildLocalGenerator() {
         let transformers;
@@ -70,7 +83,9 @@ export class HuggingFacePlanner {
         transformers.env.allowLocalModels = true;
         const generator = await transformers.pipeline("text-generation", this.options.model, {
             device: this.options.device,
-            token: this.options.token
+            token: this.options.token,
+            quantized: this.options.quantized,
+            revision: "main"
         });
         return {
             generate: async (prompt) => {
@@ -87,7 +102,7 @@ export class HuggingFacePlanner {
         if (!token) {
             throw new Error("HF_TOKEN is required for remote planning and no local transformers pipeline is available.");
         }
-        const endpoint = this.options.inferenceEndpoint ?? `https://api-inference.huggingface.co/models/${this.options.model}`;
+        const endpoint = "https://router.huggingface.co/v1/chat/completions";
         return {
             generate: async (prompt) => {
                 const response = await fetch(endpoint, {
@@ -97,11 +112,13 @@ export class HuggingFacePlanner {
                         "Content-Type": "application/json",
                     },
                     body: JSON.stringify({
-                        inputs: prompt,
-                        parameters: {
-                            temperature: this.options.temperature,
-                            max_new_tokens: this.options.maxTokens
-                        }
+                        model: this.options.model,
+                        messages: [
+                            { role: "user", content: prompt }
+                        ],
+                        temperature: this.options.temperature,
+                        max_tokens: this.options.maxTokens,
+                        stream: false
                     })
                 });
                 if (!response.ok) {
@@ -109,6 +126,9 @@ export class HuggingFacePlanner {
                     throw new Error(`HF inference failed with status ${response.status}: ${errorText}`);
                 }
                 const json = await response.json();
+                if (json.choices && json.choices[0] && json.choices[0].message) {
+                    return json.choices[0].message.content;
+                }
                 return this.extractText(json);
             }
         };
@@ -149,7 +169,19 @@ export class HuggingFacePlanner {
             parsed = JSON.parse(block);
         }
         catch (err) {
-            throw new Error(`Planner response was not valid JSON: ${err}`);
+            console.warn("[planner] JSON parse failed, attempting to repair...", err);
+            let fixed = block
+                .replace(/\/\/.*$/gm, "")
+                .replace(/,\s*([}\]])/g, "$1")
+                .replace(/([{,]\s*)'([a-zA-Z0-9_]+)'(\s*:)/g, '$1"$2"$3');
+            try {
+                parsed = JSON.parse(fixed);
+            }
+            catch (finalErr) {
+                console.error("[planner] FATAL: Could not parse JSON. Raw output below:");
+                console.error(text);
+                throw new Error(`Planner response was not valid JSON: ${finalErr}`);
+            }
         }
         if (typeof parsed.intent !== "string" || !Array.isArray(parsed.steps)) {
             throw new Error("Planner response missing intent or steps");
@@ -160,7 +192,7 @@ export class HuggingFacePlanner {
             }
             const action = String(s.action ?? "unknown");
             if (!SUPPORTED_ACTIONS[action]) {
-                throw new Error(`Unsupported action '${action}' in planner response`);
+                console.warn(`[planner] Warning: Model suggested unsupported action '${action}'`);
             }
             return {
                 id: String(s.id ?? `step-${idx}`),
@@ -179,12 +211,19 @@ export class HuggingFacePlanner {
     extractJsonBlock(text) {
         const fenceMatch = /```json\s*([\s\S]*?)```/i.exec(text);
         if (fenceMatch?.[1]) {
-            return fenceMatch[1];
+            return fenceMatch[1].trim();
         }
-        const braceIndex = text.indexOf("{");
-        if (braceIndex !== -1) {
-            return text.slice(braceIndex);
+        const genericFence = /```\s*([\s\S]*?)```/i.exec(text);
+        if (genericFence?.[1]) {
+            if (genericFence[1].trim().startsWith("{")) {
+                return genericFence[1].trim();
+            }
         }
-        throw new Error("Planner response did not contain JSON");
+        const firstBrace = text.indexOf("{");
+        const lastBrace = text.lastIndexOf("}");
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+            return text.slice(firstBrace, lastBrace + 1);
+        }
+        return text;
     }
 }

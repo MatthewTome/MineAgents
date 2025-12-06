@@ -84,6 +84,13 @@ export class ActionExecutor
         this.options = { ...DEFAULT_OPTIONS, ...options };
     }
 
+    reset(): void
+    {
+        this.executed.clear();
+        this.executing.clear();
+        this.log = [];
+    }
+
     async executePlan(steps: ActionStep[]): Promise<ActionResult[]>
     {
         const results: ActionResult[] = [];

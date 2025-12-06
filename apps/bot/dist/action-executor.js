@@ -29,6 +29,11 @@ export class ActionExecutor {
         }
         this.options = { ...DEFAULT_OPTIONS, ...options };
     }
+    reset() {
+        this.executed.clear();
+        this.executing.clear();
+        this.log = [];
+    }
     async executePlan(steps) {
         const results = [];
         for (const step of steps) {

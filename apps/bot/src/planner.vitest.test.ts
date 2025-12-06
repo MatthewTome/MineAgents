@@ -5,22 +5,36 @@ describe("HuggingFacePlanner", () =>
 {
     const originalFetch = global.fetch;
 
-    afterEach(() => {
+    afterEach(() =>
+    {
         global.fetch = originalFetch;
     });
 
-    it("builds a plan using the Qwen model and parses JSON output", async () =>
+    it("builds a plan using the Router API and parses JSON output", async () =>
     {
         const mockFetch = vi.fn(async (url: any, init: any) =>
         {
             return {
                 ok: true,
-                json: async () =>
-                [{
-                    generated_text: "" +
-                        "Planning..." +
-                        "```json {\"intent\":\"Test intent\",\"steps\":[{\"id\":\"s1\",\"action\":\"chat\",\"params\":{\"message\":\"hi\"}}]} ```"
-                }]
+                json: async () => (
+                {
+                    choices: [
+                    {
+                        message:
+                        {
+                            content: "" +
+                                "Here is the plan:\n" +
+                                "```json\n" +
+                                "{\n" +
+                                "  \"intent\": \"Test intent\",\n" +
+                                "  \"steps\": [\n" +
+                                "    { \"id\": \"s1\", \"action\": \"chat\", \"params\": { \"message\": \"hi\" } }\n" +
+                                "  ]\n" +
+                                "}\n" +
+                                "```"
+                        }
+                    }]
+                })
             } as any;
         });
 
@@ -28,28 +42,49 @@ describe("HuggingFacePlanner", () =>
 
         const planner = new HuggingFacePlanner(
         {
-            token: "token",
-            model: "Qwen/Qwen3-VL-2B-Instruct",
+            token: "test-token",
+            model: "meta-llama/Meta-Llama-3-8B-Instruct",
+            backend: "remote",
             maxTokens: 128
         });
 
         const result = await planner.createPlan({ goal: "wave" });
 
         expect(mockFetch).toHaveBeenCalled();
-        const url = mockFetch.mock.calls[0][0];
-        expect(String(url)).toContain("Qwen3-VL-2B-Instruct");
+        const [url, init] = mockFetch.mock.calls[0];
+
+        expect(String(url)).toContain("router.huggingface.co/v1/chat/completions");
+
+        const body = JSON.parse(init.body as string);
+        expect(body.model).toBe("meta-llama/Meta-Llama-3-8B-Instruct");
+        expect(Array.isArray(body.messages)).toBe(true);
+
         expect(result.intent).toBe("Test intent");
         expect(result.steps[0]?.action).toBe("chat");
     });
 
     it("throws when no JSON can be found in the response", async () =>
     {
-        const mockFetch = vi.fn(async (url: any, init: any) => ({ ok: true, json: async () => [{ generated_text: "no-json-here" }] } as any));
-        
+        const mockFetch = vi.fn(async (url: any, init: any) => (
+        {
+            ok: true,
+            json: async () => (
+            {
+                choices: [
+                {
+                    message: { content: "I cannot do that. I am just a text model." }
+                }]
+            })
+        } as any));
+
         global.fetch = mockFetch;
 
-        const planner = new HuggingFacePlanner({ token: "token" });
+        const planner = new HuggingFacePlanner(
+        { 
+            token: "test-token", 
+            backend: "remote" 
+        });
 
-        await expect(planner.createPlan({ goal: "wave" })).rejects.toThrow(/did not contain JSON/);
+        await expect(planner.createPlan({ goal: "wave" })).rejects.toThrow(/not valid JSON/);
     });
 });

@@ -9,13 +9,14 @@ import { ActionExecutor } from "./action-executor.js";
 import { createDefaultActionHandlers } from "./action-handlers.js";
 import { wireChatBridge } from "./chat-commands.js";
 import { ReflectionLogger } from "./reflection-log.js";
-import { HuggingFacePlanner } from "./planner.js";
+import { PlannerWorkerClient } from "./planner-worker-client.js";
 async function createBot() {
     const defaultPath = path.join(process.cwd(), "config", "bot.config.yaml");
     const configPath = process.env.BOT_CONFIG ?? defaultPath;
     const hfToken = process.env.HF_TOKEN;
     const hfModel = process.env.HF_MODEL ?? "Xenova/Qwen2.5-1.5B-Instruct";
     const hfCache = process.env.HF_CACHE_DIR;
+    const hfBackend = process.env.LLM_MODE ?? "auto";
     if (!fs.existsSync(configPath) && !process.env.BOT_CONFIG) {
         try {
             await runSetupWizard(configPath);
@@ -49,14 +50,17 @@ async function createBot() {
         const reflection = new ReflectionLogger();
         let planner = null;
         try {
-            planner = new HuggingFacePlanner({
-                model: hfModel,
-                token: hfToken,
-                cacheDir: hfCache
+            planner = new PlannerWorkerClient({
+                options: {
+                    model: hfModel,
+                    token: hfToken,
+                    cacheDir: hfCache,
+                    backend: hfBackend
+                }
             });
-            void planner.backend().then((backend) => {
-                const source = backend === "local" ? "local transformers" : "remote HF inference";
-                console.log(`[planner] Ready using ${source} (${planner?.modelName ?? hfModel}).`);
+            void planner.ready.then(({ backend, model }) => {
+                const source = backend === "local" ? "local transformers (quantized where available)" : "remote Hugging Face API";
+                console.log(`[planner] Ready using ${source} (${model ?? hfModel}).`);
             }).catch((err) => {
                 console.error("[planner] Planner backend failed to initialize:", err);
             });
@@ -111,22 +115,28 @@ async function createBot() {
                     console.log(`[planner] Raw steps:`, plan.steps);
                     if (plan.steps.length === 0) {
                         console.warn("[planner] Plan contained no steps; clearing goal.");
+                        bot.chat("I couldn't figure out how to do that.");
                         currentGoal = null;
                     }
                     else {
+                        bot.chat(plan.intent);
+                        executor.reset();
                         const results = await executor.executePlan(plan.steps);
                         const failed = results.find(r => r.status === "failed");
                         if (failed) {
                             console.warn(`[planner] Plan execution failed at ${failed.id}: ${failed.reason ?? "unknown reason"}`);
+                            bot.chat(`I got stuck on step ${failed.id}.`);
                         }
                         else {
                             console.log(`[planner] Plan execution completed for goal: "${currentGoal}"`);
+                            bot.chat("I'm done!");
                         }
                         currentGoal = null;
                     }
                 }
                 catch (error) {
                     console.error(`[planner] Error generating plan:`, error);
+                    bot.chat("My brain hurts. I couldn't make a plan.");
                     currentGoal = null;
                 }
                 finally {
