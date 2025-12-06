@@ -15,6 +15,7 @@
     "lint": "echo \"(add eslint later)\""
   },
   "dependencies": {
+    "@huggingface/transformers": "^3.8.1",
     "prismarine-block": "^1.22.0",
     "prismarine-entity": "^2.5.0",
     "prismarine-item": "^1.17.0"

@@ -14,9 +14,8 @@ async function createBot() {
     const defaultPath = path.join(process.cwd(), "config", "bot.config.yaml");
     const configPath = process.env.BOT_CONFIG ?? defaultPath;
     const hfToken = process.env.HF_TOKEN;
-    if (!hfToken) {
-        console.warn("[init] WARNING: HF_TOKEN not found in .env. Planning will not work.");
-    }
+    const hfModel = process.env.HF_MODEL ?? "Xenova/Qwen2.5-1.5B-Instruct";
+    const hfCache = process.env.HF_CACHE_DIR;
     if (!fs.existsSync(configPath) && !process.env.BOT_CONFIG) {
         try {
             await runSetupWizard(configPath);
@@ -49,10 +48,27 @@ async function createBot() {
         console.log("[bot] spawned");
         const reflection = new ReflectionLogger();
         let planner = null;
-        if (hfToken) {
-            planner = new HuggingFacePlanner(hfToken);
+        try {
+            planner = new HuggingFacePlanner({
+                model: hfModel,
+                token: hfToken,
+                cacheDir: hfCache
+            });
+            void planner.backend().then((backend) => {
+                const source = backend === "local" ? "local transformers" : "remote HF inference";
+                console.log(`[planner] Ready using ${source} (${planner?.modelName ?? hfModel}).`);
+            }).catch((err) => {
+                console.error("[planner] Planner backend failed to initialize:", err);
+            });
         }
-        let currentGoal = null;
+        catch (err) {
+            console.error(`[planner] Failed to initialize planner ${hfModel}:`, err);
+        }
+        const initialGoal = process.env.BOT_GOAL ?? null;
+        if (initialGoal) {
+            console.log(`[planner] Default goal configured: "${initialGoal}"`);
+        }
+        let currentGoal = initialGoal;
         let isPlanning = false;
         const handlers = createDefaultActionHandlers();
         const executor = new ActionExecutor(bot, handlers, {
@@ -84,7 +100,7 @@ async function createBot() {
         perception.start(async (snap) => {
             if (currentGoal && !isPlanning && planner) {
                 isPlanning = true;
-                console.log(`[planner] Contacting Qwen LLM for goal: "${currentGoal}"...`);
+                console.log(`[planner] Generating plan with ${planner.modelName} for goal: "${currentGoal}"...`);
                 try {
                     const plan = await planner.createPlan({
                         goal: currentGoal,
@@ -93,9 +109,21 @@ async function createBot() {
                     });
                     console.log(`[planner] Plan generated! Intent: ${plan.intent}`);
                     console.log(`[planner] Raw steps:`, plan.steps);
-                    // TODO: Need to send plan.steps to the executor
-                    // For now, we just clear the goal so we don't loop forever
-                    currentGoal = null;
+                    if (plan.steps.length === 0) {
+                        console.warn("[planner] Plan contained no steps; clearing goal.");
+                        currentGoal = null;
+                    }
+                    else {
+                        const results = await executor.executePlan(plan.steps);
+                        const failed = results.find(r => r.status === "failed");
+                        if (failed) {
+                            console.warn(`[planner] Plan execution failed at ${failed.id}: ${failed.reason ?? "unknown reason"}`);
+                        }
+                        else {
+                            console.log(`[planner] Plan execution completed for goal: "${currentGoal}"`);
+                        }
+                        currentGoal = null;
+                    }
                 }
                 catch (error) {
                     console.error(`[planner] Error generating plan:`, error);

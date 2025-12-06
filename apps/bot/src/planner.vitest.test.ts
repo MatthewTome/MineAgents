@@ -1,11 +1,17 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, afterEach } from "vitest";
 import { HuggingFacePlanner } from "./planner.js";
 
 describe("HuggingFacePlanner", () =>
 {
+    const originalFetch = global.fetch;
+
+    afterEach(() => {
+        global.fetch = originalFetch;
+    });
+
     it("builds a plan using the Qwen model and parses JSON output", async () =>
     {
-        const mockFetch = vi.fn(async () =>
+        const mockFetch = vi.fn(async (url: any, init: any) =>
         {
             return {
                 ok: true,
@@ -18,10 +24,12 @@ describe("HuggingFacePlanner", () =>
             } as any;
         });
 
-        const planner = new HuggingFacePlanner("token",
+        global.fetch = mockFetch;
+
+        const planner = new HuggingFacePlanner(
         {
+            token: "token",
             model: "Qwen/Qwen3-VL-2B-Instruct",
-            fetcher: mockFetch as any,
             maxTokens: 128
         });
 
@@ -36,8 +44,11 @@ describe("HuggingFacePlanner", () =>
 
     it("throws when no JSON can be found in the response", async () =>
     {
-        const mockFetch = vi.fn(async () => ({ ok: true, json: async () => [{ generated_text: "no-json-here" }] } as any));
-        const planner = new HuggingFacePlanner("token", { fetcher: mockFetch as any });
+        const mockFetch = vi.fn(async (url: any, init: any) => ({ ok: true, json: async () => [{ generated_text: "no-json-here" }] } as any));
+        
+        global.fetch = mockFetch;
+
+        const planner = new HuggingFacePlanner({ token: "token" });
 
         await expect(planner.createPlan({ goal: "wave" })).rejects.toThrow(/did not contain JSON/);
     });

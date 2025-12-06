@@ -15,6 +15,7 @@
     "coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@huggingface/transformers": "^3.1.0",
     "dotenv": "^17.2.3",
     "js-yaml": "^4.1.1",
     "mineflayer": "github:PrismarineJS/mineflayer",
