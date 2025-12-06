@@ -23,6 +23,8 @@ describe("config loader", () =>
 
         const cfg = loadBotConfig(cfgPath);
 
+        console.log({ actualConfig: cfg, expectedPort: 25565 });
+
         expect(cfg.connection.port).toBe(25565);
         expect(cfg.connection.username).toBe("MineAgent");
         expect(cfg.perception.hz).toBe(5);
@@ -82,6 +84,12 @@ describe("config loader", () =>
         {
             caught = err as ConfigError;
         }
+
+        console.log({ 
+            actualErrorField: caught?.field, 
+            actualLine: caught?.line, 
+            expectedField: "perception.hz" 
+        });
 
         expect(caught).toBeInstanceOf(ConfigError);
         expect(caught?.field).toBe("perception.hz");

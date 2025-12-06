@@ -37,6 +37,11 @@ describe("chat command bridge", () =>
 
         const handled = await handleChatCommand(bot, executor, "Player", "!say hello world");
 
+        console.log({ 
+            actualChat: (bot.chat as any).mock.calls, 
+            expected: ["[success] chat#step-1"] 
+        });
+
         expect(handled).toBe(true);
         expect(executor.executePlan).toHaveBeenCalledTimes(1);
         expect(bot.chat).toHaveBeenCalledWith("[success] chat#step-1");
@@ -48,6 +53,11 @@ describe("chat command bridge", () =>
         const executor = makeExecutor();
 
         const handled = await handleChatCommand(bot, executor, "Player", "!act id=custom-id chat {\"message\":\"hey\"}");
+
+        console.log({ 
+            actualPlan: (executor.executePlan as any).mock.calls[0][0], 
+            expectedId: "custom-id" 
+        });
 
         expect(handled).toBe(true);
         expect(executor.executePlan).toHaveBeenCalledWith([

@@ -50,6 +50,12 @@ describe("HuggingFacePlanner", () =>
 
         const result = await planner.createPlan({ goal: "wave" });
 
+        console.log({ 
+            actualIntent: result.intent, 
+            expected: "Test intent", 
+            actualSteps: result.steps 
+        });
+
         expect(mockFetch).toHaveBeenCalled();
         const [url, init] = mockFetch.mock.calls[0];
 

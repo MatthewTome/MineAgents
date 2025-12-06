@@ -137,6 +137,12 @@ describe("PerceptionCollector", function () {
 
     const snapshot = collector.getSnapshot();
 
+    console.log({ 
+        actualPos: snapshot.pose.position, 
+        actualInventory: snapshot.inventory.keyCounts, 
+        actualMessages: snapshot.chatWindow.lastMessages 
+    });
+
     assert.equal(snapshot.pose.position.x, bot.entity.position.x);
     assert.equal(snapshot.pose.health, bot.health);
     assert.equal(snapshot.environment.dimension, "overworld");

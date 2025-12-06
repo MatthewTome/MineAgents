@@ -36,6 +36,9 @@ describe("ReflectionLogger", () =>
         expect(fs.existsSync(file)).toBe(true);
 
         const content = fs.readFileSync(file, "utf8");
+
+        console.log({ actualFileContent: content });
+
         expect(content).toContain("Session started:");
         expect(content).toContain("Entries: 1");
         expect(content).toContain("id=chat-1 action=chat status=success attempts=1 desc=\"from test\"");

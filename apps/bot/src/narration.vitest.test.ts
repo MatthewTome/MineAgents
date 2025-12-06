@@ -20,9 +20,96 @@ describe("PlanNarrator", () =>
         const intent = "  Collect wood, craft planks, build shelter near spawn with a roof and walls.  ";
         const summary = narrator.maybeNarrate({ intent }) ?? "";
 
+        console.log({ actualLength: summary.length, expectedMax: 40, actualSummary: summary });
+
         expect(summary.length).toBeLessThanOrEqual(40);
         expect(summary.endsWith("...")).toBe(true);
         expect(summary).not.toContain("  ");
+    });
+
+    it("formats diverse plans into readable, compact summaries", () =>
+    {
+        const narrator = new PlanNarrator({ minIntervalMs: 0 });
+        const cases =
+        [
+            {
+                title: "no intent falls back to step and goal",
+                plan: {
+                    goal: "cross ravine",
+                    steps: [{ id: "s-1", action: "bridge", description: "across gap" }]
+                },
+                expectation: /bridge: across gap for cross ravine/,
+            },
+            {
+                title: "multi-step plan shows count and trims",
+                plan: {
+                    goal: "secure base",
+                    steps: [
+                        { id: "s-1", action: "gather", description: "wood" },
+                        { id: "s-2", action: "craft", description: "planks" },
+                        { id: "s-3", action: "build", description: "walls & roof" },
+                    ]
+                },
+                expectation: /^gather: wood for secure base \(3 steps\)$/,
+            },
+            {
+                title: "unusual characters stay readable and deduped",
+                plan: {
+                    intent: "   Scout @ village; trade??  get maps!!   "
+                },
+                expectation: /^Scout @ village; trade\?\? get maps!!$/,
+            },
+            {
+                title: "missing everything falls back to planning placeholder",
+                plan: {},
+                expectation: /^planning actions$/,
+            },
+        ];
+
+        for (const testCase of cases)
+        {
+            const summary = narrator.maybeNarrate(testCase.plan) ?? "";
+
+            console.log({ actual: summary, expected: testCase.expectation });
+
+            expect(summary.length).toBeLessThanOrEqual(140);
+            expect(summary).not.toMatch(/\s{2,}/);
+            expect(summary.trim()).toBe(summary);
+            expect(summary).toMatch(testCase.expectation);
+        }
+    });
+
+    it("exposes intent and goal hints so players can anticipate actions", () =>
+    {
+        const narrator = new PlanNarrator();
+
+        const bridgePlan = narrator.maybeNarrate(
+        {
+            goal: "reach desert temple",
+            steps:
+            [
+                { id: "s-1", action: "bridge", description: "over ravine" },
+                { id: "s-2", action: "loot", description: "the chest" }
+            ]
+        }) ?? "";
+
+        const rescuePlan = narrator.maybeNarrate(
+        {
+            intent: "Rescue villager from raid and secure houses",
+            goal: "protect settlement",
+            steps:
+            [
+                { id: "s-1", action: "defend", description: "north gate" },
+                { id: "s-2", action: "escort", description: "survivors" }
+            ]
+        }, Date.now() + 2_000) ?? "";
+
+        console.log({ actualBridge: bridgePlan, actualRescue: rescuePlan });
+
+        expect(bridgePlan).toMatchInlineSnapshot(`"bridge: over ravine for reach desert temple (2 steps)"`);
+        expect(rescuePlan).toMatchInlineSnapshot(`"Rescue villager from raid and secure houses"`);
+        expect(bridgePlan.includes("bridge")).toBe(true);
+        expect(bridgePlan.includes("desert temple")).toBe(true);
     });
 
     it("rate limits narration to one message per second", () =>
@@ -30,14 +117,26 @@ describe("PlanNarrator", () =>
         vi.useFakeTimers();
         const narrator = new PlanNarrator({ minIntervalMs: 1000 });
 
-        const first = narrator.maybeNarrate({ intent: "first" }, 0);
-        const blocked = narrator.maybeNarrate({ intent: "second" }, 500);
+        const summaries = [] as Array<string | null>;
 
-        vi.advanceTimersByTime(1000);
-        const allowed = narrator.maybeNarrate({ intent: "third" }, 1500);
+        for (let i = 0; i < 5; i++)
+        {
+            summaries.push(narrator.maybeNarrate({ intent: `call-${i}` }, i * 200));
+            vi.advanceTimersByTime(200);
+        }
 
-        expect(first).toBe("first");
-        expect(blocked).toBeNull();
-        expect(allowed).toBe("third");
+        vi.advanceTimersByTime(1_000);
+        summaries.push(narrator.maybeNarrate({ intent: "after-wait" }, 1_800));
+
+        const emitted = summaries.filter((s): s is string => Boolean(s));
+
+        console.log({ actual: emitted, expected: ["call-0", "after-wait"] });
+
+        expect(emitted[0]).toBe("call-0");
+        expect(emitted.includes("call-1")).toBe(false);
+        expect(emitted.includes("call-2")).toBe(false);
+        expect(emitted.includes("call-3")).toBe(false);
+        expect(emitted.includes("call-4")).toBe(false);
+        expect(emitted.at(-1)).toBe("after-wait");
     });
 });
