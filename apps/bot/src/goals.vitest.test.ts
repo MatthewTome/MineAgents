@@ -271,4 +271,105 @@ describe("GoalTracker", () =>
         expect(lateEvents.some(e => e.id === beaconId && e.status === "fail")).toBe(false);
         expect(dashboard.getEvents().filter(e => e.status === "pass").map(e => e.id)).toContain(foodId);
     });
+
+    it("automatically passes when MineAgent satisfies inventory condition (Goal Completion)", () =>
+    {
+        const dashboard = new InMemoryGoalDashboard();
+        const tracker = new GoalTracker(dashboard);
+
+        const collectGoal: GoalDefinition =
+        {
+            name: "Collect Building Blocks",
+            steps: ["Mine stone"],
+            successSignal:
+            {
+                type: "predicate",
+                test: (snap) => snap.inventory.keyCounts.blocks >= 10,
+                description: "Sufficient blocks acquired"
+            }
+        };
+
+        const goalId = tracker.addGoal(collectGoal);
+
+        tracker.ingestSnapshot(baseSnapshot);
+
+        const successSnapshot: PerceptionSnapshot =
+        {
+            ...baseSnapshot,
+            inventory:
+            {
+                ...baseSnapshot.inventory,
+                keyCounts: { ...baseSnapshot.inventory.keyCounts, blocks: 12 }
+            }
+        };
+
+        const events = tracker.ingestSnapshot(successSnapshot);
+        const latestEvent = dashboard.latestFor(goalId);
+
+        console.log({
+            test: "Auto-pass inventory check",
+            goal: collectGoal.name,
+            inventoryCount: successSnapshot.inventory.keyCounts.blocks,
+            expectedStatus: "pass",
+            actualStatus: latestEvent?.status,
+            reason: latestEvent?.reason
+        });
+
+        expect(events).toHaveLength(1);
+        expect(latestEvent?.status).toBe("pass");
+        expect(latestEvent?.reason).toBe("Sufficient blocks acquired");
+    });
+
+    it("simulates 'Build a shelter before nightfall' (Success before failure condition)", () =>
+    {
+        const dashboard = new InMemoryGoalDashboard();
+        const tracker = new GoalTracker(dashboard);
+
+        const shelterGoal: GoalDefinition =
+        {
+            name: "Build Shelter",
+            steps: ["Gather wood", "Build structure"],
+            successSignal:
+            {
+                type: "chat",
+                includes: "Shelter complete",
+                description: "Structure verified"
+            },
+            failureSignals:
+            [
+                {
+                    type: "predicate",
+                    test: (snap) => snap.environment.dayCycle === "night",
+                    description: "Failed: Night fell before completion"
+                }
+            ]
+        };
+
+        const goalId = tracker.addGoal(shelterGoal);
+
+        tracker.ingestSnapshot(baseSnapshot);
+
+        const successSnapshot: PerceptionSnapshot =
+        {
+            ...baseSnapshot,
+            environment: { ...baseSnapshot.environment, dayCycle: "day" },
+            chatWindow: { lastMessages: ["Gathering resources...", "Shelter complete"] }
+        };
+
+        const events = tracker.ingestSnapshot(successSnapshot);
+        const result = dashboard.latestFor(goalId);
+
+        console.log({
+            test: "Shelter before nightfall",
+            timeOfDay: successSnapshot.environment.dayCycle,
+            lastMessage: successSnapshot.chatWindow.lastMessages.at(-1),
+            expected: "pass",
+            actual: result?.status
+        });
+
+        expect(result?.status).toBe("pass");
+        expect(result?.reason).toBe("Structure verified");
+        
+        expect(events.find(e => e.status === "fail")).toBeUndefined();
+    });
 });
