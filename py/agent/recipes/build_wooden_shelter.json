@@ -1,0 +1,46 @@
+{
+  "name": "Build a wooden shelter",
+  "goal": "Safe shelter before nightfall using any sturdy blocks on hand",
+  "tags": ["shelter", "nightfall", "building", "safety"],
+  "required_items": ["logs_or_planks", "any_solid_blocks", "door_or_trapdoor"],
+  "optional_items": ["torch", "bed", "glass_pane"],
+  "environment": [
+    "Pick a flat spot away from lava and steep drops",
+    "Prefer areas with nearby trees or dirt if wood is scarce",
+    "Capture perceived nearby blocks and entities to guide material choices"
+  ],
+  "hazards": ["hostile_mobs", "lava", "ravines"],
+  "steps": [
+    {
+      "title": "Scan surroundings and inventory",
+      "action": "perceive",
+      "details": "List nearby blocks/items/entities from the latest snapshot so the planner can choose safe building materials. Include options like logs, planks, dirt, cobblestone, or leaves and confirm no mobs are closing in.",
+      "checks": ["Ensure at least one stack of placeable blocks is available", "Avoid building in line-of-sight of hostile mobs"]
+    },
+    {
+      "title": "Collect materials",
+      "action": "gather",
+      "details": "Mine or pick up any solid blocks (logs, planks, dirt, cobblestone). Favor wood but fall back to dirt or stone if inventory is low. Keep fuel (coal/charcoal) for torches if possible.",
+      "checks": ["Inventory has >= 24 solid blocks", "Keep an escape route clear while gathering"]
+    },
+    {
+      "title": "Lay out a 3x3 or 4x4 footprint",
+      "action": "build",
+      "details": "Place a one-block-high outline using whichever solid blocks you have the most of. Keep an opening for a door or trapdoor. If uneven terrain, terraform with spare dirt.",
+      "checks": ["Opening reserved for door", "Walls use consistent material to save time"]
+    },
+    {
+      "title": "Raise walls and install roof",
+      "action": "build",
+      "details": "Build walls at least two blocks tall with available materials. Cap with a solid roof (slabs, planks, dirt) to block mobs and rain. Use ladders or temporary dirt to reach the roof safely.",
+      "checks": ["No holes that spiders can slip through", "Roof fully covered"]
+    },
+    {
+      "title": "Secure entrance and light interior",
+      "action": "finish",
+      "details": "Place a door/trapdoor; if unavailable, stack blocks to seal entry at night. Craft torches from coal/charcoal + sticks to light inside and around the perimeter.",
+      "checks": ["Torch or light source placed inside", "Entrance can be closed quickly"]
+    }
+  ],
+  "notes": "If wood is limited, mix cobblestone or dirt. Always surface before dusk and keep food handy."
+}
