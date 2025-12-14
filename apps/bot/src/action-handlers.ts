@@ -145,7 +145,17 @@ async function handleBuild(bot: Bot, step: { params?: Record<string, unknown> })
         throw new Error("Build action requires a structure type");
     }
 
-    const origin = params.origin ? new Vec3(params.origin.x, params.origin.y, params.origin.z) : bot.entity.position.floored();
+    const rawOrigin = params.origin ? new Vec3(params.origin.x, params.origin.y, params.origin.z) : bot.entity.position;
+    const origin = rawOrigin.floored();
+    const structureBounds = getBlueprint(params.structure).map(p => origin.plus(p));
+    const botPos = bot.entity.position.floored();
+    
+    const isObstructing = structureBounds.some(b => b.equals(botPos) || b.equals(botPos.offset(0, 1, 0)));
+    if (isObstructing) {
+        const safeSpot = findSafeSpotNear(bot, origin, structureBounds);
+        await moveToward(bot, safeSpot, 0.5, 5000); 
+    }
+
     const materialName = (params.material ?? "cobblestone").toLowerCase();
     const blueprint = getBlueprint(params.structure);
 
@@ -158,17 +168,39 @@ async function handleBuild(bot: Bot, step: { params?: Record<string, unknown> })
 
     for (const pos of sortedBlocks)
     {
+        const existing = bot.blockAt(pos);
+        if (existing && existing.boundingBox !== "empty" && existing.name !== "water" && existing.name !== "lava") {
+            continue;
+        }
+
         const reference = findReferenceBlock(bot, pos);
         if (!reference)
         {
-            throw new Error(`No support block to place at ${pos}`);
+            continue;
         }
 
         const face = pos.minus(reference.position);
         const item = requireInventoryItem(bot, materialName);
-        await bot.equip(item, "hand");
-        await moveToward(bot, reference.position.offset(0.5, 0.5, 0.5), 4, 20000);
-        await bot.placeBlock(reference, face);
+        
+        if (bot.inventory.slots[bot.getEquipmentDestSlot("hand")]?.name !== item.name) {
+            await bot.equip(item, "hand");
+            await waitForNextTick(bot); 
+        }
+
+        await moveToward(bot, reference.position.offset(0.5, 0.5, 0.5), 3.5, 20000);
+        await ensureNotOnPlacement(bot, pos);
+
+        try {
+            await bot.placeBlock(reference, face);
+        } catch (err: any) {
+            if (err.message.includes("timeout") || err.message.includes("range")) {
+                await moveToward(bot, reference.position.offset(0.5, 0.5, 0.5), 2.0, 5000);
+                await bot.placeBlock(reference, face);
+            } else {
+                throw err;
+            }
+        }
+        await waitForNextTick(bot);
     }
 }
 
@@ -179,16 +211,8 @@ async function handleHunt(bot: Bot, step: { params?: Record<string, unknown> }):
 
     const target = findNearestEntity(bot, (entity) =>
     {
-        if (entity.type !== "mob")
-        {
-            return false;
-        }
-
-        if (!match)
-        {
-            return true;
-        }
-
+        if (entity.type !== "mob") return false;
+        if (!match) return true;
         const name = (entity.displayName ?? entity.name ?? "").toLowerCase();
         return name.includes(match);
     }, 64);
@@ -209,28 +233,18 @@ async function handleFight(bot: Bot, step: { params?: Record<string, unknown> })
 
     const target = findNearestEntity(bot, (entity) =>
     {
-        if (entity.type !== "mob" && entity.type !== "player")
-        {
-            return false;
-        }
-
+        if (entity.type !== "mob" && entity.type !== "player") return false;
         const name = (entity.displayName ?? entity.name ?? entity.username ?? "").toLowerCase();
-
-        if (match && !name.includes(match))
-        {
-            return false;
-        }
+        if (match && !name.includes(match)) return false;
 
         if (aggression === "aggressive")
         {
             return entity.kind === "Hostile" || entity.metadata?.some((m: any) => m?.name === "target" && m?.value);
         }
-
         if (aggression === "passive")
         {
             return entity.kind !== "Hostile";
         }
-
         return true;
     }, 64);
 
@@ -254,6 +268,165 @@ async function handleFish(bot: Bot, step: { params?: Record<string, unknown> }):
         await bot.fish();
     }
 }
+
+// --- Navigation Logic -------------------------------------------------------
+
+async function moveToward(bot: Bot, target: Vec3, stopDistance: number, timeoutMs: number): Promise<void>
+{
+    const start = Date.now();
+    let lastPos = bot.entity.position.clone();
+    let stuckTicks = 0;
+
+    const cleanup = () => {
+        bot.clearControlStates();
+        bot.stopDigging(); 
+    };
+
+    try {
+        while (bot.entity.position.distanceTo(target) > stopDistance)
+        {
+            if (Date.now() - start > timeoutMs) throw new Error("Movement timed out");
+
+            const distMoved = bot.entity.position.distanceTo(lastPos);
+            if (distMoved < 0.2) {
+                stuckTicks++;
+            } else {
+                stuckTicks = 0;
+                lastPos = bot.entity.position.clone();
+            }
+
+            if (stuckTicks > 15) {
+                await attemptUnstuck(bot, target, stuckTicks);
+                if (stuckTicks > 20) stuckTicks = 0; 
+                continue;
+            }
+
+            const nextSpot = findBestLocalStep(bot, target);
+            
+            if (nextSpot) {
+                await lookAtAndSteer(bot, nextSpot);
+            } else {
+                await lookAtAndSteer(bot, target);
+            }
+
+            const pos = bot.entity.position;
+            const velocity = bot.entity.velocity;
+            const heading = new Vec3(-Math.sin(bot.entity.yaw), 0, Math.cos(bot.entity.yaw));
+            const blockAhead = bot.blockAt(pos.plus(heading));
+            
+            if (bot.controlState.forward && blockAhead && blockAhead.boundingBox !== "empty" && velocity.x ** 2 + velocity.z ** 2 > 0.01) {
+                bot.setControlState("jump", true);
+            } else {
+                if (stuckTicks < 5) bot.setControlState("jump", false);
+            }
+
+            await waitForNextTick(bot);
+        }
+    } finally {
+        cleanup();
+    }
+}
+
+async function attemptUnstuck(bot: Bot, target: Vec3, severity: number): Promise<void> {
+    bot.setControlState("forward", false);
+    
+    if (severity < 30) {
+        bot.setControlState("jump", true);
+        bot.setControlState("sprint", true);
+        const randomYaw = Math.random() * Math.PI * 2;
+        await bot.look(randomYaw, 0, true);
+        bot.setControlState("forward", true);
+        await waitForNextTick(bot);
+        await waitForNextTick(bot);
+        return;
+    }
+
+    const eyePos = bot.entity.position.offset(0, 1.6, 0);
+    const lookDir = target.minus(eyePos).normalize();
+    const ray = bot.world.raycast(eyePos, lookDir, 2);
+
+    if (ray && ray.block && ray.block.boundingBox !== "empty" && ray.block.name !== "bedrock") {
+        if (bot.entity.onGround) {
+            await bot.dig(ray.block, true);
+            return;
+        }
+    }
+
+    if (target.y > bot.entity.position.y + 1 && bot.entity.onGround) {
+        const jumpBlock = bot.inventory.items().find(i => i.name.includes("dirt") || i.name.includes("cobblestone") || i.name.includes("stone"));
+        if (jumpBlock) {
+             await bot.equip(jumpBlock, "hand");
+             bot.setControlState("jump", true);
+             await bot.look(bot.entity.yaw, -Math.PI / 2, true); 
+             await waitForNextTick(bot);
+             await waitForNextTick(bot);
+             try {
+                const blockBelow = bot.blockAt(bot.entity.position.offset(0, -1, 0));
+                if (blockBelow) await bot.placeBlock(blockBelow, new Vec3(0, 1, 0));
+             } catch (e) { /* ignore placement err */ }
+             return;
+        }
+    }
+    
+    bot.setControlState("back", true);
+    await waitForNextTick(bot);
+    await waitForNextTick(bot);
+    bot.setControlState("back", false);
+}
+
+function findBestLocalStep(bot: Bot, globalTarget: Vec3): Vec3 | null {
+    const pos = bot.entity.position.floored();
+    const candidates: { vec: Vec3; score: number }[] = [];
+
+    for (let x = -1; x <= 1; x++) {
+        for (let z = -1; z <= 1; z++) {
+            if (x === 0 && z === 0) continue;
+
+            for (let y = -1; y <= 1; y++) {
+                const candidate = pos.offset(x, y, z);
+                
+                if (!isSafeToStand(bot, candidate)) continue;
+
+                const center = candidate.offset(0.5, 0, 0.5);
+                const dist = center.distanceTo(globalTarget);
+                
+                const penalty = (y === 1) ? 0.5 : 0;
+                
+                candidates.push({ vec: center, score: dist + penalty });
+            }
+        }
+    }
+
+    candidates.sort((a, b) => a.score - b.score);
+
+    if (candidates.length > 0) return candidates[0].vec;
+    return null;
+}
+
+function isSafeToStand(bot: Bot, pos: Vec3): boolean {
+    const blockBelow = bot.blockAt(pos.offset(0, -1, 0));
+    const blockFeet = bot.blockAt(pos);
+    const blockHead = bot.blockAt(pos.offset(0, 1, 0));
+
+    if (!blockBelow || !blockBelow.boundingBox || blockBelow.boundingBox === "empty") return false; 
+    if (blockBelow.name === "lava" || blockBelow.name === "fire" || blockBelow.name === "magma_block") return false;
+    if (blockFeet && blockFeet.boundingBox !== "empty" && blockFeet.name !== "water") return false;
+    if (blockHead && blockHead.boundingBox !== "empty") return false;
+
+    return true;
+}
+
+async function lookAtAndSteer(bot: Bot, target: Vec3): Promise<void> {
+    await bot.lookAt(target, true);
+    bot.setControlState("forward", true);
+    
+    const deltaY = target.y - bot.entity.position.y;
+    if (deltaY > 0.5) {
+        bot.setControlState("jump", true);
+    }
+}
+
+// --- Helpers ---------------------------------------------------------------
 
 function resolveTargetPosition(bot: Bot, params: MoveParams): Vec3
 {
@@ -294,13 +467,12 @@ function findBlockTarget(bot: Bot, params: MineParams, maxDistance: number): Blo
         return null;
     }
 
-    const blockId = bot.registry.blocksByName[name]?.id;
-    if (!blockId)
-    {
-        return null;
-    }
+    const aliases = expandMaterialAliases(name);
 
-    return bot.findBlock({ matching: blockId, maxDistance }) ?? null;
+    return bot.findBlock({
+        matching: (block) => aliases.includes(block.name.toLowerCase()),
+        maxDistance
+    }) ?? null;
 }
 
 function findReferenceBlock(bot: Bot, target: Vec3): Block | null
@@ -329,6 +501,34 @@ function findReferenceBlock(bot: Bot, target: Vec3): Block | null
     }
 
     return null;
+}
+
+async function ensureNotOnPlacement(bot: Bot, targetBlockPos: Vec3, backAwayDistance = 1.5): Promise<void> {
+    const botPos = bot.entity.position;
+    const targetCenter = targetBlockPos.offset(0.5, 0, 0.5);
+    const dist = botPos.distanceTo(targetCenter);
+
+    if (dist < 1.3) {
+        let retreatDir = (dist < 0.01) ? new Vec3(1, 0, 0) : botPos.minus(targetCenter).normalize();
+        retreatDir.y = 0;
+        retreatDir = retreatDir.normalize();
+
+        const safeSpot = targetCenter.plus(retreatDir.scaled(backAwayDistance));
+        await moveToward(bot, safeSpot, 0.2, 3000);
+    }
+}
+
+function findSafeSpotNear(bot: Bot, origin: Vec3, badPositions: Vec3[]): Vec3 {
+    for (let r = 2; r < 6; r++) {
+        for (let x = -r; x <= r; x++) {
+            for (let z = -r; z <= r; z++) {
+                const test = origin.offset(x, 0, z);
+                if (badPositions.some(b => b.equals(test))) continue;
+                if (isSafeToStand(bot, test)) return test.offset(0.5, 0, 0.5);
+            }
+        }
+    }
+    return origin.offset(3, 0, 3);
 }
 
 function getBlueprint(structure: BuildParams["structure"]): Vec3[]
@@ -403,7 +603,13 @@ function getBlueprint(structure: BuildParams["structure"]): Vec3[]
 function requireInventoryItem(bot: Bot, name: string): Item
 {
     const lower = name.toLowerCase();
-    const item = bot.inventory.items().find(i => (i.name?.toLowerCase() ?? "") === lower);
+    const aliases = expandMaterialAliases(lower);
+    const item = bot.inventory.items().find((i) =>
+    {
+        const itemName = i.name?.toLowerCase() ?? "";
+        const display = i.displayName?.toLowerCase() ?? "";
+        return aliases.includes(itemName) || aliases.includes(display) || itemName.includes(lower);
+    });
 
     if (!item)
     {
@@ -411,6 +617,41 @@ function requireInventoryItem(bot: Bot, name: string): Item
     }
 
     return item;
+}
+
+function expandMaterialAliases(name: string): string[]
+{
+    const lower = name.toLowerCase();
+    const woodVariants =
+    [
+        "oak_planks", "spruce_planks", "birch_planks", "jungle_planks", "acacia_planks", "dark_oak_planks",
+        "mangrove_planks", "cherry_planks", "bamboo_planks", "crimson_planks", "warped_planks",
+        "oak_wood", "spruce_wood", "birch_wood", "jungle_wood", "acacia_wood", "dark_oak_wood",
+        "mangrove_wood", "cherry_wood", "bamboo_block", "crimson_hyphae", "warped_hyphae",
+        "stripped_oak_wood", "stripped_spruce_wood", "stripped_birch_wood", "stripped_jungle_wood",
+        "stripped_acacia_wood", "stripped_dark_oak_wood", "stripped_mangrove_wood", "stripped_cherry_wood",
+        "stripped_bamboo_block", "stripped_crimson_hyphae", "stripped_warped_hyphae"
+    ];
+
+    const stoneVariants =
+    [
+        "stone", "cobblestone", "stone_bricks", "mossy_stone_bricks", "granite", "polished_granite",
+        "andesite", "polished_andesite", "diorite", "polished_diorite", "deepslate", "cobbled_deepslate",
+        "polished_deepslate", "deepslate_bricks", "cracked_deepslate_bricks", "blackstone",
+        "polished_blackstone", "blackstone_bricks", "tuff", "smooth_stone"
+    ];
+
+    if (lower.includes("wood") || lower.includes("plank"))
+    {
+        return Array.from(new Set([lower, ...woodVariants]));
+    }
+
+    if (lower.includes("stone") || lower.includes("cobble"))
+    {
+        return Array.from(new Set([lower, ...stoneVariants]));
+    }
+
+    return [lower];
 }
 
 function findNearestEntity(bot: Bot, predicate: (entity: Entity) => boolean, maxDistance: number): Entity | null
@@ -453,37 +694,6 @@ async function engageTarget(bot: Bot, entity: Entity, range: number, timeoutMs: 
     bot.clearControlStates();
     await bot.lookAt(entity.position, true);
     bot.attack(entity);
-}
-
-async function moveToward(bot: Bot, target: Vec3, stopDistance: number, timeoutMs: number): Promise<void>
-{
-    const start = Date.now();
-    bot.setControlState("forward", false);
-
-    while (bot.entity.position.distanceTo(target) > stopDistance)
-    {
-        if (Date.now() - start > timeoutMs)
-        {
-            bot.clearControlStates();
-            throw new Error("Movement timed out");
-        }
-
-        await bot.lookAt(target, true);
-        bot.setControlState("forward", true);
-
-        if (target.y - bot.entity.position.y > 0.5)
-        {
-            bot.setControlState("jump", true);
-        }
-        else
-        {
-            bot.setControlState("jump", false);
-        }
-
-        await waitForNextTick(bot);
-    }
-
-    bot.clearControlStates();
 }
 
 function waitForNextTick(bot: Bot): Promise<void>

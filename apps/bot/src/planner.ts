@@ -1,5 +1,6 @@
 import type { PerceptionSnapshot } from "./types.js";
 import type { ActionStep } from "./action-executor.js";
+import type { SessionLogger } from "./session-logger.js";
 
 export interface PlanRequest
 {
@@ -41,12 +42,14 @@ export interface HuggingFacePlannerOptions
     backend?: "auto" | "local" | "remote";
     quantized?: boolean;
     remoteMode?: "inference_api" | "hf_api";
+    logger?: SessionLogger;
 }
 
 export class HuggingFacePlanner
 {
     private readonly options: HuggingFacePlannerOptions;
     private readonly generatorPromise: Promise<{ generate: (prompt: string) => Promise<string>; backend: "local" | "remote" }>;
+    private readonly logger?: SessionLogger;
 
     constructor(options?: Partial<HuggingFacePlannerOptions>)
     {
@@ -54,16 +57,18 @@ export class HuggingFacePlanner
         {
             model: options?.model ?? "onnx-community/Qwen2.5-0.5B-Instruct",
             temperature: options?.temperature ?? 0.2,
-            maxTokens: options?.maxTokens ?? 256,
+            maxTokens: options?.maxTokens ?? 2000,
             cacheDir: options?.cacheDir,
             device: options?.device ?? "auto",
             token: options?.token,
             inferenceEndpoint: options?.inferenceEndpoint,
             backend: options?.backend ?? "auto",
             quantized: options?.quantized ?? true,
-            remoteMode: options?.remoteMode ?? "inference_api"
+            remoteMode: options?.remoteMode ?? "inference_api",
+            logger: options?.logger
         } satisfies HuggingFacePlannerOptions;
 
+        this.logger = this.options.logger;
         this.generatorPromise = this.buildGenerator();
     }
 
@@ -81,16 +86,31 @@ export class HuggingFacePlanner
     async createPlan(request: PlanRequest): Promise<PlanResult>
     {
         const { generate, backend } = await this.generatorPromise;
-        const rawText = await generate(this.buildPrompt(request));
-        const parsed = this.parsePlan(rawText);
+        const prompt = this.buildPrompt(request);
 
-        return {
-            intent: parsed.intent,
-            steps: parsed.steps,
-            model: this.options.model,
-            backend,
-            raw: rawText
-        };
+        this.logger?.logPlannerPrompt(prompt, request);
+
+        try
+        {
+            const rawText = await generate(prompt);
+            this.logger?.logPlannerResponse(rawText, { backend, model: this.options.model });
+
+            const parsed = this.parsePlan(rawText);
+            this.logger?.logPlannerParsed({ ...parsed, backend });
+
+            return {
+                intent: parsed.intent,
+                steps: parsed.steps,
+                model: this.options.model,
+                backend,
+                raw: rawText
+            };
+        }
+        catch (error)
+        {
+            this.logger?.logPlannerError(error, { prompt, request });
+            throw error;
+        }
     }
 
     private async buildGenerator(): Promise<{ generate: (prompt: string) => Promise<string>; backend: "local" | "remote" }>

@@ -1,0 +1,33 @@
+{
+  "name": "Mine any block safely",
+  "goal": "Collect targeted blocks while adapting to available tools and hazards",
+  "tags": ["mining", "resources", "safety"],
+  "required_items": ["pickaxe_or_tool", "torches_or_blocks_for_light"],
+  "optional_items": ["water_bucket", "ladders", "shovel"],
+  "environment": [
+    "Track nearby ore veins, exposed caves, and mob spawns",
+    "Use water to neutralize lava if available"
+  ],
+  "hazards": ["lava", "gravel_fall", "hostile_mobs"],
+  "steps": [
+    {
+      "title": "Confirm tool and block requirements",
+      "action": "perceive",
+      "details": "Check current tool tier vs. target block (e.g., iron pickaxe for diamonds). List nearby blocks and entities to avoid surprises.",
+      "checks": ["Tool tier sufficient for drops", "Lighting available"]
+    },
+    {
+      "title": "Stabilize workspace",
+      "action": "prepare",
+      "details": "Place torches or temporary blocks to prevent mob spawns and falling gravel/sand. Block off open cave mouths if needed.",
+      "checks": ["Area lit every 7 blocks", "No exposed gravel above"]
+    },
+    {
+      "title": "Mine and collect",
+      "action": "mine",
+      "details": "Dig the target block while standing on solid footing. Use water on lava, and mine around valuable ore to check for hazards before breaking it.",
+      "checks": ["Pick up drops before despawn", "Leave a marked exit path"]
+    }
+  ],
+  "notes": "Always carry spare blocks to plug lava and build stairs back up."
+}

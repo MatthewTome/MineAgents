@@ -1,7 +1,9 @@
 import { parentPort, workerData } from "node:worker_threads";
 import { HuggingFacePlanner } from "./planner.js";
+import { SessionLogger } from "./session-logger.js";
 const data = workerData;
-const planner = new HuggingFacePlanner(data.options);
+const logger = new SessionLogger(data.logDir);
+const planner = new HuggingFacePlanner({ ...data.options, logger });
 async function initialize() {
     try {
         const backend = await planner.backend();

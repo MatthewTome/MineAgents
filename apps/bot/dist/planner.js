@@ -11,20 +11,23 @@ const SUPPORTED_ACTIONS = {
 export class HuggingFacePlanner {
     options;
     generatorPromise;
+    logger;
     constructor(options) {
         this.options =
             {
                 model: options?.model ?? "onnx-community/Qwen2.5-0.5B-Instruct",
                 temperature: options?.temperature ?? 0.2,
-                maxTokens: options?.maxTokens ?? 256,
+                maxTokens: options?.maxTokens ?? 2000,
                 cacheDir: options?.cacheDir,
                 device: options?.device ?? "auto",
                 token: options?.token,
                 inferenceEndpoint: options?.inferenceEndpoint,
                 backend: options?.backend ?? "auto",
                 quantized: options?.quantized ?? true,
-                remoteMode: options?.remoteMode ?? "inference_api"
+                remoteMode: options?.remoteMode ?? "inference_api",
+                logger: options?.logger
             };
+        this.logger = this.options.logger;
         this.generatorPromise = this.buildGenerator();
     }
     get modelName() {
@@ -36,15 +39,25 @@ export class HuggingFacePlanner {
     }
     async createPlan(request) {
         const { generate, backend } = await this.generatorPromise;
-        const rawText = await generate(this.buildPrompt(request));
-        const parsed = this.parsePlan(rawText);
-        return {
-            intent: parsed.intent,
-            steps: parsed.steps,
-            model: this.options.model,
-            backend,
-            raw: rawText
-        };
+        const prompt = this.buildPrompt(request);
+        this.logger?.logPlannerPrompt(prompt, request);
+        try {
+            const rawText = await generate(prompt);
+            this.logger?.logPlannerResponse(rawText, { backend, model: this.options.model });
+            const parsed = this.parsePlan(rawText);
+            this.logger?.logPlannerParsed({ ...parsed, backend });
+            return {
+                intent: parsed.intent,
+                steps: parsed.steps,
+                model: this.options.model,
+                backend,
+                raw: rawText
+            };
+        }
+        catch (error) {
+            this.logger?.logPlannerError(error, { prompt, request });
+            throw error;
+        }
     }
     async buildGenerator() {
         const preferLocal = this.options.backend !== "remote";

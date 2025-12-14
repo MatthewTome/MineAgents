@@ -1,13 +1,16 @@
 import { parentPort, workerData } from "node:worker_threads";
 import { HuggingFacePlanner, type PlanRequest, type PlanResult, type HuggingFacePlannerOptions } from "./planner.js";
+import { SessionLogger } from "./session-logger.js";
 
 interface WorkerInit
 {
     options?: Partial<HuggingFacePlannerOptions>;
+    logDir?: string;
 }
 
 const data = workerData as WorkerInit;
-const planner = new HuggingFacePlanner(data.options);
+const logger = new SessionLogger(data.logDir);
+const planner = new HuggingFacePlanner({ ...data.options, logger });
 
 async function initialize()
 {

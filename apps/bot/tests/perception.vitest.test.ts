@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { Vec3 } from "vec3";
 import type { Bot } from "mineflayer";
-import { PerceptionCollector } from "./perception";
+import { PerceptionCollector } from "../src/perception";
 import { describe, it, expect } from "vitest";
 
 // --- Mocks -------------------------------------------------------------------

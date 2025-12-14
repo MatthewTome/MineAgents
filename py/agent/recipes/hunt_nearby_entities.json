@@ -1,0 +1,33 @@
+{
+  "name": "Hunt nearby entities",
+  "goal": "Track and eliminate target animals or hostile mobs with available gear",
+  "tags": ["combat", "hunting", "food"],
+  "required_items": ["weapon_or_tool"],
+  "optional_items": ["shield", "bow", "food"],
+  "environment": [
+    "Use perception to list target entities, distances, and obstacles",
+    "Consider terrain for line-of-sight and cover"
+  ],
+  "hazards": ["hostile_mobs", "fall_damage"],
+  "steps": [
+    {
+      "title": "Choose a target",
+      "action": "perceive",
+      "details": "Identify the closest suitable entity (animal for food or hostile mob). Note its position, nearby allies, and any hazards like cliffs or lava.",
+      "checks": ["Target not surrounded by mobs", "Escape path marked"]
+    },
+    {
+      "title": "Equip and approach",
+      "action": "move",
+      "details": "Equip the best available weapon/shield. Approach using cover, avoiding fall damage. Use blocks to pillar or kite if the mob is dangerous.",
+      "checks": ["Health above half", "Hunger sufficient for sprinting if needed"]
+    },
+    {
+      "title": "Engage and loot",
+      "action": "attack",
+      "details": "Attack while circle-strafing or keeping distance for ranged weapons. After the kill, pick up drops quickly and retreat to a safe spot to heal.",
+      "checks": ["Pick up loot", "Eat if health low"]
+    }
+  ],
+  "notes": "If multiple mobs aggro, block with walls or retreat to high ground before re-engaging."
+}

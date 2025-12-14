@@ -28,6 +28,7 @@ interface WorkerPlanError
 export interface PlannerWorkerInit
 {
     options?: Partial<HuggingFacePlannerOptions>;
+    logDir?: string;
 }
 
 export class PlannerWorkerClient

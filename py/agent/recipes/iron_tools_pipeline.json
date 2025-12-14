@@ -1,0 +1,46 @@
+{
+  "name": "Iron tools pipeline",
+  "goal": "Smelt iron and craft iron tools/armor using available fuel and crafting options",
+  "tags": ["iron", "smelting", "tools", "armor"],
+  "required_items": ["logs_or_planks", "cobblestone", "iron_ore_or_raw_iron"],
+  "optional_items": ["coal_or_charcoal", "furnace", "crafting_table"],
+  "environment": [
+    "Track perceived fuel sources like logs, coal, or lava buckets",
+    "Note nearby furnaces or crafting tables; craft them if missing",
+    "Avoid mining directly above/below to stay safe"
+  ],
+  "hazards": ["lava", "hostile_mobs", "falls"],
+  "steps": [
+    {
+      "title": "Survey resources",
+      "action": "perceive",
+      "details": "From the latest observation, list nearby ore veins, stone, coal, crafting stations, and inventory fuel. Include entity proximity to avoid ambush while mining.",
+      "checks": ["Confirm at least wooden_pickaxe or better is available", "Plan a safe mine route"]
+    },
+    {
+      "title": "Gather wood and stone",
+      "action": "gather",
+      "details": "Chop any logs and craft planks/sticks. Mine cobblestone with the safest available pickaxe to build a furnace and stone tools if iron tools are not yet made.",
+      "checks": ["Have 8 cobblestone for furnace", "Crafting table placed or carried"]
+    },
+    {
+      "title": "Acquire fuel",
+      "action": "collect",
+      "details": "Mine coal if present; otherwise smelt logs into charcoal or use leftover planks as fuel. Keep some wood reserved for sticks and building blocks.",
+      "checks": ["At least 8 fuel items ready", "Avoid smelting without spare wood for sticks"]
+    },
+    {
+      "title": "Mine iron safely",
+      "action": "mine",
+      "details": "Locate iron ore using perception hints; mine while keeping a block underfoot and blocking off exposed lava or mobs. Collect at least 9 raw iron for tools and a shield.",
+      "checks": ["Carry blocks to bridge or block lava", "Keep exit lit to reduce mob spawns"]
+    },
+    {
+      "title": "Smelt and craft",
+      "action": "smelt",
+      "details": "Place or use a furnace; smelt raw iron with chosen fuel. Craft iron pickaxe, sword/axe, bucket, and armor as resources allow. Prioritize shield first if hostile mobs nearby.",
+      "checks": ["Fuel inserted before iron", "Crafting queue respects available sticks"]
+    }
+  ],
+  "notes": "If coal is missing, produce charcoal from logs. Keep spare blocks for emergency towers or walls."
+}

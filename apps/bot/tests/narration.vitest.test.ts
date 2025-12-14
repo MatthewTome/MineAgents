@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { PlanNarrator } from "./narration.js";
+import { PlanNarrator } from "../src/narration.js";
 
 describe("PlanNarrator", () =>
 {

@@ -1,0 +1,33 @@
+{
+  "name": "Fight aggressive mobs",
+  "goal": "Survive and neutralize hostile mobs using available gear and terrain",
+  "tags": ["combat", "survival", "defense"],
+  "required_items": ["weapon_or_tool", "blocks_for_cover"],
+  "optional_items": ["shield", "bow", "food"],
+  "environment": [
+    "Capture perceived mob types, counts, and positions",
+    "Use terrain (water, walls, high ground) to your advantage"
+  ],
+  "hazards": ["creeper_explosions", "skeleton_arrows", "lava"],
+  "steps": [
+    {
+      "title": "Assess threat",
+      "action": "perceive",
+      "details": "Check which mobs are present, their distance, and if more are arriving. Record nearby blocks for cover or elevation.",
+      "checks": ["No unspotted mobs behind", "Retreat vector chosen"]
+    },
+    {
+      "title": "Fortify position",
+      "action": "build",
+      "details": "Place quick walls or pillars with any solid blocks. If skeletons present, build side cover; if creepers, maintain distance and avoid tight tunnels.",
+      "checks": ["Two-block-high barrier between you and melee mobs", "Line-of-sight broken for ranged mobs where possible"]
+    },
+    {
+      "title": "Engage safely",
+      "action": "attack",
+      "details": "Kite mobs into choke points. Use shield timing for skeletons; strafe creepers and finish before explosion range; for spiders, fight in open to avoid ceiling pounces.",
+      "checks": ["Health and hunger topped between fights", "Collect drops after area is secure"]
+    }
+  ],
+  "notes": "If overwhelmed, pillar three blocks up or retreat to the shelter and wait for daylight."
+}
