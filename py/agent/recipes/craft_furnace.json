@@ -1,0 +1,29 @@
+{
+  "name": "Craft Furnace",
+  "goal": "Create a furnace for smelting ore and cooking food",
+  "tags": ["crafting", "amenities", "furnace"],
+  "steps": [
+    {
+      "title": "Gather Cobblestone",
+      "action": "mine",
+      "details": "Mine 8 cobblestone blocks.",
+      "checks": ["Inventory has >= 8 cobblestone"]
+    },
+    {
+      "title": "Craft Crafting Table",
+      "action": "craft",
+      "details": "If missing, craft a crafting_table first (requires 4 planks)."
+    },
+    {
+      "title": "Place Crafting Table",
+      "action": "build",
+      "details": "Place crafting table nearby if not already placed. params: { \"structure\": \"platform\", \"width\": 1, \"length\": 1, \"material\": \"crafting_table\" }"
+    },
+    {
+      "title": "Craft Furnace",
+      "action": "craft",
+      "details": "Craft the furnace using the table.",
+      "params": { "recipe": "furnace", "count": 1 }
+    }
+  ]
+}

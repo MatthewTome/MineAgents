@@ -1,0 +1,18 @@
+{
+  "name": "Build Roof",
+  "goal": "Add a weather-proof covering to the house",
+  "tags": ["building", "house", "roof"],
+  "steps": [
+    {
+      "title": "Gather materials",
+      "action": "perceive",
+      "details": "Ensure ample wood or stairs. Roofs consume lots of blocks."
+    },
+    {
+      "title": "Construct Roof",
+      "action": "build",
+      "details": "Place the roof structure on top of the walls. Use the 'roof' structure type which automatically builds a pyramid shape.",
+      "checks": ["Structure 'roof' used", "Origin set to top of walls"]
+    }
+  ]
+}

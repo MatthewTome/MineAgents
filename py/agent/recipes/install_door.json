@@ -1,0 +1,24 @@
+{
+  "name": "Install Door",
+  "goal": "Secure the entrance with a wooden door",
+  "tags": ["building", "security", "door"],
+  "steps": [
+    {
+      "title": "Craft Door",
+      "action": "craft",
+      "details": "Craft an oak_door. Requires 6 planks and a crafting table."
+    },
+    {
+      "title": "Clear Doorway",
+      "action": "mine",
+      "details": "Clear 2 blocks vertically where the door will go to ensure it fits.",
+      "checks": ["Air blocks at target position"]
+    },
+    {
+      "title": "Place Door",
+      "action": "build",
+      "details": "Place the door. Use width=1, length=1, material='oak_door'.",
+      "params": { "structure": "platform", "width": 1, "length": 1, "material": "oak_door" }
+    }
+  ]
+}
