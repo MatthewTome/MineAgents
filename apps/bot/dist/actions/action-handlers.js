@@ -1,12 +1,11 @@
 import { Vec3 } from "vec3";
-// --- REGISTRY ---
 export function createDefaultActionHandlers() {
     return {
         move: handleMove,
         mine: handleMine,
         gather: handleGather,
         craft: handleCraft,
-        smelt: handleSmelt, // NEW: Smelting
+        smelt: handleSmelt,
         build: handleBuild,
         hunt: handleHunt,
         fish: handleFish,
@@ -15,7 +14,6 @@ export function createDefaultActionHandlers() {
         analyzeInventory: handlePerceive
     };
 }
-// --- CORE HANDLERS ---
 async function handlePerceive(bot, step) {
     const params = (step.params ?? {});
     console.log(`[bot] Perceiving: ${params?.check ?? "surroundings/inventory"}`);
@@ -27,16 +25,13 @@ async function handleSmelt(bot, step) {
         throw new Error("Smelt requires item name");
     const rawItem = resolveItemName(params.item);
     const fuelItem = resolveItemName(params.fuel ?? "coal");
-    // 1. Find Furnace
     let furnaceBlock = params.furnace
         ? bot.blockAt(new Vec3(params.furnace.x, params.furnace.y, params.furnace.z))
         : bot.findBlock({ matching: b => b.name === "furnace", maxDistance: 32 });
     if (!furnaceBlock) {
         console.log("[smelt] No furnace found. Crafting/Placing one...");
-        // Pipeline: Gather Stone -> Craft Furnace -> Place Furnace
-        await handleGather(bot, { params: { item: "cobblestone" } }); // Need 8
+        await handleGather(bot, { params: { item: "cobblestone" } });
         await handleCraft(bot, { params: { recipe: "furnace" } });
-        // Place it
         const pos = bot.entity.position.offset(1, 0, 0).floored();
         const ref = findReferenceBlock(bot, pos);
         if (ref) {
@@ -51,23 +46,18 @@ async function handleSmelt(bot, step) {
     }
     if (!furnaceBlock)
         throw new Error("Failed to secure a furnace.");
-    // 2. Go to Furnace
     await moveToward(bot, furnaceBlock.position, 3, 15000);
-    // 3. Operate
     const furnace = await bot.openFurnace(furnaceBlock);
-    // Put Fuel
     const fuel = bot.inventory.items().find(i => i.name.includes(fuelItem) || i.name.includes("wood") || i.name.includes("plank") || i.name.includes("coal"));
     if (!fuel)
         throw new Error(`No fuel found for smelting (looked for ${fuelItem} or wood)`);
     await furnace.putFuel(fuel.type, null, fuel.count);
-    // Put Input
     const input = bot.inventory.items().find(i => i.name.includes(rawItem));
     if (!input)
         throw new Error(`No input item ${rawItem} found to smelt`);
     await furnace.putInput(input.type, null, input.count);
     console.log("[smelt] Cooking... waiting 10s");
-    await new Promise(r => setTimeout(r, 10000)); // Wait a bit
-    // Take Output
+    await new Promise(r => setTimeout(r, 10000));
     try {
         await furnace.takeOutput();
     }
@@ -78,35 +68,28 @@ async function handleCraft(bot, step) {
     const params = (step.params ?? {});
     const itemName = params.recipe.toLowerCase();
     const count = params.count ?? 1;
-    // Validate
     const itemType = bot.registry.itemsByName[itemName];
     if (!itemType && !itemName.includes("plank"))
         throw new Error(`Unknown item name: ${itemName}`);
-    // Find Recipe
-    // @ts-ignore
     let recipeList = itemType ? bot.recipesFor(itemType.id, null, 1, true) : [];
     let recipe = recipeList[0];
     if (!recipe && itemName.includes("plank")) {
         const oak = bot.registry.itemsByName['oak_planks'];
-        // @ts-ignore
         if (oak)
             recipe = bot.recipesFor(oak.id, null, 1, true)[0];
     }
     if (!recipe)
         throw new Error(`No crafting recipe found for ${itemName}.`);
-    // Table Logic
     if (recipe.requiresTable) {
         let tableBlock = params.craftingTable
             ? bot.blockAt(new Vec3(params.craftingTable.x, params.craftingTable.y, params.craftingTable.z))
             : bot.findBlock({ matching: (b) => b.name === "crafting_table", maxDistance: 32 });
         if (!tableBlock) {
             console.log("[craft] Crafting new table...");
-            // Ensure planks
             await handleGather(bot, { params: { item: "log" } });
             await handleCraft(bot, { params: { recipe: "oak_planks" } });
             const tRecipe = bot.recipesFor(bot.registry.itemsByName['crafting_table'].id, null, 1, null)[0];
             await bot.craft(tRecipe, 1, undefined);
-            // Place
             const pos = bot.entity.position.offset(1, 0, 0).floored();
             const ref = findReferenceBlock(bot, pos);
             if (ref) {
@@ -147,7 +130,6 @@ async function handleGather(bot, step) {
             consecutiveFailures = 0;
             continue;
         }
-        // 1. Drops
         const dropped = findNearestEntity(bot, (e) => {
             if (e.name !== "item")
                 return false;
@@ -159,7 +141,6 @@ async function handleGather(bot, step) {
             await moveToward(bot, dropped.position, 1.0, 15000);
             return;
         }
-        // 2. Mining
         const blockName = resolveItemToBlock(targetItem);
         if (blockName) {
             const aliases = expandMaterialAliases(blockName);
@@ -199,7 +180,6 @@ async function handleGather(bot, step) {
                 }
             }
         }
-        // 3. Crafting/Production
         const raw = resolveProductToRaw(targetItem);
         if (raw) {
             console.log(`[gather] Producing ${targetItem} from ${raw}...`);
@@ -207,7 +187,6 @@ async function handleGather(bot, step) {
             await handleCraft(bot, { params: { recipe: targetItem } });
             return;
         }
-        // 4. Explore
         console.log(`[gather] Searching...`);
         const explore = bot.entity.position.offset((Math.random() - 0.5) * 20, 0, (Math.random() - 0.5) * 20);
         await moveToward(bot, explore, 2, 5000).catch(() => { });
@@ -241,7 +220,6 @@ async function handleBuild(bot, step) {
     const params = (step.params ?? {});
     if (!params?.structure)
         throw new Error("Build requires structure type");
-    // Stable Origin
     const rawOrigin = params.origin ? new Vec3(params.origin.x, params.origin.y, params.origin.z) : bot.entity.position;
     const origin = rawOrigin.floored();
     const blueprint = getBlueprint(params);
@@ -249,7 +227,6 @@ async function handleBuild(bot, step) {
         throw new Error(`Blueprint empty for '${params.structure}'`);
     const bounds = blueprint.map(p => origin.plus(p));
     const botPos = bot.entity.position.floored();
-    // Safety Relocation
     if (bounds.some(b => b.equals(botPos) || b.equals(botPos.offset(0, 1, 0)))) {
         console.log("[build] Relocating to avoid trapping...");
         const safe = findSafeSpotNear(bot, origin);
@@ -257,10 +234,9 @@ async function handleBuild(bot, step) {
     }
     const materialName = (params.material ?? "cobblestone").toLowerCase();
     const isVertical = ["wall", "walls", "roof", "house", "tower", "chimney"].includes(params.structure);
-    // SMART SORTING: Vertical=Far->Near, Flat=Near->Far
     const sorted = blueprint.map(pos => origin.plus(pos)).sort((a, b) => {
         if (a.y !== b.y)
-            return a.y - b.y; // Bottom up always
+            return a.y - b.y;
         const distA = a.distanceTo(bot.entity.position);
         const distB = b.distanceTo(bot.entity.position);
         return isVertical ? (distB - distA) : (distA - distB);
@@ -288,7 +264,6 @@ async function handleBuild(bot, step) {
             await bot.equip(item, "hand");
         }
         if (bot.entity.position.distanceTo(ref.position) > 4.5) {
-            // Smart stand position: Don't stand inside the block we are placing
             const safeStand = ref.position.offset(0.5, 1, 0.5).plus(pos.minus(ref.position).scaled(-1));
             await moveToward(bot, safeStand, 4.0, 10000);
         }
@@ -300,8 +275,6 @@ async function handleBuild(bot, step) {
         catch (e) { }
     }
 }
-// === SMART NAVIGATION ===
-// Replaces linear pathing with local BFS/Gradient
 async function moveToward(bot, target, range, timeout) {
     const start = Date.now();
     let lastPos = bot.entity.position.clone();
@@ -310,7 +283,6 @@ async function moveToward(bot, target, range, timeout) {
         while (bot.entity.position.distanceTo(target) > range) {
             if (Date.now() - start > timeout)
                 throw new Error("Move timeout");
-            // Stuck detection
             if (bot.entity.position.distanceTo(lastPos) < 0.2)
                 stuck++;
             else {
@@ -319,13 +291,10 @@ async function moveToward(bot, target, range, timeout) {
             }
             if (stuck > 15)
                 await attemptUnstuck(bot, target);
-            // 1. Calculate next best step
             const nextSpot = findBestLocalStep(bot, target);
-            // 2. Look and Move
             if (nextSpot) {
-                await bot.lookAt(nextSpot.offset(0, 1.6, 0)); // Look up a bit
+                await bot.lookAt(nextSpot.offset(0, 1.6, 0));
                 bot.setControlState("forward", true);
-                // Jumping logic: If next spot is higher, JUMP
                 if (nextSpot.y > bot.entity.position.y + 0.1) {
                     bot.setControlState("jump", true);
                 }
@@ -334,14 +303,12 @@ async function moveToward(bot, target, range, timeout) {
                 }
             }
             else {
-                // Fallback to naive if no path found (unlikely)
                 await bot.lookAt(target);
                 bot.setControlState("forward", true);
             }
-            // Safety: Don't walk off cliffs
             if (isCliffAhead(bot)) {
                 bot.setControlState("forward", false);
-                bot.setControlState("back", true); // Back up!
+                bot.setControlState("back", true);
                 await waitForNextTick(bot);
             }
             await waitForNextTick(bot);
@@ -353,26 +320,22 @@ async function moveToward(bot, target, range, timeout) {
 }
 function findBestLocalStep(bot, globalTarget) {
     const pos = bot.entity.position.floored();
-    // Scan 3x3x2 area
     let best = null;
     let minScore = Infinity;
-    for (let x = -5; x <= 5; x++) {
-        for (let z = -5; z <= 5; z++) {
+    for (let x = -1; x <= 1; x++) {
+        for (let z = -1; z <= 1; z++) {
             if (x === 0 && z === 0)
                 continue;
-            // Check Y-1 (down), Y+0 (level), Y+1 (up)
             for (let y = -1; y <= 1; y++) {
                 const candidate = pos.offset(x, y, z);
-                // Must be safe to stand
                 if (!isSafeToStand(bot, candidate))
                     continue;
-                // Score: Distance to target + Penalty for jumping
                 const dist = candidate.distanceTo(globalTarget);
-                const penalty = (y === 1) ? 0.5 : 0; // Prefer flat
+                const penalty = (y === 1) ? 0.5 : 0;
                 const score = dist + penalty;
                 if (score < minScore) {
                     minScore = score;
-                    best = candidate.offset(0.5, 0, 0.5); // Center
+                    best = candidate.offset(0.5, 0, 0.5);
                 }
             }
         }
@@ -380,41 +343,35 @@ function findBestLocalStep(bot, globalTarget) {
     return best;
 }
 function isSafeToStand(bot, pos) {
-    const block = bot.blockAt(pos); // Feet
-    const below = bot.blockAt(pos.offset(0, -1, 0)); // Ground
-    const above = bot.blockAt(pos.offset(0, 1, 0)); // Head
+    const block = bot.blockAt(pos);
+    const below = bot.blockAt(pos.offset(0, -1, 0));
+    const above = bot.blockAt(pos.offset(0, 1, 0));
     if (!block || !below || !above)
         return false;
-    // Ground must be solid
     if (below.boundingBox === "empty" || below.name === "lava")
         return false;
-    // Feet and Head must be clear
     if (block.boundingBox !== "empty")
         return false;
     if (above.boundingBox !== "empty")
         return false;
-    // Don't fall too far (check block below the ground)
     const deepBelow = bot.blockAt(pos.offset(0, -2, 0));
     if (deepBelow && deepBelow.boundingBox === "empty") {
-        // It's a ledge... check one more
         const deepDeep = bot.blockAt(pos.offset(0, -3, 0));
         if (deepDeep && deepDeep.boundingBox === "empty")
-            return false; // > 2 block drop
+            return false;
     }
     return true;
 }
 function isCliffAhead(bot) {
     const velocity = bot.entity.velocity;
-    const look = bot.entity.position.plus(velocity.scaled(5)); // Where we are going
+    const look = bot.entity.position.plus(velocity.scaled(5));
     const blockBelow = bot.blockAt(look.offset(0, -1, 0));
     const blockBelow2 = bot.blockAt(look.offset(0, -2, 0));
     const blockBelow3 = bot.blockAt(look.offset(0, -3, 0));
-    // If all air below trajectory, STOP
     return (!blockBelow || blockBelow.boundingBox === "empty") &&
         (!blockBelow2 || blockBelow2.boundingBox === "empty") &&
         (!blockBelow3 || blockBelow3.boundingBox === "empty");
 }
-// --- STANDARD HELPERS ---
 function resolveItemName(name) {
     const lower = name.toLowerCase();
     if (lower === "wood")
@@ -508,7 +465,6 @@ async function attemptUnstuck(bot, target) {
 function waitForNextTick(bot) {
     return new Promise(r => bot.once("physicsTick", r));
 }
-// Re-implement others simply
 async function handleHunt(bot, step) {
     const params = (step.params ?? {});
     const target = findNearestEntity(bot, e => e.type === "mob" && (e.name ?? "").includes(params.target ?? ""), 64);
@@ -540,7 +496,6 @@ async function engageTarget(bot, entity, range, timeoutMs) {
     await bot.lookAt(entity.position, true);
     bot.attack(entity);
 }
-// --- LOGIC HELPERS ---
 async function ensureToolFor(bot, block) {
     const inventory = bot.inventory.items();
     if (block.material === "rock" || block.name.includes("stone") || block.name.includes("ore") || block.name.includes("cobble")) {

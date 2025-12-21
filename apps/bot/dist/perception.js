@@ -1,10 +1,10 @@
 import { Vec3 } from "vec3";
 const DEFAULTS = {
     hz: 5,
-    nearbyRange: 12,
-    blockSampleRadiusXY: 2,
-    blockSampleHalfHeight: 1,
-    maxNearbyEntities: 24,
+    nearbyRange: 80,
+    blockSampleRadiusXY: 24,
+    blockSampleHalfHeight: 6,
+    maxNearbyEntities: 144,
     chatBuffer: 10
 };
 export class PerceptionCollector {
@@ -42,7 +42,6 @@ export class PerceptionCollector {
     getSnapshot() {
         return this.buildSnapshot();
     }
-    // —— internals ———————————————————————————————————————————————————
     wireEvents() {
         this.bot.on("move", () => this.markDirty());
         this.bot.on("health", () => this.markDirty());
@@ -284,7 +283,6 @@ export class PerceptionCollector {
         return String(biomeId);
     }
 }
-// —— helpers ————————————————————————————————————————————————————————
 function classifyEntity(name, type) {
     const n = (name ?? "").toLowerCase();
     if (type === "player" || n === "player") {

@@ -1,6 +1,6 @@
 import { parentPort, workerData } from "node:worker_threads";
 import { HuggingFacePlanner, type PlanRequest, type PlanResult, type HuggingFacePlannerOptions } from "./planner.js";
-import { SessionLogger } from "./session-logger.js";
+import { SessionLogger } from "../logger/session-logger.js";
 
 interface WorkerInit
 {

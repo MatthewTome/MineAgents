@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { ActionLogEntry, ActionStatus } from "./action-executor.js";
+import { ActionLogEntry, ActionStatus } from "../actions/action-executor.js";
 
 export interface ReflectionEntry
 {

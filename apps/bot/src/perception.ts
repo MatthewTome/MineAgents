@@ -9,7 +9,7 @@ import {
     InventorySummary,
     NearbyEntity,
     EntityKind
-} from "./types.js";
+} from "./settings/types.js";
 
 type PerceptionConfig =
 {
@@ -24,10 +24,10 @@ type PerceptionConfig =
 const DEFAULTS: PerceptionConfig =
 {
     hz: 5,
-    nearbyRange: 12,
-    blockSampleRadiusXY: 2,
-    blockSampleHalfHeight: 1,
-    maxNearbyEntities: 24,
+    nearbyRange: 80,
+    blockSampleRadiusXY: 24,
+    blockSampleHalfHeight: 6,
+    maxNearbyEntities: 144,
     chatBuffer: 10
 };
 
@@ -84,8 +84,6 @@ export class PerceptionCollector
     {
         return this.buildSnapshot();
     }
-
-    // —— internals ———————————————————————————————————————————————————
 
     private wireEvents(): void
     {
@@ -382,38 +380,26 @@ export class PerceptionCollector
     }
 
     private biomeNameAt(pos: Vec3): string | undefined
-{
-    const x = Math.floor(pos.x);
-    const z = Math.floor(pos.z);
-    const y = 0;
+    {  
+        const x = Math.floor(pos.x);
+        const z = Math.floor(pos.z);
+        const y = 0;
 
-    const biomeId = (this.bot.world as any)?.getBiome?.(new Vec3(x, y, z));
-    if (biomeId == null)
-    {
-        return undefined;
+        const biomeId = (this.bot.world as any)?.getBiome?.(new Vec3(x, y, z));
+        if (biomeId == null) { return undefined; }
+
+        const biomes = (this.bot as any)?.registry?.biomes;
+        if (biomes && biomes[biomeId] && biomes[biomeId].name) { return biomes[biomeId].name as string; }
+
+        return String(biomeId);
     }
-
-    const biomes = (this.bot as any)?.registry?.biomes;
-    if (biomes && biomes[biomeId] && biomes[biomeId].name)
-    {
-        return biomes[biomeId].name as string;
-    }
-
-    return String(biomeId);
 }
-
-}
-
-// —— helpers ————————————————————————————————————————————————————————
 
 function classifyEntity(name?: string, type?: string): EntityKind
 {
     const n = (name ?? "").toLowerCase();
 
-    if (type === "player" || n === "player")
-    {
-        return "player";
-    }
+    if (type === "player" || n === "player") { return "player"; }
 
     const hostiles = ["zombie", "creeper", "skeleton", "spider", "enderman", "witch", "pillager", "blaze", "guardian"];
     const passive = ["cow", "sheep", "chicken", "pig", "villager", "horse"];

@@ -1,70 +1,37 @@
 {
   "name": "Build a wooden shelter",
-  "goal": "Safe shelter using wood variants first, then falling back to other solid blocks",
-  "tags": ["shelter", "nightfall", "building", "safety", "wood"],
-  "required_items": [
-    "wood_variants (items containing 'log', 'planks', 'wood', 'stripped', 'stem')",
-    "door_or_trapdoor"
-  ],
-  "optional_items": ["torch", "bed", "glass_pane", "cobblestone", "dirt"],
-  "environment": [
-    "Pick a flat spot away from lava and steep drops",
-    "Prefer areas with nearby trees",
-    "Capture perceived nearby blocks to guide material choices"
-  ],
-  "hazards": ["hostile_mobs", "lava", "suffocation_during_build"],
-  "material_priority": [
-    "1. Inventory items matching 'planks' (e.g., oak_planks)",
-    "2. Inventory items matching 'log' or 'wood' (e.g., birch_log)",
-    "3. Cobblestone",
-    "4. Dirt"
-  ],
+  "goal": "Safe shelter with foundation, walls, roof, and door",
+  "tags": ["shelter", "building", "safety", "house"],
   "steps": [
     {
-      "title": "Analyze Inventory for Wood",
+      "title": "Analyze & Prepare",
       "action": "perceive",
-      "details": "Scan inventory specifically for item names containing 'log', 'planks', 'wood', 'stem', or 'stripped'. If found, set these as the primary 'material' parameter for the build step.",
-      "checks": [
-        "Identified specific block name (e.g., 'oak_log') to use as material",
-        "If no wood is found, identify cobblestone or dirt as fallback"
-      ]
+      "details": "Check inventory for wood/logs. Plan a specific origin coordinate near the bot."
     },
     {
-      "title": "Collect materials",
-      "action": "gather",
-      "details": "If inventory has < 24 solid blocks, gather wood first. Mine trees to get 'log' items. Only gather dirt/cobblestone if no trees are nearby.",
-      "checks": [
-        "Inventory has >= 24 blocks total",
-        "Prioritized gathering wood over dirt"
-      ]
-    },
-    {
-      "title": "Clear Build Area",
+      "title": "Clear & Level",
       "action": "move",
-      "details": "Move to a position at least 3 blocks away from the intended build origin to prevent getting stuck inside the blocks.",
-      "checks": ["Bot is not standing at the build origin coordinates"]
+      "details": "Move to the planned origin."
     },
     {
-      "title": "Lay out foundation",
+      "title": "Foundation",
       "action": "build",
-      "details": "Place a 3x3 or 4x4 platform. IMPORTANT: In the params, set 'material' to the EXACT name of the block found in inventory (e.g., 'oak_planks'), do not use generic 'wood'.",
-      "checks": [
-        "Opening reserved for door",
-        "Material parameter matches an item currently in inventory"
-      ]
+      "details": "Place the floor. USE THE SAME ORIGIN COORDINATE FOR ALL STEPS. params: { \"structure\": \"platform\", \"width\": 5, \"length\": 5, \"material\": \"oak_planks\", \"origin\": {x,y,z} }"
     },
     {
-      "title": "Raise walls and install roof",
+      "title": "Walls",
       "action": "build",
-      "details": "Build walls 2 blocks high. Use the same material priority: Wood -> Cobblestone -> Dirt.",
-      "checks": ["Roof fully covered", "Bot is outside the structure while building"]
+      "details": "Build perimeter walls. params: { \"structure\": \"walls\", \"width\": 5, \"length\": 5, \"height\": 3, \"material\": \"oak_planks\", \"origin\": {SAME_AS_ABOVE} }"
     },
     {
-      "title": "Secure entrance",
+      "title": "Roof",
       "action": "build",
-      "details": "Place a door or trapdoor at the opening. If unavailable, use a solid block to seal it.",
-      "checks": ["Entrance is secure"]
+      "details": "Build the roof on top (y+3). params: { \"structure\": \"roof\", \"width\": 5, \"length\": 5, \"material\": \"oak_planks\", \"origin\": {SAME_AS_ABOVE, but y+3} }"
+    },
+    {
+      "title": "Door Frame",
+      "action": "build",
+      "details": "Clear space for door. params: { \"structure\": \"door_frame\", \"origin\": {SAME_AS_ABOVE_PLUS_OFFSET} }"
     }
-  ],
-  "notes": "When generating the 'build' command, the 'material' parameter MUST match a string in the inventory. 'wood' is not a valid block name; use 'oak_log', 'spruce_planks', etc."
+  ]
 }

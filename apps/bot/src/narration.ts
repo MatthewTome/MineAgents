@@ -1,4 +1,4 @@
-import type { ActionStep } from "./action-executor.js";
+import type { ActionStep } from "./actions/action-executor.js";
 
 export interface PlanIntent
 {
