@@ -2,15 +2,20 @@ import "dotenv/config";
 import mineflayer from "mineflayer";
 import path from "node:path";
 import fs from "node:fs";
-import { loadBotConfig, ConfigError } from "./config.js";
+import minecraftData from "minecraft-data";
+import { pathfinder, Movements } from "mineflayer-pathfinder";
+import { plugin as movementPlugin } from "mineflayer-movement";
+import { plugin as collectBlock } from "mineflayer-collectblock";
+import { plugin as toolPlugin } from "mineflayer-tool";
+import { loadBotConfig, ConfigError } from "./settings/config.js";
 import { PerceptionCollector } from "./perception.js";
-import { runSetupWizard } from "./setup.js";
-import { ActionExecutor } from "./action-executor.js";
-import { createDefaultActionHandlers } from "./action-handlers.js";
-import { wireChatBridge } from "./chat-commands.js";
-import { ReflectionLogger } from "./reflection-log.js";
-import { PlannerWorkerClient } from "./planner-worker-client.js";
-import { SessionLogger } from "./session-logger.js";
+import { runSetupWizard } from "./settings/setup.js";
+import { ActionExecutor } from "./actions/action-executor.js";
+import { createDefaultActionHandlers } from "./actions/action-handlers.js";
+import { wireChatBridge } from "./actions/chat-commands.js";
+import { ReflectionLogger } from "./logger/reflection-log.js";
+import { PlannerWorkerClient } from "./planner/planner-worker-client.js";
+import { SessionLogger } from "./logger/session-logger.js";
 async function createBot() {
     const defaultPath = path.join(process.cwd(), "config", "bot.config.yaml");
     const configPath = process.env.BOT_CONFIG ?? defaultPath;
@@ -57,9 +62,17 @@ async function createBot() {
         username: cfg.connection.username,
         version: cfg.connection.version,
     });
+    bot.loadPlugin(pathfinder);
+    bot.loadPlugin(movementPlugin);
+    bot.loadPlugin(collectBlock);
+    bot.loadPlugin(toolPlugin);
     bot.once("spawn", () => {
         console.log("[bot] spawned");
         sessionLogger.info("bot.spawn", "Bot spawned", { position: bot.entity.position, dimension: bot.game.dimension });
+        const mcData = minecraftData(bot.version);
+        const movements = new Movements(bot);
+        movements.allowSprinting = true;
+        bot.pathfinder.setMovements(movements);
         const reflection = new ReflectionLogger(sessionLogger.directory);
         let planner = null;
         try {

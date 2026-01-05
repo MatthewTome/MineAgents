@@ -11,7 +11,11 @@
     "rootDir": "src",
     "types": ["node"]
   },
-  "include": ["src"],
+  "include": [
+    "src",
+    "src/**/*.ts",
+    "src/types/**/*.d.ts"
+  ],
   "exclude": [
     "tests",
     "node_modules",

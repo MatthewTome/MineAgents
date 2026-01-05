@@ -1,15 +1,15 @@
 {
   "name": "@mineagents/bot",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
-  "main": "dist/main.js",
-  "types": "dist/main.d.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
-    "dev": "node --import tsx src/main.ts",
+    "dev": "node --import tsx src/index.ts",
     "build": "tsc -p tsconfig.json",
     "prestart": "pnpm build",
-    "start": "node dist/main.js",
+    "start": "node dist/index.js",
     "test": "vitest",
     "test:watch": "vitest --watch",
     "coverage": "vitest run --coverage"
@@ -18,7 +18,12 @@
     "@huggingface/transformers": "^3.1.0",
     "dotenv": "^17.2.3",
     "js-yaml": "^4.1.1",
+    "minecraft-data": "^3.100.0",
     "mineflayer": "github:PrismarineJS/mineflayer",
+    "mineflayer-collectblock": "^1.6.0",
+    "mineflayer-movement": "^0.4.4",
+    "mineflayer-pathfinder": "^2.4.5",
+    "mineflayer-tool": "^1.2.0",
     "vec3": "^0.1.10",
     "zod": "^3.25.76"
   },

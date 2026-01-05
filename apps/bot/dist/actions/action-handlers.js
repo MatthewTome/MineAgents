@@ -1,4 +1,6 @@
 import { Vec3 } from "vec3";
+import pathfinderPkg from "mineflayer-pathfinder";
+const { goals } = pathfinderPkg;
 export function createDefaultActionHandlers() {
     return {
         move: handleMove,
@@ -166,7 +168,10 @@ async function handleGather(bot, step) {
                     continue;
                 }
                 try {
-                    await handleMine(bot, { params: { position: block.position } });
+                    const collected = await collectBlocks(bot, [block]);
+                    if (!collected) {
+                        await handleMine(bot, { params: { position: block.position } });
+                    }
                     consecutiveFailures = 0;
                     await waitForNextTick(bot);
                     continue;
@@ -205,6 +210,9 @@ async function handleMine(bot, step) {
     const block = findBlockTarget(bot, params || {}, 32);
     if (!block)
         throw new Error(`No matching block found`);
+    if (await collectBlocks(bot, [block])) {
+        return;
+    }
     if (bot.entity.position.distanceTo(block.position) > 4.5) {
         await moveToward(bot, block.position, 3.5, 15000);
     }
@@ -276,6 +284,22 @@ async function handleBuild(bot, step) {
     }
 }
 async function moveToward(bot, target, range, timeout) {
+    if (bot.pathfinder) {
+        try {
+            const goal = new goals.GoalNear(target.x, target.y, target.z, range);
+            await raceWithTimeout(bot.pathfinder.goto(goal), timeout);
+            return;
+        }
+        catch (err) {
+            console.warn(`[move] Pathfinder failed (${err instanceof Error ? err.message : String(err)}). Falling back.`);
+        }
+    }
+    if (await moveWithMovementPlugin(bot, target, range, timeout)) {
+        return;
+    }
+    await moveTowardManually(bot, target, range, timeout);
+}
+async function moveTowardManually(bot, target, range, timeout) {
     const start = Date.now();
     let lastPos = bot.entity.position.clone();
     let stuck = 0;
@@ -317,6 +341,25 @@ async function moveToward(bot, target, range, timeout) {
     finally {
         bot.clearControlStates();
     }
+}
+async function moveWithMovementPlugin(bot, target, range, timeout) {
+    const movement = bot.movement;
+    if (!movement)
+        return false;
+    try {
+        if (movement.goto) {
+            await raceWithTimeout(movement.goto(target, { range, timeout }), timeout);
+            return true;
+        }
+        if (movement.moveTo) {
+            await raceWithTimeout(movement.moveTo(target, { range, timeout }), timeout);
+            return true;
+        }
+    }
+    catch (err) {
+        console.warn(`[move] Movement plugin failed (${err instanceof Error ? err.message : String(err)}).`);
+    }
+    return false;
 }
 function findBestLocalStep(bot, globalTarget) {
     const pos = bot.entity.position.floored();
@@ -497,6 +540,16 @@ async function engageTarget(bot, entity, range, timeoutMs) {
     bot.attack(entity);
 }
 async function ensureToolFor(bot, block) {
+    const toolPlugin = bot.tool;
+    if (toolPlugin?.equipForBlock) {
+        try {
+            await toolPlugin.equipForBlock(block);
+            return;
+        }
+        catch (err) {
+            console.warn(`[tools] Tool plugin failed (${err instanceof Error ? err.message : String(err)}). Falling back.`);
+        }
+    }
     const inventory = bot.inventory.items();
     if (block.material === "rock" || block.name.includes("stone") || block.name.includes("ore") || block.name.includes("cobble")) {
         if (inventory.some(i => i.name.includes("pickaxe"))) {
@@ -512,6 +565,32 @@ async function ensureToolFor(bot, block) {
         const pick = inventory.find(i => i.name.includes("pickaxe"));
         if (pick)
             await bot.equip(pick, "hand");
+    }
+}
+async function collectBlocks(bot, blocks) {
+    const collection = bot.collectBlock;
+    if (!bot.collectBlock?.collect)
+        return false;
+    try {
+        await raceWithTimeout(collection.collect(blocks, { ignoreNoPath: true }), 15000);
+        return true;
+    }
+    catch (err) {
+        console.warn(`[collect] Collect block failed (${err instanceof Error ? err.message : String(err)}).`);
+        return false;
+    }
+}
+async function raceWithTimeout(promise, timeoutMs) {
+    let timeoutId = null;
+    const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error("Move timeout")), timeoutMs);
+    });
+    try {
+        return await Promise.race([promise, timeoutPromise]);
+    }
+    finally {
+        if (timeoutId)
+            clearTimeout(timeoutId);
     }
 }
 function resolveItemToBlock(item) {

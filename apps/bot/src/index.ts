@@ -2,6 +2,11 @@ import "dotenv/config";
 import mineflayer from "mineflayer";
 import path from "node:path";
 import fs from "node:fs";
+import minecraftData from "minecraft-data";
+import { pathfinder, Movements } from "mineflayer-pathfinder";
+import { plugin as movementPlugin } from "mineflayer-movement";
+import { plugin as collectBlock } from "mineflayer-collectblock";
+import { plugin as toolPlugin } from "mineflayer-tool";
 import { loadBotConfig, ConfigError } from "./settings/config.js";
 import { PerceptionCollector } from "./perception.js";
 import { PerceptionSnapshot } from "./settings/types.js";
@@ -76,10 +81,20 @@ async function createBot()
         version: cfg.connection.version,
     });
 
+    bot.loadPlugin(pathfinder);
+    bot.loadPlugin(movementPlugin);
+    bot.loadPlugin(collectBlock);
+    bot.loadPlugin(toolPlugin);
+
     bot.once("spawn", () =>
     {
         console.log("[bot] spawned");
         sessionLogger.info("bot.spawn", "Bot spawned", { position: bot.entity.position, dimension: bot.game.dimension });
+
+        const mcData = minecraftData(bot.version);
+        const movements = new Movements(bot);
+        movements.allowSprinting = true;
+        bot.pathfinder.setMovements(movements);
 
         const reflection = new ReflectionLogger(sessionLogger.directory);
 
