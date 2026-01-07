@@ -93,6 +93,11 @@ export class SessionLogger
         this.append("planner.log", { level: "error", event: "planner.error", data: { error: errString, goal: context.request.goal, prompt: context.prompt } });
     }
 
+    logSafety(event: string, message?: string, data?: Record<string, unknown>, level: "info" | "warn" = "info"): void
+    {
+        this.append("safety.log", { level, event, message, data });
+    }
+
     private append(fileName: string, entry: Omit<BaseEntry, "ts">): void
     {
         const payload: BaseEntry = { ...entry, ts: isoNow() };

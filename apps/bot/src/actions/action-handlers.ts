@@ -215,10 +215,7 @@ async function handleGather(bot: Bot, step: { params?: Record<string, unknown> }
                 }
 
                 try {
-                    const collected = await collectBlocks(bot, [block]);
-                    if (!collected) {
-                        await handleMine(bot, { params: { position: block.position } });
-                    }
+                    await collectBlocks(bot, [block]);
                     consecutiveFailures = 0; 
                     await waitForNextTick(bot);
                     continue; 
@@ -259,16 +256,8 @@ async function handleMine(bot: Bot, step: { params?: Record<string, unknown> }):
     const block = findBlockTarget(bot, params || {}, 32);
     if (!block) throw new Error(`No matching block found`);
 
-    if (await collectBlocks(bot, [block])) {
-        return;
-    }
-
-    if (bot.entity.position.distanceTo(block.position) > 4.5) {
-        await moveToward(bot, block.position, 3.5, 15000);
-    }
     await ensureToolFor(bot, block);
-    try { await bot.dig(block, true); } 
-    catch (err: any) { await bot.dig(block, true); }
+    await collectBlocks(bot, [block]);
 }
 
 async function handleBuild(bot: Bot, step: { params?: Record<string, unknown> }): Promise<void>
@@ -359,48 +348,7 @@ async function moveToward(bot: Bot, target: Vec3, range: number, timeout: number
         return;
     }
 
-    await moveTowardManually(bot, target, range, timeout);
-}
-
-async function moveTowardManually(bot: Bot, target: Vec3, range: number, timeout: number): Promise<void> {
-    const start = Date.now();
-    let lastPos = bot.entity.position.clone();
-    let stuck = 0;
-
-    try {
-        while(bot.entity.position.distanceTo(target) > range) {
-            if (Date.now() - start > timeout) throw new Error("Move timeout");
-            
-            if (bot.entity.position.distanceTo(lastPos) < 0.2) stuck++;
-            else { stuck = 0; lastPos = bot.entity.position.clone(); }
-
-            if (stuck > 15) await attemptUnstuck(bot, target);
-
-            const nextSpot = findBestLocalStep(bot, target);
-            
-            if (nextSpot) {
-                await bot.lookAt(nextSpot.offset(0, 1.6, 0));
-                bot.setControlState("forward", true);
-                
-                if (nextSpot.y > bot.entity.position.y + 0.1) {
-                    bot.setControlState("jump", true);
-                } else {
-                    bot.setControlState("jump", false);
-                }
-            } else {
-                await bot.lookAt(target);
-                bot.setControlState("forward", true);
-            }
-            
-            if (isCliffAhead(bot)) {
-                bot.setControlState("forward", false);
-                bot.setControlState("back", true);
-                await waitForNextTick(bot);
-            }
-
-            await waitForNextTick(bot);
-        }
-    } finally { bot.clearControlStates(); }
+    throw new Error("Movement plugins unavailable for navigation");
 }
 
 async function moveWithMovementPlugin(bot: Bot, target: Vec3, range: number, timeout: number): Promise<boolean> {
@@ -423,33 +371,6 @@ async function moveWithMovementPlugin(bot: Bot, target: Vec3, range: number, tim
     return false;
 }
 
-function findBestLocalStep(bot: Bot, globalTarget: Vec3): Vec3 | null {
-    const pos = bot.entity.position.floored();
-    let best: Vec3 | null = null;
-    let minScore = Infinity;
-
-    for (let x = -1; x <= 1; x++) {
-        for (let z = -1; z <= 1; z++) {
-            if (x===0 && z===0) continue;
-            for (let y = -1; y <= 1; y++) {
-                const candidate = pos.offset(x, y, z);
-                
-                if (!isSafeToStand(bot, candidate)) continue;
-
-                const dist = candidate.distanceTo(globalTarget);
-                const penalty = (y === 1) ? 0.5 : 0;
-                const score = dist + penalty;
-
-                if (score < minScore) {
-                    minScore = score;
-                    best = candidate.offset(0.5, 0, 0.5);
-                }
-            }
-        }
-    }
-    return best;
-}
-
 function isSafeToStand(bot: Bot, pos: Vec3): boolean {
     const block = bot.blockAt(pos);
     const below = bot.blockAt(pos.offset(0, -1, 0));
@@ -469,18 +390,6 @@ function isSafeToStand(bot: Bot, pos: Vec3): boolean {
     }
 
     return true;
-}
-
-function isCliffAhead(bot: Bot): boolean {
-    const velocity = bot.entity.velocity;
-    const look = bot.entity.position.plus(velocity.scaled(5));
-    const blockBelow = bot.blockAt(look.offset(0, -1, 0));
-    const blockBelow2 = bot.blockAt(look.offset(0, -2, 0));
-    const blockBelow3 = bot.blockAt(look.offset(0, -3, 0));
-    
-    return (!blockBelow || blockBelow.boundingBox==="empty") && 
-           (!blockBelow2 || blockBelow2.boundingBox==="empty") && 
-           (!blockBelow3 || blockBelow3.boundingBox==="empty");
 }
 
 function resolveItemName(name: string): string {
@@ -624,14 +533,6 @@ async function ensureNotOnPlacement(bot: Bot, target: Vec3): Promise<void> {
     }
 }
 
-async function attemptUnstuck(bot: Bot, target: Vec3): Promise<void> {
-    bot.setControlState("forward", false);
-    bot.setControlState("jump", true);
-    await bot.look(bot.entity.yaw + (Math.random() - 0.5), 0);
-    bot.setControlState("forward", true);
-    await waitForNextTick(bot);
-}
-
 function waitForNextTick(bot: Bot): Promise<void> {
     return new Promise(r => bot.once("physicsTick", r));
 }
@@ -667,42 +568,21 @@ async function engageTarget(bot: Bot, entity: Entity, range: number, timeoutMs: 
 async function ensureToolFor(bot: Bot, block: Block): Promise<void> {
     const toolPlugin = (bot as any).tool;
     if (toolPlugin?.equipForBlock) {
-        try {
-            await toolPlugin.equipForBlock(block);
-            return;
-        } catch (err) {
-            console.warn(`[tools] Tool plugin failed (${err instanceof Error ? err.message : String(err)}). Falling back.`);
-        }
+        await toolPlugin.equipForBlock(block);
+        return;
     }
 
-    const inventory = bot.inventory.items();
-    if (block.material === "rock" || block.name.includes("stone") || block.name.includes("ore") || block.name.includes("cobble")) {
-        if (inventory.some(i => i.name.includes("pickaxe"))) {
-            await bot.equip(inventory.find(i => i.name.includes("pickaxe"))!, "hand");
-            return;
-        }
-        console.log("[tools] Crafting pickaxe...");
-        await handleGather(bot, { params: { item: "log" } });
-        await handleCraft(bot, { params: { recipe: "oak_planks" } });
-        await handleCraft(bot, { params: { recipe: "stick" } });
-        await handleCraft(bot, { params: { recipe: "crafting_table" } });
-        await handleCraft(bot, { params: { recipe: "wooden_pickaxe" } });
-        const pick = inventory.find(i => i.name.includes("pickaxe"));
-        if (pick) await bot.equip(pick, "hand");
-    }
+    throw new Error("Tool plugin unavailable for equipping tools");
 }
 
 async function collectBlocks(bot: Bot, blocks: Block[]): Promise<boolean> {
     const collection = (bot as any).collectBlock;
-    if (!bot.collectBlock?.collect) return false;
-
-    try {
-        await raceWithTimeout(collection.collect(blocks, { ignoreNoPath: true }), 15000);
-        return true;
-    } catch (err) {
-        console.warn(`[collect] Collect block failed (${err instanceof Error ? err.message : String(err)}).`);
-        return false;
+    if (!bot.collectBlock?.collect) {
+        throw new Error("Collect block plugin unavailable");
     }
+
+    await raceWithTimeout(collection.collect(blocks, { ignoreNoPath: true }), 15000);
+    return true;
 }
 
 async function raceWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {

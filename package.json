@@ -1,8 +1,8 @@
 {
   "name": "mineagents",
   "private": true,
-  "version": "0.0.0",
-  "description": "Monorepo for MineAgents capstone",
+  "version": "0.1.0",
+  "description": "Monorepo for MineAgents",
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -12,7 +12,7 @@
     "dev:bot": "pnpm -C apps/bot dev",
     "build:bot": "pnpm -C apps/bot build",
     "test:bot": "pnpm --filter @mineagents/bot test",
-    "lint": "echo \"(add eslint later)\""
+    "lint": ""
   },
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",

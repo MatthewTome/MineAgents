@@ -1,9 +1,11 @@
 import type { Bot } from "mineflayer";
 import { ActionExecutor, type ActionResult, type ActionStep } from "./action-executor.js";
+import type { SafetyRails } from "../safety/safety-rails.js";
 
 export interface ChatBridgeOptions
 {
     prefix?: string;
+    safety?: SafetyRails;
 }
 
 export async function handleChatCommand(bot: Bot, executor: ActionExecutor, username: string, message: string, options?: ChatBridgeOptions): Promise<boolean>
@@ -21,13 +23,13 @@ export async function handleChatCommand(bot: Bot, executor: ActionExecutor, user
 
     if (trimmed.startsWith(sayCmd))
     {
-        const handled = await handleSay(bot, executor, username, trimmed, sayCmd);
+        const handled = await handleSay(bot, executor, username, trimmed, sayCmd, options?.safety);
         return handled;
     }
 
     if (trimmed.startsWith(actCmd))
     {
-        const handled = await handleAct(bot, executor, username, trimmed, actCmd);
+        const handled = await handleAct(bot, executor, username, trimmed, actCmd, options?.safety);
         return handled;
     }
 
@@ -63,12 +65,12 @@ export function wireChatBridge(bot: Bot, executor: ActionExecutor, options?: Cha
     return () => bot.removeListener("chat", listener);
 }
 
-async function handleSay(bot: Bot, executor: ActionExecutor, username: string, trimmed: string, sayCmd: string): Promise<boolean>
+async function handleSay(bot: Bot, executor: ActionExecutor, username: string, trimmed: string, sayCmd: string, safety?: SafetyRails): Promise<boolean>
 {
     const withoutCmd = trimmed.replace(new RegExp(`^${escapeRegExp(sayCmd)}\\s*`), "");
     if (!withoutCmd)
     {
-        bot.chat(`Usage: ${sayCmd} <message>`);
+        safeChat(bot, safety, `Usage: ${sayCmd} <message>`, "chat.command.usage");
         return true;
     }
 
@@ -81,16 +83,16 @@ async function handleSay(bot: Bot, executor: ActionExecutor, username: string, t
         description: `chat command from ${username}`
     };
 
-    await executeAndReport(bot, executor, step);
+    await executeAndReport(bot, executor, step, safety);
     return true;
 }
 
-async function handleAct(bot: Bot, executor: ActionExecutor, username: string, trimmed: string, actCmd: string): Promise<boolean>
+async function handleAct(bot: Bot, executor: ActionExecutor, username: string, trimmed: string, actCmd: string, safety?: SafetyRails): Promise<boolean>
 {
     const rest = trimmed.replace(new RegExp(`^${escapeRegExp(actCmd)}\\s*`), "").trim();
     if (!rest)
     {
-        bot.chat(`Usage: ${actCmd} [id=my-id] <action> {jsonParams}`);
+        safeChat(bot, safety, `Usage: ${actCmd} [id=my-id] <action> {jsonParams}`, "chat.command.usage");
         return true;
     }
 
@@ -100,7 +102,7 @@ async function handleAct(bot: Bot, executor: ActionExecutor, username: string, t
 
     if (!action)
     {
-        bot.chat(`Usage: ${actCmd} [id=my-id] <action> {jsonParams}`);
+        safeChat(bot, safety, `Usage: ${actCmd} [id=my-id] <action> {jsonParams}`, "chat.command.usage");
         return true;
     }
 
@@ -112,7 +114,7 @@ async function handleAct(bot: Bot, executor: ActionExecutor, username: string, t
 
     if (!action)
     {
-        bot.chat(`Usage: ${actCmd} [id=my-id] <action> {jsonParams}`);
+        safeChat(bot, safety, `Usage: ${actCmd} [id=my-id] <action> {jsonParams}`, "chat.command.usage");
         return true;
     }
 
@@ -127,7 +129,7 @@ async function handleAct(bot: Bot, executor: ActionExecutor, username: string, t
         }
         catch (err: any)
         {
-            bot.chat(`Param parse error: ${err?.message ?? String(err)}`);
+            safeChat(bot, safety, `Param parse error: ${err?.message ?? String(err)}`, "chat.command.error");
             return true;
         }
     }
@@ -140,7 +142,7 @@ async function handleAct(bot: Bot, executor: ActionExecutor, username: string, t
         description: `chat command from ${username}`
     };
 
-    await executeAndReport(bot, executor, step);
+    await executeAndReport(bot, executor, step, safety);
     return true;
 }
 
@@ -156,22 +158,39 @@ function parseIdAndPayload(input: string): { id?: string; payload: string }
     return { payload: input };
 }
 
-async function executeAndReport(bot: Bot, executor: ActionExecutor, step: ActionStep): Promise<void>
+async function executeAndReport(bot: Bot, executor: ActionExecutor, step: ActionStep, safety?: SafetyRails): Promise<void>
 {
     const results = await executor.executePlan([step]);
     const result: ActionResult | undefined = results[0];
 
     if (!result)
     {
-        bot.chat("No result");
+        safeChat(bot, safety, "No result", "chat.command.result");
         return;
     }
 
     const reason = result.reason ? ` (${result.reason})` : "";
-    bot.chat(`[${result.status}] ${result.action}#${result.id}${reason}`);
+    safeChat(bot, safety, `[${result.status}] ${result.action}#${result.id}${reason}`, "chat.command.result");
 }
 
 function escapeRegExp(str: string): string
 {
     return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function safeChat(bot: Bot, safety: SafetyRails | undefined, message: string, source: string): void
+{
+    if (!safety)
+    {
+        bot.chat(message);
+        return;
+    }
+
+    const result = safety.checkOutgoingChat(message, source);
+    if (!result.allowed)
+    {
+        return;
+    }
+
+    bot.chat(result.message);
 }

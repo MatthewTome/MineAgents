@@ -21,6 +21,17 @@ export interface BotConfig
         maxNearbyEntities: number;
         chatBuffer: number;
     };
+    safety:
+    {
+        allowedActions: string[];
+        blockedMaterials: string[];
+        customProfanityList: string[];
+        rateLimits:
+        {
+            global?: { max: number; windowMs: number };
+            perAction?: Record<string, { max: number; windowMs: number }>;
+        };
+    };
 }
 
 export class ConfigError extends Error
@@ -55,6 +66,51 @@ const configSchema = z.object(
         blockSampleHalfHeight: z.number().int().nonnegative().default(1),
         maxNearbyEntities: z.number().int().positive().default(24),
         chatBuffer: z.number().int().positive().default(10)
+        }).default({}),
+    safety: z.object(
+    {
+        allowedActions: z.array(z.string()).default([
+            "chat",
+            "perceive",
+            "analyzeInventory",
+            "move",
+            "mine",
+            "gather",
+            "craft",
+            "smelt",
+            "build",
+            "hunt",
+            "fight",
+            "fish"
+        ]),
+        blockedMaterials: z.array(z.string()).default([
+            "tnt",
+            "lava",
+            "flint_and_steel",
+            "fire_charge",
+            "fire"
+        ]),
+        customProfanityList: z.array(z.string()).default([
+            "kys",
+            "kill yourself"
+        ]),
+        rateLimits: z.object(
+        {
+            global: z.object(
+            {
+                max: z.number().int().positive().default(24),
+                windowMs: z.number().int().positive().default(10000)
+            }).default({}),
+            perAction: z.record(z.object(
+            {
+                max: z.number().int().positive(),
+                windowMs: z.number().int().positive()
+            })).default({
+                chat: { max: 4, windowMs: 2000 },
+                build: { max: 2, windowMs: 2000 },
+                mine: { max: 6, windowMs: 2000 }
+            })
+        }).default({})
     }).default({})
 });
 

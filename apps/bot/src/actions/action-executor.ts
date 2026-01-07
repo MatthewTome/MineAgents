@@ -1,4 +1,5 @@
 import type { Bot } from "mineflayer";
+import type { SafetyRails, SafetyCheckResult } from "../safety/safety-rails.js";
 
 export type ActionHandler = (bot: Bot, step: ActionStep) => Promise<void>;
 
@@ -15,6 +16,7 @@ export interface ActionExecutorOptions
     maxAttempts: number;
     baseBackoffMs: number;
     logger?: (entry: ActionLogEntry) => void;
+    safety?: SafetyRails;
 }
 
 export type ActionStatus = "success" | "failed" | "skipped" | "retry";
@@ -43,7 +45,8 @@ const DEFAULT_OPTIONS: ActionExecutorOptions =
 {
     maxAttempts: 3,
     baseBackoffMs: 250,
-    logger: undefined
+    logger: undefined,
+    safety: undefined
 };
 
 const BUILT_IN_HANDLERS: Record<string, ActionHandler> =
@@ -67,6 +70,7 @@ export class ActionExecutor
     private executing: Set<string> = new Set();
     private log: ActionLogEntry[] = [];
     private options: ActionExecutorOptions;
+    private safety?: SafetyRails;
 
     constructor(bot: Bot, handlers?: Record<string, ActionHandler>, options?: Partial<ActionExecutorOptions>)
     {
@@ -82,6 +86,7 @@ export class ActionExecutor
         }
 
         this.options = { ...DEFAULT_OPTIONS, ...options };
+        this.safety = this.options.safety;
     }
 
     reset(): void
@@ -128,7 +133,15 @@ export class ActionExecutor
             return this.toResult(entry);
         }
 
-        const handler = this.handlers.get(step.action);
+        const safetyCheck = this.applySafety(step);
+        if (safetyCheck && !safetyCheck.allowed)
+        {
+            const entry = this.logEntry(step, "failed", 0, safetyCheck.reason ?? "blocked by safety rails");
+            return this.toResult(entry);
+        }
+
+        const guardedStep = safetyCheck?.step ?? step;
+        const handler = this.handlers.get(guardedStep.action);
 
         if (!handler)
         {
@@ -136,7 +149,7 @@ export class ActionExecutor
             return this.toResult(entry);
         }
 
-        this.executing.add(step.id);
+        this.executing.add(guardedStep.id);
 
         let attempts = 0;
         let lastReason: string | undefined;
@@ -147,10 +160,10 @@ export class ActionExecutor
 
             try
             {
-                await handler(this.bot, step);
-                this.executed.add(step.id);
-                const entry = this.logEntry(step, "success", attempts, undefined);
-                this.executing.delete(step.id);
+                await handler(this.bot, guardedStep);
+                this.executed.add(guardedStep.id);
+                const entry = this.logEntry(guardedStep, "success", attempts, undefined);
+                this.executing.delete(guardedStep.id);
                 return this.toResult(entry);
             }
             catch (err: any)
@@ -158,12 +171,12 @@ export class ActionExecutor
                 lastReason = err?.message ?? String(err);
                 const hasMore = attempts < this.options.maxAttempts;
                 const status: ActionStatus = hasMore ? "retry" : "failed";
-                this.logEntry(step, status, attempts, lastReason);
+                this.logEntry(guardedStep, status, attempts, lastReason);
 
                 if (!hasMore)
                 {
-                    this.executing.delete(step.id);
-                    return { id: step.id, action: step.action, status: "failed", attempts, reason: lastReason };
+                    this.executing.delete(guardedStep.id);
+                    return { id: guardedStep.id, action: guardedStep.action, status: "failed", attempts, reason: lastReason };
                 }
 
                 const delay = this.backoffMs(attempts);
@@ -171,8 +184,18 @@ export class ActionExecutor
             }
         }
 
-        this.executing.delete(step.id);
-        return { id: step.id, action: step.action, status: "failed", attempts, reason: lastReason };
+        this.executing.delete(guardedStep.id);
+        return { id: guardedStep.id, action: guardedStep.action, status: "failed", attempts, reason: lastReason };
+    }
+
+    private applySafety(step: ActionStep): SafetyCheckResult | undefined
+    {
+        if (!this.safety)
+        {
+            return undefined;
+        }
+
+        return this.safety.checkStep(step);
     }
 
     private logEntry(step: ActionStep, status: ActionStatus, attempts: number, reason?: string): ActionLogEntry

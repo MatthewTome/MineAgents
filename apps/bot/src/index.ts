@@ -1,5 +1,6 @@
 import "dotenv/config";
 import mineflayer from "mineflayer";
+import type { Bot } from "mineflayer";
 import path from "node:path";
 import fs from "node:fs";
 import minecraftData from "minecraft-data";
@@ -18,6 +19,7 @@ import { ReflectionLogger } from "./logger/reflection-log.js";
 import { PlannerWorkerClient } from "./planner/planner-worker-client.js";
 import { SessionLogger } from "./logger/session-logger.js";
 import { goalNeedsBuildSite, scoutBuildSite } from "./scouting.js";
+import { SafetyRails } from "./safety/safety-rails.js";
 
 async function createBot()
 {
@@ -73,6 +75,7 @@ async function createBot()
 
     const sessionLogger = new SessionLogger();
     sessionLogger.info("startup", "MineAgent starting", { configPath, model: hfModel, backend: hfBackend });
+    const safety = new SafetyRails({ config: cfg.safety, logger: sessionLogger });
 
     const bot = mineflayer.createBot(
     {
@@ -146,7 +149,8 @@ async function createBot()
                 const reason = entry.reason ? ` (${entry.reason})` : "";
                 sessionLogger.logAction(entry);
                 console.log(`[action] ${entry.action}#${entry.id} -> ${entry.status}${reason}`);
-            }
+            },
+            safety
         });
         
         const perception = new PerceptionCollector(bot,
@@ -161,7 +165,7 @@ async function createBot()
 
         let lastLog = 0;
 
-        const unwireChat = wireChatBridge(bot, executor);
+        const unwireChat = wireChatBridge(bot, executor, { safety });
 
         bot.on("chat", (username, message) => {
             if (username === bot.username) return;
@@ -219,13 +223,13 @@ async function createBot()
                     if (plan.steps.length === 0)
                     {
                         console.warn("[planner] Plan contained no steps; clearing goal.");
-                        bot.chat("I couldn't figure out how to do that.");
+                        safeChat(bot, safety, "I couldn't figure out how to do that.", "planner.empty");
                         currentGoal = null;
                         sessionLogger.warn("planner.empty", "Plan contained no steps", { goal: currentGoal });
                     }
                     else
                     {
-                        bot.chat(plan.intent);
+                        safeChat(bot, safety, plan.intent, "planner.intent");
 
                         executor.reset();
 
@@ -235,13 +239,13 @@ async function createBot()
                         if (failed)
                         {
                             console.warn(`[planner] Plan execution failed at ${failed.id}: ${failed.reason ?? "unknown reason"}`);
-                            bot.chat(`I got stuck on step ${failed.id}.`);
+                            safeChat(bot, safety, `I got stuck on step ${failed.id}.`, "planner.failed");
                             sessionLogger.warn("planner.execution.failed", "Plan execution failed", { failed });
                         }
                         else
                         {
                             console.log(`[planner] Plan execution completed for goal: "${currentGoal}"`);
-                            bot.chat("I'm done!");
+                            safeChat(bot, safety, "I'm done!", "planner.complete");
                             sessionLogger.info("planner.execution.complete", "Plan execution completed", { goal: currentGoal });
                         }
 
@@ -249,7 +253,7 @@ async function createBot()
                     }
                 } catch (error) {
                     console.error(`[planner] Error generating plan:`, error);
-                    bot.chat("My brain hurts. I couldn't make a plan.");
+                    safeChat(bot, safety, "My brain hurts. I couldn't make a plan.", "planner.error");
                     sessionLogger.error("planner.error", "Error generating plan", { error: error instanceof Error ? error.message : String(error) });
                     currentGoal = null;
                 } finally {
@@ -308,3 +312,14 @@ async function createBot()
 }
 
 createBot().catch(console.error);
+
+function safeChat(bot: Bot, safety: SafetyRails, message: string, source: string): void
+{
+    const result = safety.checkOutgoingChat(message, source);
+    if (!result.allowed)
+    {
+        return;
+    }
+
+    bot.chat(result.message);
+}
