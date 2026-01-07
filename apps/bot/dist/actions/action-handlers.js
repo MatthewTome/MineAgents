@@ -235,9 +235,11 @@ async function handleBuild(bot, step) {
         throw new Error(`Blueprint empty for '${params.structure}'`);
     const bounds = blueprint.map(p => origin.plus(p));
     const botPos = bot.entity.position.floored();
-    if (bounds.some(b => b.equals(botPos) || b.equals(botPos.offset(0, 1, 0)))) {
-        console.log("[build] Relocating to avoid trapping...");
-        const safe = findSafeSpotNear(bot, origin);
+    const buildBounds = getBuildBounds(bounds);
+    const structureCanTrap = ["walls", "roof", "tower", "chimney"].includes(params.structure);
+    if (structureCanTrap && isInsideBounds(botPos, buildBounds)) {
+        console.log("[build] Relocating outside build bounds to avoid trapping...");
+        const safe = findBuildStandOutside(bot, buildBounds, origin);
         await moveToward(bot, safe, 0.5, 5000);
     }
     const materialName = (params.material ?? "cobblestone").toLowerCase();
@@ -249,6 +251,7 @@ async function handleBuild(bot, step) {
         const distB = b.distanceTo(bot.entity.position);
         return isVertical ? (distB - distA) : (distA - distB);
     });
+    let placed = 0;
     for (const pos of sorted) {
         const existing = bot.blockAt(pos);
         if (existing && existing.boundingBox !== "empty") {
@@ -279,8 +282,12 @@ async function handleBuild(bot, step) {
         try {
             await bot.placeBlock(ref, pos.minus(ref.position));
             await waitForNextTick(bot);
+            placed += 1;
         }
         catch (e) { }
+    }
+    if (placed === 0) {
+        throw new Error("Build failed: placed 0 blocks (obstructed or unreachable)");
     }
 }
 async function moveToward(bot, target, range, timeout) {
@@ -490,6 +497,58 @@ function requireInventoryItem(bot, name) {
 }
 function findSafeSpotNear(bot, origin) {
     return origin.offset(3, 0, 3);
+}
+function getBuildBounds(points) {
+    let minX = Infinity;
+    let minY = Infinity;
+    let minZ = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    let maxZ = -Infinity;
+    for (const p of points) {
+        minX = Math.min(minX, p.x);
+        minY = Math.min(minY, p.y);
+        minZ = Math.min(minZ, p.z);
+        maxX = Math.max(maxX, p.x);
+        maxY = Math.max(maxY, p.y);
+        maxZ = Math.max(maxZ, p.z);
+    }
+    return {
+        min: new Vec3(minX, minY, minZ),
+        max: new Vec3(maxX, maxY, maxZ)
+    };
+}
+function isInsideBounds(pos, bounds) {
+    return pos.x >= bounds.min.x &&
+        pos.x <= bounds.max.x &&
+        pos.z >= bounds.min.z &&
+        pos.z <= bounds.max.z &&
+        pos.y >= bounds.min.y - 1 &&
+        pos.y <= bounds.max.y + 1;
+}
+function findBuildStandOutside(bot, bounds, origin) {
+    const candidates = [];
+    const offsets = [
+        new Vec3(bounds.min.x - 2, origin.y, origin.z),
+        new Vec3(bounds.max.x + 2, origin.y, origin.z),
+        new Vec3(origin.x, origin.y, bounds.min.z - 2),
+        new Vec3(origin.x, origin.y, bounds.max.z + 2),
+        new Vec3(bounds.min.x - 2, origin.y, bounds.min.z - 2),
+        new Vec3(bounds.min.x - 2, origin.y, bounds.max.z + 2),
+        new Vec3(bounds.max.x + 2, origin.y, bounds.min.z - 2),
+        new Vec3(bounds.max.x + 2, origin.y, bounds.max.z + 2)
+    ];
+    for (const pos of offsets) {
+        const floored = pos.floored();
+        if (isSafeToStand(bot, floored)) {
+            candidates.push(floored.offset(0.5, 0, 0.5));
+        }
+    }
+    if (!candidates.length) {
+        return findSafeSpotNear(bot, origin);
+    }
+    candidates.sort((a, b) => bot.entity.position.distanceTo(a) - bot.entity.position.distanceTo(b));
+    return candidates[0];
 }
 async function ensureNotOnPlacement(bot, target) {
     if (bot.entity.position.distanceTo(target.offset(0.5, 0.5, 0.5)) < 1.5) {

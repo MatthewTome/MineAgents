@@ -18,7 +18,7 @@ def planner_system_prompt() -> str:
         - Output ONLY valid JSON (no prose, code fences, or comments).
         - Follow the JSON schema exactly. Do not invent fields.
         - Use only allowed tools: {tool_names}.
-        - Keep 1-8 steps and ensure they read like a sensible short-term plan.
+        - Ensure steps read like a sensible short-term plan.
         - Prefer safety: avoid lava, fire, void, and risky drops unless the goal demands it.
 
         Schema (Draft-07):

@@ -17,6 +17,7 @@ import { wireChatBridge } from "./actions/chat-commands.js";
 import { ReflectionLogger } from "./logger/reflection-log.js";
 import { PlannerWorkerClient } from "./planner/planner-worker-client.js";
 import { SessionLogger } from "./logger/session-logger.js";
+import { goalNeedsBuildSite, scoutBuildSite } from "./scouting.js";
 
 async function createBot()
 {
@@ -182,10 +183,22 @@ async function createBot()
                 sessionLogger.info("planner.start", "Generating plan", { goal: currentGoal, tickId: snap.tickId });
 
                 try {
+                    let context = "You are currently in the game. React immediately.";
+                    if (goalNeedsBuildSite(currentGoal)) {
+                        const site = scoutBuildSite(bot, currentGoal);
+                        if (site) {
+                            context += ` Scouted build site: origin (${site.origin.x}, ${site.origin.y}, ${site.origin.z}), size ${site.size}x${site.size}, flatness ${site.flatness}, coverage ${Math.round(site.coverage * 100)}%, distance ${site.radius}. Move there before building.`;
+                            sessionLogger.info("planner.scout.site", "Scouted build site", { goal: currentGoal, site });
+                        } else {
+                            context += " Scouting report: no suitable flat build site found nearby. Consider clearing or leveling terrain.";
+                            sessionLogger.warn("planner.scout.none", "No suitable build site found", { goal: currentGoal });
+                        }
+                    }
+
                     const plan = await planner.createPlan({
                         goal: currentGoal,
                         perception: snap,
-                        context: "You are currently in the game. React immediately."
+                        context
                     });
 
                     if (plan.knowledgeUsed && plan.knowledgeUsed.length > 0)
