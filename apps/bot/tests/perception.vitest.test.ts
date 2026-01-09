@@ -5,8 +5,6 @@ import type { Bot } from "mineflayer";
 import { PerceptionCollector } from "../src/perception";
 import { describe, it, expect } from "vitest";
 
-// --- Mocks -------------------------------------------------------------------
-
 interface MockBlock {
   name: string;
   boundingBox?: string;
@@ -117,15 +115,11 @@ class MockBot extends EventEmitter {
   }
 }
 
-// --- Helpers -----------------------------------------------------------------
-
 const makeCollector = (cfg: Record<string, unknown> = {}) => {
   const bot = new MockBot();
   const collector = new PerceptionCollector(bot as unknown as Bot, cfg as any);
   return { bot, collector };
 };
-
-// --- Tests -------------------------------------------------------------------
 
 describe("PerceptionCollector", function () {
   it("builds a complete snapshot from the bot state", function () {

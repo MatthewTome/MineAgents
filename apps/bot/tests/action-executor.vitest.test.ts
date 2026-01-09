@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import type { Bot } from "mineflayer";
-import { ActionExecutor, type ActionHandler, type ActionStep } from "../src/action-executor.js";
+import { ActionExecutor, type ActionHandler, type ActionStep } from "../src/actions/action-executor.js";
 
 function makeBot()
 {

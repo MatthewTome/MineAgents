@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { HuggingFacePlanner } from "../src/planner.js";
+import { HuggingFacePlanner } from "../src/planner/planner.js";
 
 describe("HuggingFacePlanner", () =>
 {
