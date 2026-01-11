@@ -60,12 +60,12 @@ const configSchema = z.object(
     }).default({}),
     perception: z.object(
     {
-        hz: z.number().positive().max(120).default(5),
-        nearbyRange: z.number().positive().default(12),
-        blockSampleRadiusXY: z.number().int().nonnegative().default(2),
-        blockSampleHalfHeight: z.number().int().nonnegative().default(1),
-        maxNearbyEntities: z.number().int().positive().default(24),
-        chatBuffer: z.number().int().positive().default(10)
+        hz: z.number().positive().max(120).default(8),
+        nearbyRange: z.number().positive().default(24),
+        blockSampleRadiusXY: z.number().int().nonnegative().default(4),
+        blockSampleHalfHeight: z.number().int().nonnegative().default(2),
+        maxNearbyEntities: z.number().int().positive().default(48),
+        chatBuffer: z.number().int().positive().default(20)
         }).default({}),
     safety: z.object(
     {
@@ -79,6 +79,9 @@ const configSchema = z.object(
             "craft",
             "smelt",
             "build",
+            "loot",
+            "eat",
+            "smith",
             "hunt",
             "fight",
             "fish"

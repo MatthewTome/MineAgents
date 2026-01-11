@@ -1,12 +1,15 @@
-import { RecipeLibrary } from "../knowledge.js";
+import { RecipeLibrary } from "./knowledge.js";
 const SUPPORTED_ACTIONS = {
     chat: "Send a chat message. params: { message }",
     perceive: "Check inventory or surroundings. params: { check: string }",
     craft: "Craft an item. params: { recipe: string, count?: number, craftingTable?: {x,y,z} }",
-    move: "Move. params: { position:{x,y,z} }",
+    move: "Move. params: { position:{x,y,z} } or { entityName?: string, range?: number }",
     mine: "Break block. params: { block?:string, position:{x,y,z} }",
     gather: "Collect items. params: { item?:string }",
     build: "Place structure. params: { structure: 'platform'|'wall'|'walls'|'tower'|'roof'|'chimney', origin?:{x,y,z}, material?:string, width?:number, height?:number, length?:number }",
+    loot: "Open a nearby chest and inspect contents. params: { position?:{x,y,z}, maxDistance?: number }",
+    eat: "Eat a food item from inventory. params: { item?: string }",
+    smith: "Use an anvil to combine or rename items. params: { item1: string, item2?: string, name?: string }",
     hunt: "Hunt mob.",
     fight: "Fight mob.",
     fish: "Fish."
@@ -180,6 +183,7 @@ export class HuggingFacePlanner {
             "1. For multi-part builds (house, base), you MUST pick a specific coordinate (e.g. x:0, y:63, z:0) and use it as the 'origin' for EVERY build step (platform, walls, roof). Do NOT omit the origin.",
             "2. If context includes a scouted build site, use its origin for build steps and move there before building.",
             "3. Be complete (include roof, door).",
+            "4. Coordinates must be grounded in the provided Perception snapshot. Only use positions from Perception.pose, Perception.nearby/entities, Perception.blocks, or scouted build site. Do not invent random coordinates.",
             "Intent should be fewer than 140 characters.",
             `Goal: ${request.goal}`,
             context ? `Context: ${context}` : "",

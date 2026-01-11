@@ -8,7 +8,7 @@ import { plugin as movementPlugin } from "mineflayer-movement";
 import { plugin as collectBlock } from "mineflayer-collectblock";
 import { plugin as toolPlugin } from "mineflayer-tool";
 import { loadBotConfig, ConfigError } from "./settings/config.js";
-import { PerceptionCollector } from "./perception.js";
+import { PerceptionCollector } from "./perception/perception.js";
 import { runSetupWizard } from "./settings/setup.js";
 import { ActionExecutor } from "./actions/action-executor.js";
 import { createDefaultActionHandlers } from "./actions/action-handlers.js";
@@ -16,7 +16,9 @@ import { wireChatBridge } from "./actions/chat-commands.js";
 import { ReflectionLogger } from "./logger/reflection-log.js";
 import { PlannerWorkerClient } from "./planner/planner-worker-client.js";
 import { SessionLogger } from "./logger/session-logger.js";
-import { goalNeedsBuildSite, scoutBuildSite } from "./scouting.js";
+import { goalNeedsBuildSite, scoutBuildSite } from "./actions/scouting.js";
+import { SafetyRails } from "./safety/safety-rails.js";
+import { RecipeLibrary } from "./planner/knowledge.js";
 async function createBot() {
     const defaultPath = path.join(process.cwd(), "config", "bot.config.yaml");
     const configPath = process.env.BOT_CONFIG ?? defaultPath;
@@ -48,8 +50,11 @@ async function createBot() {
     }
     const defaultRecipePath = path.resolve(process.cwd(), "..", "..", "py", "agent", "recipes");
     const RECIPES_PATH = process.env.RECIPES_DIR ?? defaultRecipePath;
+    let recipeLibrary = null;
     if (fs.existsSync(RECIPES_PATH)) {
         console.log(`[startup] RAG Recipes enabled. Loading from: ${RECIPES_PATH}`);
+        recipeLibrary = new RecipeLibrary(RECIPES_PATH);
+        recipeLibrary.loadAll();
     }
     else {
         console.warn(`[startup] WARNING: Recipe path not found at: ${RECIPES_PATH}`);
@@ -57,6 +62,7 @@ async function createBot() {
     }
     const sessionLogger = new SessionLogger();
     sessionLogger.info("startup", "MineAgent starting", { configPath, model: hfModel, backend: hfBackend });
+    const safety = new SafetyRails({ config: cfg.safety, logger: sessionLogger });
     const bot = mineflayer.createBot({
         host: cfg.connection.host,
         port: cfg.connection.port,
@@ -114,7 +120,8 @@ async function createBot() {
                 const reason = entry.reason ? ` (${entry.reason})` : "";
                 sessionLogger.logAction(entry);
                 console.log(`[action] ${entry.action}#${entry.id} -> ${entry.status}${reason}`);
-            }
+            },
+            safety
         });
         const perception = new PerceptionCollector(bot, {
             hz: cfg.perception.hz,
@@ -125,7 +132,7 @@ async function createBot() {
             chatBuffer: cfg.perception.chatBuffer
         });
         let lastLog = 0;
-        const unwireChat = wireChatBridge(bot, executor);
+        const unwireChat = wireChatBridge(bot, executor, { safety });
         bot.on("chat", (username, message) => {
             if (username === bot.username)
                 return;
@@ -172,23 +179,35 @@ async function createBot() {
                     sessionLogger.info("planner.result", "Plan generated", { intent: plan.intent, steps: plan.steps, backend: plan.backend, model: plan.model });
                     if (plan.steps.length === 0) {
                         console.warn("[planner] Plan contained no steps; clearing goal.");
-                        bot.chat("I couldn't figure out how to do that.");
+                        safeChat(bot, safety, "I couldn't figure out how to do that.", "planner.empty");
                         currentGoal = null;
                         sessionLogger.warn("planner.empty", "Plan contained no steps", { goal: currentGoal });
                     }
                     else {
-                        bot.chat(plan.intent);
+                        safeChat(bot, safety, plan.intent, "planner.intent");
                         executor.reset();
                         const results = await executor.executePlan(plan.steps);
                         const failed = results.find(r => r.status === "failed");
                         if (failed) {
                             console.warn(`[planner] Plan execution failed at ${failed.id}: ${failed.reason ?? "unknown reason"}`);
-                            bot.chat(`I got stuck on step ${failed.id}.`);
-                            sessionLogger.warn("planner.execution.failed", "Plan execution failed", { failed });
+                            const recovered = await attemptRecovery({
+                                bot,
+                                planner,
+                                executor,
+                                recipeLibrary,
+                                goal: currentGoal,
+                                perception: snap,
+                                baseContext: context,
+                                failed
+                            });
+                            if (!recovered) {
+                                safeChat(bot, safety, `I got stuck on step ${failed.id}.`, "planner.failed");
+                                sessionLogger.warn("planner.execution.failed", "Plan execution failed", { failed });
+                            }
                         }
                         else {
                             console.log(`[planner] Plan execution completed for goal: "${currentGoal}"`);
-                            bot.chat("I'm done!");
+                            safeChat(bot, safety, "I'm done!", "planner.complete");
                             sessionLogger.info("planner.execution.complete", "Plan execution completed", { goal: currentGoal });
                         }
                         currentGoal = null;
@@ -196,7 +215,7 @@ async function createBot() {
                 }
                 catch (error) {
                     console.error(`[planner] Error generating plan:`, error);
-                    bot.chat("My brain hurts. I couldn't make a plan.");
+                    safeChat(bot, safety, "My brain hurts. I couldn't make a plan.", "planner.error");
                     sessionLogger.error("planner.error", "Error generating plan", { error: error instanceof Error ? error.message : String(error) });
                     currentGoal = null;
                 }
@@ -243,3 +262,42 @@ async function createBot() {
     return bot;
 }
 createBot().catch(console.error);
+function safeChat(bot, safety, message, source) {
+    const result = safety.checkOutgoingChat(message, source);
+    if (!result.allowed) {
+        return;
+    }
+    bot.chat(result.message);
+}
+async function attemptRecovery(options) {
+    if (!options.recipeLibrary) {
+        return false;
+    }
+    const query = `${options.goal} ${options.failed.reason ?? ""}`.trim();
+    const recipes = options.recipeLibrary.search(query).slice(0, 3);
+    if (recipes.length === 0) {
+        return false;
+    }
+    for (const recipe of recipes) {
+        const context = [
+            options.baseContext,
+            `Recovery attempt: previous plan failed at ${options.failed.id} (${options.failed.reason ?? "unknown reason"}).`,
+            options.recipeLibrary.formatRecipeFact(recipe, 8)
+        ].join(" ");
+        const plan = await options.planner.createPlan({
+            goal: options.goal,
+            perception: options.perception,
+            context
+        });
+        if (plan.steps.length === 0) {
+            continue;
+        }
+        options.executor.reset();
+        const results = await options.executor.executePlan(plan.steps);
+        const failed = results.find(r => r.status === "failed");
+        if (!failed) {
+            return true;
+        }
+    }
+    return false;
+}

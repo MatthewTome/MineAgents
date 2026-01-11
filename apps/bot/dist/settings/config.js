@@ -21,12 +21,56 @@ const configSchema = z.object({
         version: z.string().min(1).default("1.21")
     }).default({}),
     perception: z.object({
-        hz: z.number().positive().max(120).default(5),
-        nearbyRange: z.number().positive().default(12),
-        blockSampleRadiusXY: z.number().int().nonnegative().default(2),
-        blockSampleHalfHeight: z.number().int().nonnegative().default(1),
-        maxNearbyEntities: z.number().int().positive().default(24),
-        chatBuffer: z.number().int().positive().default(10)
+        hz: z.number().positive().max(120).default(8),
+        nearbyRange: z.number().positive().default(24),
+        blockSampleRadiusXY: z.number().int().nonnegative().default(4),
+        blockSampleHalfHeight: z.number().int().nonnegative().default(2),
+        maxNearbyEntities: z.number().int().positive().default(48),
+        chatBuffer: z.number().int().positive().default(20)
+    }).default({}),
+    safety: z.object({
+        allowedActions: z.array(z.string()).default([
+            "chat",
+            "perceive",
+            "analyzeInventory",
+            "move",
+            "mine",
+            "gather",
+            "craft",
+            "smelt",
+            "build",
+            "loot",
+            "eat",
+            "smith",
+            "hunt",
+            "fight",
+            "fish"
+        ]),
+        blockedMaterials: z.array(z.string()).default([
+            "tnt",
+            "lava",
+            "flint_and_steel",
+            "fire_charge",
+            "fire"
+        ]),
+        customProfanityList: z.array(z.string()).default([
+            "kys",
+            "kill yourself"
+        ]),
+        rateLimits: z.object({
+            global: z.object({
+                max: z.number().int().positive().default(24),
+                windowMs: z.number().int().positive().default(10000)
+            }).default({}),
+            perAction: z.record(z.object({
+                max: z.number().int().positive(),
+                windowMs: z.number().int().positive()
+            })).default({
+                chat: { max: 4, windowMs: 2000 },
+                build: { max: 2, windowMs: 2000 },
+                mine: { max: 6, windowMs: 2000 }
+            })
+        }).default({})
     }).default({})
 });
 export function loadBotConfig(configPath) {

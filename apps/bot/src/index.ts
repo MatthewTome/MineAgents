@@ -9,7 +9,7 @@ import { plugin as movementPlugin } from "mineflayer-movement";
 import { plugin as collectBlock } from "mineflayer-collectblock";
 import { plugin as toolPlugin } from "mineflayer-tool";
 import { loadBotConfig, ConfigError } from "./settings/config.js";
-import { PerceptionCollector } from "./perception.js";
+import { PerceptionCollector } from "./perception/perception.js";
 import { PerceptionSnapshot } from "./settings/types.js";
 import { runSetupWizard } from "./settings/setup.js";
 import { ActionExecutor } from "./actions/action-executor.js";
@@ -18,8 +18,9 @@ import { wireChatBridge } from "./actions/chat-commands.js";
 import { ReflectionLogger } from "./logger/reflection-log.js";
 import { PlannerWorkerClient } from "./planner/planner-worker-client.js";
 import { SessionLogger } from "./logger/session-logger.js";
-import { goalNeedsBuildSite, scoutBuildSite } from "./scouting.js";
+import { goalNeedsBuildSite, scoutBuildSite } from "./actions/scouting.js";
 import { SafetyRails } from "./safety/safety-rails.js";
+import { RecipeLibrary } from "./planner/knowledge.js";
 
 async function createBot()
 {
@@ -63,9 +64,12 @@ async function createBot()
     const defaultRecipePath = path.resolve(process.cwd(), "..", "..", "py", "agent", "recipes");
     const RECIPES_PATH = process.env.RECIPES_DIR ?? defaultRecipePath;
     
+    let recipeLibrary: RecipeLibrary | null = null;
     if (fs.existsSync(RECIPES_PATH))
     {
         console.log(`[startup] RAG Recipes enabled. Loading from: ${RECIPES_PATH}`);
+        recipeLibrary = new RecipeLibrary(RECIPES_PATH);
+        recipeLibrary.loadAll();
     }
     else
     {
@@ -239,8 +243,22 @@ async function createBot()
                         if (failed)
                         {
                             console.warn(`[planner] Plan execution failed at ${failed.id}: ${failed.reason ?? "unknown reason"}`);
-                            safeChat(bot, safety, `I got stuck on step ${failed.id}.`, "planner.failed");
-                            sessionLogger.warn("planner.execution.failed", "Plan execution failed", { failed });
+                            const recovered = await attemptRecovery({
+                                bot,
+                                planner,
+                                executor,
+                                recipeLibrary,
+                                goal: currentGoal,
+                                perception: snap,
+                                baseContext: context,
+                                failed
+                            });
+
+                            if (!recovered)
+                            {
+                                safeChat(bot, safety, `I got stuck on step ${failed.id}.`, "planner.failed");
+                                sessionLogger.warn("planner.execution.failed", "Plan execution failed", { failed });
+                            }
                         }
                         else
                         {
@@ -322,4 +340,59 @@ function safeChat(bot: Bot, safety: SafetyRails, message: string, source: string
     }
 
     bot.chat(result.message);
+}
+
+async function attemptRecovery(options:
+{
+    bot: Bot;
+    planner: PlannerWorkerClient;
+    executor: ActionExecutor;
+    recipeLibrary: RecipeLibrary | null;
+    goal: string;
+    perception: PerceptionSnapshot;
+    baseContext: string;
+    failed: { id: string; reason?: string };
+}): Promise<boolean>
+{
+    if (!options.recipeLibrary)
+    {
+        return false;
+    }
+
+    const query = `${options.goal} ${options.failed.reason ?? ""}`.trim();
+    const recipes = options.recipeLibrary.search(query).slice(0, 3);
+    if (recipes.length === 0)
+    {
+        return false;
+    }
+
+    for (const recipe of recipes)
+    {
+        const context = [
+            options.baseContext,
+            `Recovery attempt: previous plan failed at ${options.failed.id} (${options.failed.reason ?? "unknown reason"}).`,
+            options.recipeLibrary.formatRecipeFact(recipe, 8)
+        ].join(" ");
+
+        const plan = await options.planner.createPlan({
+            goal: options.goal,
+            perception: options.perception,
+            context
+        });
+
+        if (plan.steps.length === 0)
+        {
+            continue;
+        }
+
+        options.executor.reset();
+        const results = await options.executor.executePlan(plan.steps);
+        const failed = results.find(r => r.status === "failed");
+        if (!failed)
+        {
+            return true;
+        }
+    }
+
+    return false;
 }

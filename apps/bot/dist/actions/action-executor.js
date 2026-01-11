@@ -1,7 +1,8 @@
 const DEFAULT_OPTIONS = {
     maxAttempts: 3,
     baseBackoffMs: 250,
-    logger: undefined
+    logger: undefined,
+    safety: undefined
 };
 const BUILT_IN_HANDLERS = {
     chat: async (bot, step) => {
@@ -19,6 +20,7 @@ export class ActionExecutor {
     executing = new Set();
     log = [];
     options;
+    safety;
     constructor(bot, handlers, options) {
         this.bot = bot;
         this.handlers = new Map(Object.entries(BUILT_IN_HANDLERS));
@@ -28,6 +30,7 @@ export class ActionExecutor {
             }
         }
         this.options = { ...DEFAULT_OPTIONS, ...options };
+        this.safety = this.options.safety;
     }
     reset() {
         this.executed.clear();
@@ -57,38 +60,50 @@ export class ActionExecutor {
             const entry = this.logEntry(step, "skipped", 0, "duplicate action id already in progress");
             return this.toResult(entry);
         }
-        const handler = this.handlers.get(step.action);
+        const safetyCheck = this.applySafety(step);
+        if (safetyCheck && !safetyCheck.allowed) {
+            const entry = this.logEntry(step, "failed", 0, safetyCheck.reason ?? "blocked by safety rails");
+            return this.toResult(entry);
+        }
+        const guardedStep = safetyCheck?.step ?? step;
+        const handler = this.handlers.get(guardedStep.action);
         if (!handler) {
             const entry = this.logEntry(step, "failed", 0, `unsupported action '${step.action}'`);
             return this.toResult(entry);
         }
-        this.executing.add(step.id);
+        this.executing.add(guardedStep.id);
         let attempts = 0;
         let lastReason;
         while (attempts < this.options.maxAttempts) {
             attempts++;
             try {
-                await handler(this.bot, step);
-                this.executed.add(step.id);
-                const entry = this.logEntry(step, "success", attempts, undefined);
-                this.executing.delete(step.id);
+                await handler(this.bot, guardedStep);
+                this.executed.add(guardedStep.id);
+                const entry = this.logEntry(guardedStep, "success", attempts, undefined);
+                this.executing.delete(guardedStep.id);
                 return this.toResult(entry);
             }
             catch (err) {
                 lastReason = err?.message ?? String(err);
                 const hasMore = attempts < this.options.maxAttempts;
                 const status = hasMore ? "retry" : "failed";
-                this.logEntry(step, status, attempts, lastReason);
+                this.logEntry(guardedStep, status, attempts, lastReason);
                 if (!hasMore) {
-                    this.executing.delete(step.id);
-                    return { id: step.id, action: step.action, status: "failed", attempts, reason: lastReason };
+                    this.executing.delete(guardedStep.id);
+                    return { id: guardedStep.id, action: guardedStep.action, status: "failed", attempts, reason: lastReason };
                 }
                 const delay = this.backoffMs(attempts);
                 await this.sleep(delay);
             }
         }
-        this.executing.delete(step.id);
-        return { id: step.id, action: step.action, status: "failed", attempts, reason: lastReason };
+        this.executing.delete(guardedStep.id);
+        return { id: guardedStep.id, action: guardedStep.action, status: "failed", attempts, reason: lastReason };
+    }
+    applySafety(step) {
+        if (!this.safety) {
+            return undefined;
+        }
+        return this.safety.checkStep(step);
     }
     logEntry(step, status, attempts, reason) {
         const entry = {

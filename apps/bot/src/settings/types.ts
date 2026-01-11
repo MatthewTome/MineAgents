@@ -34,6 +34,7 @@ export interface InventorySummary
         name: string;
         count: number;
     }[];
+    items?: { name: string; count: number }[];
     keyCounts:
     {
         blocks: number;
@@ -72,6 +73,14 @@ export interface LocalBlocks
     }[];
 }
 
+export interface ChestMemoryEntry
+{
+    position: Vec3Like;
+    status: "unknown" | "known" | "invalid";
+    items?: { name: string; count: number }[];
+    lastUpdated?: number;
+}
+
 export interface PlayerPose
 {
     position: Vec3Like;
@@ -98,6 +107,7 @@ export interface PerceptionSnapshot
         entities: NearbyEntity[];
     };
     blocks: LocalBlocks;
+    nearbyChests?: ChestMemoryEntry[];
     chatWindow:
     {
         lastMessages: string[];

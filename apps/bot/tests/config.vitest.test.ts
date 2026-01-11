@@ -27,8 +27,8 @@ describe("config loader", () =>
 
         expect(cfg.connection.port).toBe(25565);
         expect(cfg.connection.username).toBe("MineAgent");
-        expect(cfg.perception.hz).toBe(5);
-        expect(cfg.perception.maxNearbyEntities).toBe(24);
+        expect(cfg.perception.hz).toBe(8);
+        expect(cfg.perception.maxNearbyEntities).toBe(48);
     });
 
     it("loads JSON configs", () =>

@@ -8,7 +8,7 @@ export async function runSetupWizard(destinationPath: string): Promise<void>
 {
     console.clear();
     console.log("\n" + "=".repeat(60));
-    console.log("👋  WELCOME TO MINEAGENTS!");
+    console.log("WELCOME TO MINEAGENTS!");
     console.log("=".repeat(60));
     console.log("   It looks like this is your first time running the bot.");
     console.log("   I need to know where your Minecraft server is located.");
@@ -27,12 +27,12 @@ export async function runSetupWizard(destinationPath: string): Promise<void>
     const ask = (title: string, description: string, defaultValue: string): Promise<string> =>
     {
         return new Promise((resolve) => {
-            console.log(`\n🔹 QUESTION: ${title}`);
+            console.log(`\nQUESTION: ${title}`);
             console.log(`   ${description}`);
             
             rl.question(`   Type value or press ENTER to accept [${defaultValue}]: `, (answer) => {
                 const finalValue = answer.trim() || defaultValue;
-                console.log(`   ✅ Selected: ${finalValue}`);
+                console.log(`Selected: ${finalValue}`);
                 resolve(finalValue);
             });
         });
@@ -65,7 +65,7 @@ export async function runSetupWizard(destinationPath: string): Promise<void>
     rl.close();
 
     console.log("\n" + "-".repeat(60));
-    console.log("⚙️  Saving configuration...");
+    console.log("Saving configuration...");
 
     const config: BotConfig = {
         connection: {
@@ -75,12 +75,33 @@ export async function runSetupWizard(destinationPath: string): Promise<void>
             version
         },
         perception: {
-            hz: 5,
-            nearbyRange: 16,
-            blockSampleRadiusXY: 2,
-            blockSampleHalfHeight: 1,
-            maxNearbyEntities: 24,
-            chatBuffer: 10
+            hz: 8,
+            nearbyRange: 24,
+            blockSampleRadiusXY: 4,
+            blockSampleHalfHeight: 2,
+            maxNearbyEntities: 48,
+            chatBuffer: 20
+        },
+        safety: {
+            allowedActions: [
+                "chat", "perceive", "analyzeInventory", "move", "mine", 
+                "gather", "craft", "smelt", "build", "loot", 
+                "eat", "smith", "hunt", "fight", "fish"
+            ],
+            blockedMaterials: [
+                "tnt", "lava", "flint_and_steel", "fire_charge", "fire"
+            ],
+            customProfanityList: [
+                "kys", "kill yourself"
+            ],
+            rateLimits: {
+                global: { max: 24, windowMs: 10000 },
+                perAction: {
+                    chat: { max: 4, windowMs: 2000 },
+                    build: { max: 2, windowMs: 2000 },
+                    mine: { max: 6, windowMs: 2000 }
+                }
+            }
         }
     };
 
@@ -92,8 +113,8 @@ export async function runSetupWizard(destinationPath: string): Promise<void>
     const yamlStr = dumpYaml(config);
     fs.writeFileSync(destinationPath, yamlStr, "utf8");
 
-    console.log(`✅ Setup complete! Settings saved to:`);
+    console.log(`Setup complete! Settings saved to:`);
     console.log(`   ${destinationPath}`);
     console.log("-".repeat(60));
-    console.log("🚀 Starting bot now...\n");
+    console.log("Starting bot now...\n");
 }

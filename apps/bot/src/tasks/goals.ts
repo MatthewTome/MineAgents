@@ -1,4 +1,4 @@
-import type { PerceptionSnapshot } from "./settings/types.js";
+import type { PerceptionSnapshot } from "../settings/types.js";
 
 export type GoalStatus = "pending" | "pass" | "fail";
 

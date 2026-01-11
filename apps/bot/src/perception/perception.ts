@@ -8,8 +8,10 @@ import {
     LocalBlocks,
     InventorySummary,
     NearbyEntity,
-    EntityKind
-} from "./settings/types.js";
+    EntityKind,
+    ChestMemoryEntry
+} from "../settings/types.js";
+import { listChestMemory, markChestInvalid, rememberChest } from "./chest-memory.js";
 
 type PerceptionConfig =
 {
@@ -23,12 +25,12 @@ type PerceptionConfig =
 
 const DEFAULTS: PerceptionConfig =
 {
-    hz: 5,
-    nearbyRange: 80,
-    blockSampleRadiusXY: 24,
-    blockSampleHalfHeight: 6,
-    maxNearbyEntities: 144,
-    chatBuffer: 10
+    hz: 8,
+    nearbyRange: 24,
+    blockSampleRadiusXY: 4,
+    blockSampleHalfHeight: 2,
+    maxNearbyEntities: 48,
+    chatBuffer: 20
 };
 
 export class PerceptionCollector
@@ -130,6 +132,7 @@ export class PerceptionCollector
         const inventory = this.collectInventory();
         const nearby = this.collectNearby();
         const blocks = this.collectLocalBlocks();
+        const nearbyChests = this.collectNearbyChests();
         const hazards = this.deriveHazards(pose, blocks);
         const chatWindow = { lastMessages: [...this.chatRing] };
 
@@ -144,6 +147,7 @@ export class PerceptionCollector
             hazards,
             nearby,
             blocks,
+            nearbyChests,
             chatWindow
         };
 
@@ -225,6 +229,7 @@ export class PerceptionCollector
             totalSlots: this.bot.inventory?.slots?.length ?? 46,
             usedSlots: items.length,
             hotbar,
+            items: items.map((item) => ({ name: item.name, count: item.count ?? 0 })),
             keyCounts
         };
     }
@@ -325,6 +330,46 @@ export class PerceptionCollector
             airAhead,
             sample5x5: sample
         };
+    }
+
+    private collectNearbyChests(): ChestMemoryEntry[]
+    {
+        const chestId = this.bot.registry?.blocksByName?.chest?.id;
+        if (typeof chestId !== "number")
+        {
+            return listChestMemory();
+        }
+
+        const chests = this.bot.findBlocks(
+        {
+            matching: chestId,
+            maxDistance: this.cfg.nearbyRange,
+            count: 128
+        });
+
+        for (const chest of chests)
+        {
+            rememberChest({ x: chest.x, y: chest.y, z: chest.z });
+        }
+
+        const memory = listChestMemory();
+        for (const entry of memory)
+        {
+            const position = new Vec3(entry.position.x, entry.position.y, entry.position.z);
+            const dist = this.bot.entity.position.distanceTo(position);
+            if (dist > this.cfg.nearbyRange)
+            {
+                continue;
+            }
+
+            const block = this.bot.blockAt(position);
+            if (!block || block.name !== "chest")
+            {
+                markChestInvalid(entry.position);
+            }
+        }
+
+        return listChestMemory();
     }
 
     private deriveHazards(pose: PlayerPose, blocks: LocalBlocks): Hazards

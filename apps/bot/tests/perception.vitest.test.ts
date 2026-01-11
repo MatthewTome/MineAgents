@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { Vec3 } from "vec3";
 import type { Bot } from "mineflayer";
-import { PerceptionCollector } from "../src/perception";
+import { PerceptionCollector } from "../src/perception/perception";
 import { describe, it, expect } from "vitest";
 
 interface MockBlock {
@@ -36,6 +36,7 @@ class MockBot extends EventEmitter {
     };
 
   public entities: Record<number, any>;
+  public registry = { blocksByName: { chest: { id: 54 } } };
 
   private readonly inventoryItems =
     [
@@ -49,6 +50,7 @@ class MockBot extends EventEmitter {
     ];
 
   private readonly blocks = new Map<string, MockBlock>();
+  private readonly blockIds = new Map<string, number>();
 
   constructor() {
     super();
@@ -70,11 +72,16 @@ class MockBot extends EventEmitter {
       for (let dz = -2; dz <= 2; dz++) {
         const key = this.blockKey(origin.x + dx, groundY, origin.z + dz);
         this.blocks.set(key, { name: dx === 0 && dz === 0 ? "stone" : "dirt", boundingBox: "block" });
+        this.blockIds.set(key, 1);
       }
     }
 
     this.blocks.set(this.blockKey(origin.x, origin.y, origin.z + 1), { name: "oak_log", boundingBox: "block" });
+    this.blockIds.set(this.blockKey(origin.x, origin.y, origin.z + 1), 2);
     this.blocks.set(this.blockKey(origin.x + 1, groundY, origin.z), { name: "lava" });
+    this.blockIds.set(this.blockKey(origin.x + 1, groundY, origin.z), 3);
+    this.blocks.set(this.blockKey(origin.x + 2, groundY, origin.z), { name: "chest", boundingBox: "block" });
+    this.blockIds.set(this.blockKey(origin.x + 2, groundY, origin.z), 54);
 
     this.entities =
     {
@@ -108,6 +115,20 @@ class MockBot extends EventEmitter {
   public blockAt(vec: Vec3): MockBlock | null {
     const key = this.blockKey(vec.x, vec.y, vec.z);
     return this.blocks.get(key) ?? null;
+  }
+
+  public findBlocks({ matching, maxDistance }: { matching: number; maxDistance: number; count?: number }): Vec3[] {
+    const hits: Vec3[] = [];
+    for (const [key, block] of this.blocks.entries()) {
+      const id = this.blockIds.get(key);
+      if (id !== matching) continue;
+      const [x, y, z] = key.split(",").map(Number);
+      const pos = new Vec3(x, y, z);
+      if (pos.distanceTo(this.entity.position) <= maxDistance) {
+        hits.push(pos);
+      }
+    }
+    return hits;
   }
 
   private blockKey(x: number, y: number, z: number): string {
@@ -159,6 +180,7 @@ describe("PerceptionCollector", function () {
     assert.equal(snapshot.blocks.solidBelow, true);
     assert.equal(snapshot.blocks.airAhead, false);
     assert.equal(snapshot.blocks.sample5x5.length, 9);
+    assert.ok(snapshot.nearbyChests?.length);
 
     assert.equal(snapshot.hazards.nearLava, true);
     assert.equal(snapshot.hazards.dropEdge, false);
