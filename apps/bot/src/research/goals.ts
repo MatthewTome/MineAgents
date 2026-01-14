@@ -23,6 +23,7 @@ export interface GoalEvent
     status: GoalStatus;
     ts: number;
     reason: string;
+    durationMs?: number;
 }
 
 interface TrackedGoal
@@ -145,6 +146,19 @@ export class GoalTracker
                 const reason = goal.definition.successSignal.description ?? `Signal ${channel} matched`;
                 events.push(this.recordEvent(goal, "pass", now, reason));
             }
+            
+            if (goal.definition.failureSignals) {
+                const failed = goal.definition.failureSignals.find(sig => 
+                    sig.type === "event" && 
+                    sig.channel === channel && 
+                    (!sig.match || sig.match(payload))
+                );
+                
+                if (failed) {
+                    const reason = failed.description ?? `Signal ${channel} indicated failure`;
+                    events.push(this.recordEvent(goal, "fail", now, reason));
+                }
+            }
         }
 
         return events;
@@ -153,13 +167,15 @@ export class GoalTracker
     private recordEvent(goal: TrackedGoal, status: Exclude<GoalStatus, "pending">, ts: number, reason: string): GoalEvent
     {
         goal.status = status;
+        const durationMs = ts - goal.startedAt;
         const event: GoalEvent =
         {
             id: goal.id,
             name: goal.definition.name,
             status,
             ts,
-            reason
+            reason,
+            durationMs
         };
 
         this.dashboard.record(event);

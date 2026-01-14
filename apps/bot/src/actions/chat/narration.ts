@@ -1,4 +1,4 @@
-import type { ActionStep } from "./action-executor.js";
+import type { ActionStep } from "../action-executor.js";
 
 export interface PlanIntent
 {
@@ -39,6 +39,14 @@ export class PlanNarrator
         const summary = this.format(plan);
         this.lastNarrationAt = now;
         return summary;
+    }
+
+    narrateRecovery(plan: PlanIntent, failedStepId: string): string
+    {
+        const base = this.format(plan);
+        const text = `Adapting plan (stuck on ${failedStepId}): ${base}`;
+        this.lastNarrationAt = Date.now();
+        return this.trimToLimit(text, this.options.maxLength);
     }
 
     private format(plan: PlanIntent): string

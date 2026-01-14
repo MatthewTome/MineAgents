@@ -67,9 +67,9 @@ export async function runSetupWizard(destinationPath) {
             rateLimits: {
                 global: { max: 24, windowMs: 10000 },
                 perAction: {
-                    chat: { max: 4, windowMs: 2000 },
-                    build: { max: 2, windowMs: 2000 },
-                    mine: { max: 6, windowMs: 2000 }
+                    chat: { max: 10, windowMs: 2000 },
+                    build: { max: 50, windowMs: 5000 },
+                    mine: { max: 50, windowMs: 5000 }
                 }
             }
         }

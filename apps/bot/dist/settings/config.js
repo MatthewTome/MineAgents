@@ -66,9 +66,9 @@ const configSchema = z.object({
                 max: z.number().int().positive(),
                 windowMs: z.number().int().positive()
             })).default({
-                chat: { max: 4, windowMs: 2000 },
-                build: { max: 2, windowMs: 2000 },
-                mine: { max: 6, windowMs: 2000 }
+                chat: { max: 10, windowMs: 2000 },
+                build: { max: 50, windowMs: 5000 },
+                mine: { max: 50, windowMs: 5000 }
             })
         }).default({})
     }).default({})

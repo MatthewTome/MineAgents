@@ -19,13 +19,13 @@ export interface ActionExecutorOptions
     safety?: SafetyRails;
 }
 
-export type ActionStatus = "success" | "failed" | "skipped" | "retry";
+export type ActionStatus = "success" | "failed" | "skipped" | "retry" | "started";
 
 export interface ActionResult
 {
     id: string;
     action: string;
-    status: Exclude<ActionStatus, "retry">;
+    status: Exclude<ActionStatus, "retry" | "started">;
     attempts: number;
     reason?: string;
 }
@@ -150,6 +150,8 @@ export class ActionExecutor
         }
 
         this.executing.add(guardedStep.id);
+        
+        this.logEntry(guardedStep, "started", 1, undefined);
 
         let attempts = 0;
         let lastReason: string | undefined;
@@ -223,7 +225,13 @@ export class ActionExecutor
 
     private toResult(entry: ActionLogEntry): ActionResult
     {
-        return { id: entry.id, action: entry.action, status: entry.status as Exclude<ActionStatus, "retry">, attempts: entry.attempts, reason: entry.reason };
+        return { 
+            id: entry.id, 
+            action: entry.action, 
+            status: entry.status as ActionResult["status"], 
+            attempts: entry.attempts, 
+            reason: entry.reason 
+        };
     }
 
     private backoffMs(attempt: number): number

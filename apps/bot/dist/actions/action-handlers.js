@@ -1,6 +1,8 @@
 import { Vec3 } from "vec3";
-import pathfinderPkg from "mineflayer-pathfinder";
-const { goals } = pathfinderPkg;
+import { recordChestContents, listChestMemory } from "../perception/chest-memory.js";
+import { moveToward, resolveTargetPosition, findNearestEntity, waitForNextTick, raceWithTimeout } from "./movement.js";
+import { executeBuild } from "./building/building.js";
+import { requireInventoryItem, ensureToolFor, expandMaterialAliases, resolveItemName, resolveWoodType } from "./utils.js";
 export function createDefaultActionHandlers() {
     return {
         move: handleMove,
@@ -9,12 +11,25 @@ export function createDefaultActionHandlers() {
         craft: handleCraft,
         smelt: handleSmelt,
         build: handleBuild,
+        loot: handleLoot,
+        eat: handleEat,
+        smith: handleSmith,
         hunt: handleHunt,
         fish: handleFish,
         fight: handleFight,
         perceive: handlePerceive,
         analyzeInventory: handlePerceive
     };
+}
+async function handleMove(bot, step) {
+    const params = (step.params ?? {});
+    const targetPos = resolveTargetPosition(bot, params || {});
+    await moveToward(bot, targetPos, params?.range ?? 1.5, params?.timeoutMs ?? 15000);
+}
+async function handleBuild(bot, step) {
+    const params = (step.params ?? {});
+    const timeout = 180000;
+    await raceWithTimeout(executeBuild(bot, params), timeout);
 }
 async function handlePerceive(bot, step) {
     const params = (step.params ?? {});
@@ -63,22 +78,118 @@ async function handleSmelt(bot, step) {
     try {
         await furnace.takeOutput();
     }
-    catch (e) { /* might not be done, ignore */ }
+    catch (e) { }
     furnace.close();
+}
+async function handleLoot(bot, step) {
+    const params = (step.params ?? {});
+    const maxDistance = params.maxDistance ?? 16;
+    const chestId = bot.registry?.blocksByName?.chest?.id;
+    if (typeof chestId !== "number") {
+        throw new Error("Chest block not registered for this version.");
+    }
+    const chestBlock = params.position
+        ? bot.blockAt(new Vec3(params.position.x, params.position.y, params.position.z))
+        : bot.findBlock({ matching: chestId, maxDistance });
+    if (!chestBlock) {
+        throw new Error("No chest found nearby.");
+    }
+    await moveToward(bot, chestBlock.position, 2.5, 15000);
+    const chest = await bot.openContainer(chestBlock);
+    const items = chest.containerItems().map((item) => ({ name: item.name, count: item.count ?? 0 }));
+    recordChestContents(chestBlock.position, items);
+    chest.close();
+}
+async function handleEat(bot, step) {
+    const params = (step.params ?? {});
+    const preferred = params.item?.toLowerCase();
+    const inventory = bot.inventory.items();
+    const foodCandidates = inventory.filter((item) => {
+        const name = item.name.toLowerCase();
+        return name.includes("bread")
+            || name.includes("cooked")
+            || name.includes("apple")
+            || name.includes("stew")
+            || name.includes("porkchop")
+            || name.includes("beef")
+            || name.includes("mutton")
+            || name.includes("chicken")
+            || name.includes("carrot")
+            || name.includes("potato")
+            || name.includes("fish");
+    });
+    const food = preferred
+        ? foodCandidates.find((item) => item.name.toLowerCase().includes(preferred))
+        : foodCandidates[0];
+    if (!food) {
+        throw new Error("No food available to eat.");
+    }
+    await bot.equip(food, "hand");
+    await bot.consume();
+}
+async function handleSmith(bot, step) {
+    const params = (step.params ?? {});
+    if (!params.item1) {
+        throw new Error("Smith requires item1");
+    }
+    const anvilBlocks = ["anvil", "chipped_anvil", "damaged_anvil"];
+    const matchingIds = anvilBlocks
+        .map((name) => bot.registry?.blocksByName?.[name]?.id)
+        .filter((id) => typeof id === "number");
+    const anvilBlock = bot.findBlock({ matching: matchingIds, maxDistance: 16 });
+    if (!anvilBlock) {
+        throw new Error("No anvil found nearby.");
+    }
+    const item1 = requireInventoryItem(bot, params.item1);
+    const item2 = params.item2 ? requireInventoryItem(bot, params.item2) : null;
+    await moveToward(bot, anvilBlock.position, 2.5, 15000);
+    const anvil = await bot.openAnvil(anvilBlock);
+    if (item2) {
+        await anvil.combine(item1, item2, params.name);
+    }
+    else {
+        await anvil.rename(item1, params.name ?? item1.name);
+    }
+    anvil.close();
 }
 async function handleCraft(bot, step) {
     const params = (step.params ?? {});
-    const itemName = params.recipe.toLowerCase();
+    let itemName = params.recipe.toLowerCase();
     const count = params.count ?? 1;
+    const structureNames = ["platform", "walls", "roof", "door_frame"];
+    if (structureNames.includes(itemName)) {
+        console.warn(`[craft] Recipe '${itemName}' looks like a structure. Attempting to switch to material '${params.material ?? "oak_planks"}'`);
+        itemName = params.material?.toLowerCase() ?? "oak_planks";
+    }
+    if (itemName.endsWith("door") && !itemName.includes("_")) {
+        const availableWood = resolveWoodType(bot);
+        itemName = `${availableWood}_door`;
+        console.log(`[craft] Resolved generic 'door' to '${itemName}' based on inventory.`);
+    }
+    const existing = bot.inventory.items().find(i => i.name === itemName);
+    if (existing && existing.count >= count) {
+        console.log(`[craft] Already have ${existing.count} ${itemName}, skipping craft.`);
+        return;
+    }
     const itemType = bot.registry.itemsByName[itemName];
     if (!itemType && !itemName.includes("plank"))
         throw new Error(`Unknown item name: ${itemName}`);
     let recipeList = itemType ? bot.recipesFor(itemType.id, null, 1, true) : [];
     let recipe = recipeList[0];
     if (!recipe && itemName.includes("plank")) {
-        const oak = bot.registry.itemsByName['oak_planks'];
-        if (oak)
-            recipe = bot.recipesFor(oak.id, null, 1, true)[0];
+        const logItem = bot.inventory.items().find(i => i.name.endsWith("_log"));
+        if (logItem) {
+            const plankName = logItem.name.replace("_log", "_planks");
+            const pType = bot.registry.itemsByName[plankName];
+            if (pType) {
+                recipe = bot.recipesFor(pType.id, null, 1, true)[0];
+            }
+        }
+        if (!recipe) {
+            const oak = bot.registry.itemsByName['oak_planks'];
+            if (oak)
+                recipe = bot.recipesFor(oak.id, null, 1, true)[0];
+        }
     }
     if (!recipe)
         throw new Error(`No crafting recipe found for ${itemName}.`);
@@ -89,7 +200,15 @@ async function handleCraft(bot, step) {
         if (!tableBlock) {
             console.log("[craft] Crafting new table...");
             await handleGather(bot, { params: { item: "log" } });
-            await handleCraft(bot, { params: { recipe: "oak_planks" } });
+            const log = bot.inventory.items().find(i => i.name.endsWith("_log"));
+            if (!log)
+                throw new Error("Failed to gather logs for crafting table.");
+            const plankItem = bot.registry.itemsByName[log.name.replace("_log", "_planks")];
+            if (plankItem) {
+                const plankRecipe = bot.recipesFor(plankItem.id, null, 1, null)[0];
+                if (plankRecipe)
+                    await bot.craft(plankRecipe, 1, undefined);
+            }
             const tRecipe = bot.recipesFor(bot.registry.itemsByName['crafting_table'].id, null, 1, null)[0];
             await bot.craft(tRecipe, 1, undefined);
             const pos = bot.entity.position.offset(1, 0, 0).floored();
@@ -118,10 +237,25 @@ async function handleGather(bot, step) {
     const rawTarget = params.item?.toLowerCase();
     const targetItem = resolveItemName(rawTarget ?? "");
     const timeout = params.timeoutMs ?? 60000;
-    const start = Date.now();
     if (!targetItem)
         throw new Error("Gather requires item name");
+    const existing = bot.inventory.items().find(i => i.name.toLowerCase().includes(targetItem));
+    if (existing) {
+        console.log(`[gather] Already have ${targetItem} (${existing.count}), skipping gather.`);
+        return;
+    }
+    const chests = listChestMemory().filter(c => c.status === "known" && c.items && c.items.some(i => i.name.includes(targetItem)));
+    if (chests.length > 0) {
+        console.log(`[gather] Found ${targetItem} in known chest at ${chests[0].position.x},${chests[0].position.y},${chests[0].position.z}`);
+        await handleLoot(bot, { params: { position: chests[0].position } });
+        const nowHas = bot.inventory.items().find(i => i.name.toLowerCase().includes(targetItem));
+        if (nowHas) {
+            console.log(`[gather] Retrieved ${targetItem} from chest.`);
+            return;
+        }
+    }
     console.log(`[gather] Starting cycle for: ${targetItem}`);
+    const start = Date.now();
     const failedBlocks = new Set();
     let consecutiveFailures = 0;
     while (Date.now() - start < timeout) {
@@ -197,11 +331,6 @@ async function handleGather(bot, step) {
     }
     throw new Error(`Gather ${targetItem} failed.`);
 }
-async function handleMove(bot, step) {
-    const params = (step.params ?? {});
-    const targetPos = resolveTargetPosition(bot, params || {});
-    await moveToward(bot, targetPos, params?.range ?? 1.5, params?.timeoutMs ?? 15000);
-}
 async function handleMine(bot, step) {
     const params = (step.params ?? {});
     const block = findBlockTarget(bot, params || {}, 32);
@@ -209,265 +338,6 @@ async function handleMine(bot, step) {
         throw new Error(`No matching block found`);
     await ensureToolFor(bot, block);
     await collectBlocks(bot, [block]);
-}
-async function handleBuild(bot, step) {
-    const params = (step.params ?? {});
-    if (!params?.structure)
-        throw new Error("Build requires structure type");
-    const rawOrigin = params.origin ? new Vec3(params.origin.x, params.origin.y, params.origin.z) : bot.entity.position;
-    const origin = rawOrigin.floored();
-    const blueprint = getBlueprint(params);
-    if (!blueprint.length)
-        throw new Error(`Blueprint empty for '${params.structure}'`);
-    const bounds = blueprint.map(p => origin.plus(p));
-    const botPos = bot.entity.position.floored();
-    const buildBounds = getBuildBounds(bounds);
-    const structureCanTrap = ["walls", "roof", "tower", "chimney"].includes(params.structure);
-    if (structureCanTrap && isInsideBounds(botPos, buildBounds)) {
-        console.log("[build] Relocating outside build bounds to avoid trapping...");
-        const safe = findBuildStandOutside(bot, buildBounds, origin);
-        await moveToward(bot, safe, 0.5, 5000);
-    }
-    const materialName = (params.material ?? "cobblestone").toLowerCase();
-    const isVertical = ["wall", "walls", "roof", "house", "tower", "chimney"].includes(params.structure);
-    const sorted = blueprint.map(pos => origin.plus(pos)).sort((a, b) => {
-        if (a.y !== b.y)
-            return a.y - b.y;
-        const distA = a.distanceTo(bot.entity.position);
-        const distB = b.distanceTo(bot.entity.position);
-        return isVertical ? (distB - distA) : (distA - distB);
-    });
-    let placed = 0;
-    for (const pos of sorted) {
-        const existing = bot.blockAt(pos);
-        if (existing && existing.boundingBox !== "empty") {
-            if (existing.name.includes(materialName) || materialName.includes(existing.name))
-                continue;
-            console.log(`[build] Clearing ${existing.name} at ${pos}`);
-            await ensureToolFor(bot, existing);
-            await bot.dig(existing, true);
-        }
-        const ref = findReferenceBlock(bot, pos);
-        if (!ref)
-            continue;
-        let item;
-        try {
-            item = requireInventoryItem(bot, materialName);
-        }
-        catch (e) {
-            throw new Error(`Build failed: Out of ${materialName}`);
-        }
-        if (bot.inventory.slots[bot.getEquipmentDestSlot("hand")]?.name !== item.name) {
-            await bot.equip(item, "hand");
-        }
-        if (bot.entity.position.distanceTo(ref.position) > 4.5) {
-            const safeStand = ref.position.offset(0.5, 1, 0.5).plus(pos.minus(ref.position).scaled(-1));
-            await moveToward(bot, safeStand, 4.0, 10000);
-        }
-        await ensureNotOnPlacement(bot, pos);
-        try {
-            await bot.placeBlock(ref, pos.minus(ref.position));
-            await waitForNextTick(bot);
-            placed += 1;
-        }
-        catch (e) { }
-    }
-    if (placed === 0) {
-        throw new Error("Build failed: placed 0 blocks (obstructed or unreachable)");
-    }
-}
-async function moveToward(bot, target, range, timeout) {
-    if (bot.pathfinder) {
-        try {
-            const goal = new goals.GoalNear(target.x, target.y, target.z, range);
-            await raceWithTimeout(bot.pathfinder.goto(goal), timeout);
-            return;
-        }
-        catch (err) {
-            console.warn(`[move] Pathfinder failed (${err instanceof Error ? err.message : String(err)}). Falling back.`);
-        }
-    }
-    if (await moveWithMovementPlugin(bot, target, range, timeout)) {
-        return;
-    }
-    throw new Error("Movement plugins unavailable for navigation");
-}
-async function moveWithMovementPlugin(bot, target, range, timeout) {
-    const movement = bot.movement;
-    if (!movement)
-        return false;
-    try {
-        if (movement.goto) {
-            await raceWithTimeout(movement.goto(target, { range, timeout }), timeout);
-            return true;
-        }
-        if (movement.moveTo) {
-            await raceWithTimeout(movement.moveTo(target, { range, timeout }), timeout);
-            return true;
-        }
-    }
-    catch (err) {
-        console.warn(`[move] Movement plugin failed (${err instanceof Error ? err.message : String(err)}).`);
-    }
-    return false;
-}
-function isSafeToStand(bot, pos) {
-    const block = bot.blockAt(pos);
-    const below = bot.blockAt(pos.offset(0, -1, 0));
-    const above = bot.blockAt(pos.offset(0, 1, 0));
-    if (!block || !below || !above)
-        return false;
-    if (below.boundingBox === "empty" || below.name === "lava")
-        return false;
-    if (block.boundingBox !== "empty")
-        return false;
-    if (above.boundingBox !== "empty")
-        return false;
-    const deepBelow = bot.blockAt(pos.offset(0, -2, 0));
-    if (deepBelow && deepBelow.boundingBox === "empty") {
-        const deepDeep = bot.blockAt(pos.offset(0, -3, 0));
-        if (deepDeep && deepDeep.boundingBox === "empty")
-            return false;
-    }
-    return true;
-}
-function resolveItemName(name) {
-    const lower = name.toLowerCase();
-    if (lower === "wood")
-        return "log";
-    if (lower === "stone")
-        return "cobblestone";
-    return lower;
-}
-function resolveTargetPosition(bot, params) {
-    if (params.position)
-        return new Vec3(params.position.x, params.position.y, params.position.z);
-    if (params.entityName) {
-        const lower = params.entityName.toLowerCase();
-        const entity = findNearestEntity(bot, (e) => {
-            const name = (e.username ?? e.displayName ?? e.name ?? "").toLowerCase();
-            return name.includes(lower);
-        }, 96);
-        if (entity)
-            return entity.position.clone();
-    }
-    throw new Error("Unable to resolve target position");
-}
-function findNearestEntity(bot, predicate, maxDistance) {
-    let best = null;
-    let bestDist = Infinity;
-    for (const e of Object.values(bot.entities)) {
-        if (!predicate(e))
-            continue;
-        const d = bot.entity.position.distanceTo(e.position);
-        if (d < bestDist && d <= maxDistance) {
-            best = e;
-            bestDist = d;
-        }
-    }
-    return best;
-}
-function expandMaterialAliases(name) {
-    const lower = name.toLowerCase();
-    if (lower === "wood" || lower === "log" || lower === "planks")
-        return ["oak_planks", "spruce_planks", "birch_planks", "oak_log", "birch_log", "cobblestone", "dirt"];
-    if (lower.includes("plank"))
-        return [lower, "oak_planks", "birch_planks", "spruce_planks"];
-    if (lower.includes("stone"))
-        return [lower, "cobblestone", "stone", "stone_bricks"];
-    if (lower.includes("iron"))
-        return ["iron_ore", "deepslate_iron_ore", "raw_iron"];
-    return [lower];
-}
-function findBlockTarget(bot, params, maxDistance) {
-    if (params.position)
-        return bot.blockAt(new Vec3(params.position.x, params.position.y, params.position.z));
-    const name = params.block?.toLowerCase();
-    if (!name)
-        return null;
-    const aliases = expandMaterialAliases(name);
-    return bot.findBlock({ matching: (b) => aliases.includes(b.name) || b.name.includes(name), maxDistance });
-}
-function findReferenceBlock(bot, target) {
-    const neighbors = [target.offset(0, -1, 0), target.offset(0, 1, 0), target.offset(1, 0, 0), target.offset(-1, 0, 0), target.offset(0, 0, 1), target.offset(0, 0, -1)];
-    for (const p of neighbors) {
-        const b = bot.blockAt(p);
-        if (b && b.boundingBox !== "empty" && !b.name.includes("water") && !b.name.includes("lava"))
-            return b;
-    }
-    return null;
-}
-function requireInventoryItem(bot, name) {
-    const aliases = expandMaterialAliases(name);
-    const item = bot.inventory.items().find(i => aliases.includes(i.name) || i.name.includes(name));
-    if (!item)
-        throw new Error(`Missing item: ${name}`);
-    return item;
-}
-function findSafeSpotNear(bot, origin) {
-    return origin.offset(3, 0, 3);
-}
-function getBuildBounds(points) {
-    let minX = Infinity;
-    let minY = Infinity;
-    let minZ = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-    let maxZ = -Infinity;
-    for (const p of points) {
-        minX = Math.min(minX, p.x);
-        minY = Math.min(minY, p.y);
-        minZ = Math.min(minZ, p.z);
-        maxX = Math.max(maxX, p.x);
-        maxY = Math.max(maxY, p.y);
-        maxZ = Math.max(maxZ, p.z);
-    }
-    return {
-        min: new Vec3(minX, minY, minZ),
-        max: new Vec3(maxX, maxY, maxZ)
-    };
-}
-function isInsideBounds(pos, bounds) {
-    return pos.x >= bounds.min.x &&
-        pos.x <= bounds.max.x &&
-        pos.z >= bounds.min.z &&
-        pos.z <= bounds.max.z &&
-        pos.y >= bounds.min.y - 1 &&
-        pos.y <= bounds.max.y + 1;
-}
-function findBuildStandOutside(bot, bounds, origin) {
-    const candidates = [];
-    const offsets = [
-        new Vec3(bounds.min.x - 2, origin.y, origin.z),
-        new Vec3(bounds.max.x + 2, origin.y, origin.z),
-        new Vec3(origin.x, origin.y, bounds.min.z - 2),
-        new Vec3(origin.x, origin.y, bounds.max.z + 2),
-        new Vec3(bounds.min.x - 2, origin.y, bounds.min.z - 2),
-        new Vec3(bounds.min.x - 2, origin.y, bounds.max.z + 2),
-        new Vec3(bounds.max.x + 2, origin.y, bounds.min.z - 2),
-        new Vec3(bounds.max.x + 2, origin.y, bounds.max.z + 2)
-    ];
-    for (const pos of offsets) {
-        const floored = pos.floored();
-        if (isSafeToStand(bot, floored)) {
-            candidates.push(floored.offset(0.5, 0, 0.5));
-        }
-    }
-    if (!candidates.length) {
-        return findSafeSpotNear(bot, origin);
-    }
-    candidates.sort((a, b) => bot.entity.position.distanceTo(a) - bot.entity.position.distanceTo(b));
-    return candidates[0];
-}
-async function ensureNotOnPlacement(bot, target) {
-    if (bot.entity.position.distanceTo(target.offset(0.5, 0.5, 0.5)) < 1.5) {
-        const back = bot.entity.position.minus(target).normalize().scaled(2);
-        back.y = 0;
-        await moveToward(bot, bot.entity.position.plus(back), 0.2, 1000);
-    }
-}
-function waitForNextTick(bot) {
-    return new Promise(r => bot.once("physicsTick", r));
 }
 async function handleHunt(bot, step) {
     const params = (step.params ?? {});
@@ -500,13 +370,23 @@ async function engageTarget(bot, entity, range, timeoutMs) {
     await bot.lookAt(entity.position, true);
     bot.attack(entity);
 }
-async function ensureToolFor(bot, block) {
-    const toolPlugin = bot.tool;
-    if (toolPlugin?.equipForBlock) {
-        await toolPlugin.equipForBlock(block);
-        return;
+function findBlockTarget(bot, params, maxDistance) {
+    if (params.position)
+        return bot.blockAt(new Vec3(params.position.x, params.position.y, params.position.z));
+    const name = params.block?.toLowerCase();
+    if (!name)
+        return null;
+    const aliases = expandMaterialAliases(name);
+    return bot.findBlock({ matching: (b) => aliases.includes(b.name) || b.name.includes(name), maxDistance });
+}
+function findReferenceBlock(bot, target) {
+    const neighbors = [target.offset(0, -1, 0), target.offset(0, 1, 0), target.offset(1, 0, 0), target.offset(-1, 0, 0), target.offset(0, 0, 1), target.offset(0, 0, -1)];
+    for (const p of neighbors) {
+        const b = bot.blockAt(p);
+        if (b && b.boundingBox !== "empty" && !b.name.includes("water") && !b.name.includes("lava"))
+            return b;
     }
-    throw new Error("Tool plugin unavailable for equipping tools");
+    return null;
 }
 async function collectBlocks(bot, blocks) {
     const collection = bot.collectBlock;
@@ -515,19 +395,6 @@ async function collectBlocks(bot, blocks) {
     }
     await raceWithTimeout(collection.collect(blocks, { ignoreNoPath: true }), 15000);
     return true;
-}
-async function raceWithTimeout(promise, timeoutMs) {
-    let timeoutId = null;
-    const timeoutPromise = new Promise((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error("Move timeout")), timeoutMs);
-    });
-    try {
-        return await Promise.race([promise, timeoutPromise]);
-    }
-    finally {
-        if (timeoutId)
-            clearTimeout(timeoutId);
-    }
 }
 function resolveItemToBlock(item) {
     if (item.includes("cobblestone"))
@@ -548,32 +415,4 @@ function resolveProductToRaw(product) {
     if (product.includes("pickaxe"))
         return "stick";
     return null;
-}
-function getBlueprint(params) {
-    const { width = 3, height = 3, length = 3, structure } = params;
-    const positions = [];
-    const hw = Math.floor(Math.max(1, width) / 2);
-    const hl = Math.floor(Math.max(1, length) / 2);
-    if (structure === "platform") {
-        for (let x = -hw; x <= hw; x++)
-            for (let z = -hl; z <= hl; z++)
-                positions.push(new Vec3(x, 0, z));
-    }
-    else if (structure === "walls") {
-        for (let y = 0; y < height; y++)
-            for (let x = -hw; x <= hw; x++)
-                for (let z = -hl; z <= hl; z++)
-                    if (Math.abs(x) === hw || Math.abs(z) === hl)
-                        positions.push(new Vec3(x, y, z));
-    }
-    else if (structure === "roof") {
-        for (let y = 0; y <= Math.min(hw, hl); y++) {
-            const ix = hw - y, iz = hl - y;
-            for (let x = -ix; x <= ix; x++)
-                for (let z = -iz; z <= iz; z++)
-                    if (Math.abs(x) === ix || Math.abs(z) === iz)
-                        positions.push(new Vec3(x, y, z));
-        }
-    }
-    return positions;
 }

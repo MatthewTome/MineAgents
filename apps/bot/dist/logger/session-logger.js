@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import util from "node:util";
 function isoNow() {
     return new Date().toISOString();
 }
@@ -13,14 +14,54 @@ function safeStringify(value) {
 }
 export class SessionLogger {
     sessionDir;
-    constructor(sessionDir) {
-        const base = sessionDir ?? path.join(process.cwd(), "logs", "sessions");
-        const resolved = sessionDir ?? path.join(base, `session-${isoNow().replace(/[:]/g, "-")}`);
-        this.sessionDir = resolved;
-        fs.mkdirSync(this.sessionDir, { recursive: true });
+    constructor(existingSessionDir) {
+        if (existingSessionDir) {
+            this.sessionDir = existingSessionDir;
+        }
+        else {
+            const now = new Date();
+            const dateStr = now.toISOString().split("T")[0];
+            const timeStr = now.toISOString().replace(/[:.]/g, "-");
+            const base = path.join(process.cwd(), "logs", "sessions", dateStr);
+            if (!fs.existsSync(base)) {
+                fs.mkdirSync(base, { recursive: true });
+            }
+            this.sessionDir = path.join(base, `session-${timeStr}`);
+            fs.mkdirSync(this.sessionDir, { recursive: true });
+        }
     }
     get directory() {
         return this.sessionDir;
+    }
+    installGlobalHandlers() {
+        const levels = ["log", "warn", "error", "debug"];
+        for (const level of levels) {
+            const original = console[level];
+            if (typeof original !== "function")
+                continue;
+            console[level] = (...args) => {
+                original.apply(console, args);
+                const message = util.format(...args);
+                const event = `console.${level}`;
+                if (level === "error") {
+                    this.error(event, message);
+                }
+                else if (level === "warn") {
+                    this.warn(event, message);
+                }
+                else {
+                    this.info(event, message);
+                }
+            };
+        }
+        process.on("uncaughtException", (err) => {
+            const msg = err instanceof Error ? err.stack ?? err.message : String(err);
+            console.error("[CRASH] Uncaught Exception:", msg);
+        });
+        process.on("unhandledRejection", (reason) => {
+            const msg = reason instanceof Error ? reason.stack ?? reason.message : String(reason);
+            console.error("[CRASH] Unhandled Rejection:", msg);
+        });
     }
     info(event, message, data) {
         this.append("session.log", { level: "info", event, message, data });
@@ -57,6 +98,11 @@ export class SessionLogger {
         const payload = { ...entry, ts: isoNow() };
         const line = safeStringify(payload) + "\n";
         const filePath = path.join(this.sessionDir, fileName);
-        fs.appendFileSync(filePath, line, "utf8");
+        try {
+            fs.appendFileSync(filePath, line, "utf8");
+        }
+        catch (err) {
+            process.stdout.write(`[LOGGER FAIL] Could not write to ${filePath}\n`);
+        }
     }
 }

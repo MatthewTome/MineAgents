@@ -4,34 +4,34 @@
   "tags": ["shelter", "building", "safety", "house"],
   "steps": [
     {
-      "title": "Analyze & Prepare",
+      "title": "Analyze & Inventory Check",
       "action": "perceive",
-      "details": "Check inventory for wood/logs. Plan a specific origin coordinate near the bot."
+      "details": "Check inventory. Calculate total blocks needed (approx 200 for 7x7 house). IF INSUFFICIENT: Generate 'craft' or 'gather' steps IMMEDIATELY."
     },
     {
       "title": "Clear & Level",
       "action": "move",
-      "details": "Move to the planned origin."
+      "details": "Move to the planned origin and clear space if needed."
     },
     {
       "title": "Foundation",
       "action": "build",
-      "details": "Place the floor. USE THE SAME ORIGIN COORDINATE FOR ALL STEPS. params: { \"structure\": \"platform\", \"width\": 5, \"length\": 5, \"material\": \"oak_planks\", \"origin\": {x,y,z} }"
+      "details": "Place the floor. USE THE SAME ORIGIN COORDINATE FOR ALL STEPS. params: { \"structure\": \"platform\", \"width\": 7, \"length\": 7, \"material\": \"oak_planks\", \"origin\": {x,y,z} }"
+    },
+    {
+      "title": "Install Door",
+      "action": "build",
+      "details": "Place the door BEFORE walls to ensure the 2x1 block gap is correct. params: { \"structure\": \"door\", \"material\": \"oak_door\", \"origin\": {SAME_AS_ABOVE} }"
     },
     {
       "title": "Walls",
       "action": "build",
-      "details": "Build perimeter walls. params: { \"structure\": \"walls\", \"width\": 5, \"length\": 5, \"height\": 3, \"material\": \"oak_planks\", \"origin\": {SAME_AS_ABOVE} }"
+      "details": "Build perimeter walls. params: { \"structure\": \"walls\", \"width\": 7, \"length\": 7, \"height\": 4, \"material\": \"oak_planks\", \"door\": true, \"origin\": {SAME_AS_ABOVE} }"
     },
     {
       "title": "Roof",
       "action": "build",
-      "details": "Build the roof on top (y+3). params: { \"structure\": \"roof\", \"width\": 5, \"length\": 5, \"material\": \"oak_planks\", \"origin\": {SAME_AS_ABOVE, but y+3} }"
-    },
-    {
-      "title": "Door Frame",
-      "action": "build",
-      "details": "Clear space for door. params: { \"structure\": \"door_frame\", \"origin\": {SAME_AS_ABOVE_PLUS_OFFSET} }"
+      "details": "Build the roof last on top (y+4). params: { \"structure\": \"roof\", \"width\": 7, \"length\": 7, \"material\": \"oak_planks\", \"origin\": {SAME_AS_ABOVE, but y+4} }"
     }
   ]
 }

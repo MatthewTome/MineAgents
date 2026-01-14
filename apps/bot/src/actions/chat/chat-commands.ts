@@ -1,6 +1,6 @@
 import type { Bot } from "mineflayer";
-import { ActionExecutor, type ActionResult, type ActionStep } from "./action-executor.js";
-import type { SafetyRails } from "../safety/safety-rails.js";
+import { ActionExecutor, type ActionResult, type ActionStep } from "../action-executor.js";
+import type { SafetyRails } from "../../safety/safety-rails.js";
 
 export interface ChatBridgeOptions
 {

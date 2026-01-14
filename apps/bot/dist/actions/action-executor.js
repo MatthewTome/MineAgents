@@ -72,6 +72,7 @@ export class ActionExecutor {
             return this.toResult(entry);
         }
         this.executing.add(guardedStep.id);
+        this.logEntry(guardedStep, "started", 1, undefined);
         let attempts = 0;
         let lastReason;
         while (attempts < this.options.maxAttempts) {
@@ -122,7 +123,13 @@ export class ActionExecutor {
         return entry;
     }
     toResult(entry) {
-        return { id: entry.id, action: entry.action, status: entry.status, attempts: entry.attempts, reason: entry.reason };
+        return {
+            id: entry.id,
+            action: entry.action,
+            status: entry.status,
+            attempts: entry.attempts,
+            reason: entry.reason
+        };
     }
     backoffMs(attempt) {
         const pow = Math.max(0, attempt - 1);

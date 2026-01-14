@@ -3,6 +3,7 @@ import { HuggingFacePlanner } from "./planner.js";
 import { SessionLogger } from "../logger/session-logger.js";
 const data = workerData;
 const logger = new SessionLogger(data.logDir);
+logger.installGlobalHandlers();
 const planner = new HuggingFacePlanner({ ...data.options, logger });
 async function initialize() {
     try {

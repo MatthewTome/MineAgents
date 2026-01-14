@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { GoalTracker, InMemoryGoalDashboard, type GoalDefinition } from "../src/tasks/goals.js";
-import type { PerceptionSnapshot } from "../src/settings/types.js";
+import { GoalTracker, InMemoryGoalDashboard, type GoalDefinition } from "../../src/tasks/goals.js";
+import type { PerceptionSnapshot } from "../../src/settings/types.js";
 
 const baseSnapshot: PerceptionSnapshot =
 {

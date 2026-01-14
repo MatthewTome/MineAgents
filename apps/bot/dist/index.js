@@ -3,7 +3,7 @@ import mineflayer from "mineflayer";
 import path from "node:path";
 import fs from "node:fs";
 import minecraftData from "minecraft-data";
-import { pathfinder, Movements } from "mineflayer-pathfinder";
+import pathfinderPkg from "mineflayer-pathfinder";
 import { plugin as movementPlugin } from "mineflayer-movement";
 import { plugin as collectBlock } from "mineflayer-collectblock";
 import { plugin as toolPlugin } from "mineflayer-tool";
@@ -12,14 +12,19 @@ import { PerceptionCollector } from "./perception/perception.js";
 import { runSetupWizard } from "./settings/setup.js";
 import { ActionExecutor } from "./actions/action-executor.js";
 import { createDefaultActionHandlers } from "./actions/action-handlers.js";
-import { wireChatBridge } from "./actions/chat-commands.js";
+import { wireChatBridge } from "./actions/chat/chat-commands.js";
 import { ReflectionLogger } from "./logger/reflection-log.js";
 import { PlannerWorkerClient } from "./planner/planner-worker-client.js";
 import { SessionLogger } from "./logger/session-logger.js";
-import { goalNeedsBuildSite, scoutBuildSite } from "./actions/scouting.js";
+import { goalNeedsBuildSite, scoutBuildSite } from "./actions/building/scouting.js";
 import { SafetyRails } from "./safety/safety-rails.js";
 import { RecipeLibrary } from "./planner/knowledge.js";
+import { GoalTracker } from "./research/goals.js";
+import { PlanNarrator } from "./actions/chat/narration.js";
+const { pathfinder, Movements } = pathfinderPkg;
 async function createBot() {
+    const sessionLogger = new SessionLogger();
+    sessionLogger.installGlobalHandlers();
     const defaultPath = path.join(process.cwd(), "config", "bot.config.yaml");
     const configPath = process.env.BOT_CONFIG ?? defaultPath;
     const hfToken = process.env.HF_TOKEN;
@@ -60,9 +65,10 @@ async function createBot() {
         console.warn(`[startup] WARNING: Recipe path not found at: ${RECIPES_PATH}`);
         console.warn(`[startup] RAG will be disabled. Ensure you are running from 'apps/bot'.`);
     }
-    const sessionLogger = new SessionLogger();
     sessionLogger.info("startup", "MineAgent starting", { configPath, model: hfModel, backend: hfBackend });
     const safety = new SafetyRails({ config: cfg.safety, logger: sessionLogger });
+    const goalTracker = new GoalTracker();
+    const narrator = new PlanNarrator({ maxLength: 200, minIntervalMs: 5000 });
     const bot = mineflayer.createBot({
         host: cfg.connection.host,
         port: cfg.connection.port,
@@ -79,6 +85,15 @@ async function createBot() {
         const mcData = minecraftData(bot.version);
         const movements = new Movements(bot);
         movements.allowSprinting = true;
+        movements.allow1by1towers = true;
+        movements.canDig = false;
+        const scafoldingItems = [
+            bot.registry.itemsByName['scaffolding']?.id,
+            bot.registry.itemsByName['dirt']?.id,
+            bot.registry.itemsByName['cobblestone']?.id,
+            bot.registry.itemsByName['oak_planks']?.id
+        ].filter((id) => id !== undefined);
+        movements.scafoldingBlocks.push(...scafoldingItems);
         bot.pathfinder.setMovements(movements);
         const reflection = new ReflectionLogger(sessionLogger.directory);
         let planner = null;
@@ -109,9 +124,16 @@ async function createBot() {
         const initialGoal = process.env.BOT_GOAL ?? null;
         if (initialGoal) {
             console.log(`[planner] Default goal configured: "${initialGoal}"`);
-            sessionLogger.info("goal.default", "Default goal configured", { goal: initialGoal });
+            const def = {
+                name: initialGoal,
+                steps: [],
+                successSignal: { type: "event", channel: "planner.success" },
+                failureSignals: [{ type: "event", channel: "planner.fatal_error" }],
+                timeoutMs: 600000
+            };
+            const id = goalTracker.addGoal(def);
+            sessionLogger.info("goal.default", "Default goal configured", { goal: initialGoal, id });
         }
-        let currentGoal = initialGoal;
         let isPlanning = false;
         const handlers = createDefaultActionHandlers();
         const executor = new ActionExecutor(bot, handlers, {
@@ -139,11 +161,32 @@ async function createBot() {
             if (message.startsWith("!goal ")) {
                 const newGoal = message.replace("!goal ", "").trim();
                 console.log(`[bot] Goal received via chat: "${newGoal}"`);
-                currentGoal = newGoal;
-                sessionLogger.info("goal.received", "Goal received via chat", { from: username, goal: newGoal });
+                const def = {
+                    name: newGoal,
+                    steps: [],
+                    successSignal: { type: "event", channel: "planner.success" },
+                    failureSignals: [{ type: "event", channel: "planner.fatal_error" }],
+                    timeoutMs: 600000
+                };
+                const id = goalTracker.addGoal(def);
+                sessionLogger.info("goal.received", "Goal received via chat", { from: username, goal: newGoal, id });
+                safeChat(bot, safety, `New research goal tracked: ${newGoal}`, "goal.ack");
             }
         });
         perception.start(async (snap) => {
+            const goalEvents = goalTracker.ingestSnapshot(snap);
+            for (const event of goalEvents) {
+                console.log(`[goal] ${event.name} -> ${event.status} (${event.reason})`);
+                sessionLogger.info("goal.update", "Goal status changed", { id: event.id, name: event.name, status: event.status, reason: event.reason, durationMs: event.durationMs });
+                if (event.status === "pass") {
+                    safeChat(bot, safety, `Goal complete: ${event.name} (${Math.round((event.durationMs ?? 0) / 1000)}s)`, "goal.success");
+                }
+                else if (event.status === "fail") {
+                    safeChat(bot, safety, `Goal failed: ${event.name} - ${event.reason}`, "goal.fail");
+                }
+            }
+            const activeGoalObj = goalTracker.goals.values().next().value;
+            const currentGoal = (activeGoalObj && activeGoalObj.status === "pending") ? activeGoalObj.definition.name : null;
             if (currentGoal && !isPlanning && planner) {
                 isPlanning = true;
                 console.log(`[planner] Generating plan with ${planner.modelName} for goal: "${currentGoal}"...`);
@@ -180,11 +223,15 @@ async function createBot() {
                     if (plan.steps.length === 0) {
                         console.warn("[planner] Plan contained no steps; clearing goal.");
                         safeChat(bot, safety, "I couldn't figure out how to do that.", "planner.empty");
-                        currentGoal = null;
-                        sessionLogger.warn("planner.empty", "Plan contained no steps", { goal: currentGoal });
+                        const events = goalTracker.notifyEvent("planner.fatal_error", {});
+                        events.forEach(e => sessionLogger.info("goal.update", "Goal failed due to empty plan", { ...e }));
                     }
                     else {
-                        safeChat(bot, safety, plan.intent, "planner.intent");
+                        const narrative = narrator.maybeNarrate({ intent: plan.intent, goal: currentGoal, steps: plan.steps });
+                        if (narrative) {
+                            safeChat(bot, safety, narrative, "planner.narration");
+                            sessionLogger.info("planner.narration", "Plan narrated", { message: narrative });
+                        }
                         executor.reset();
                         const results = await executor.executePlan(plan.steps);
                         const failed = results.find(r => r.status === "failed");
@@ -198,26 +245,33 @@ async function createBot() {
                                 goal: currentGoal,
                                 perception: snap,
                                 baseContext: context,
-                                failed
+                                failed,
+                                safety,
+                                narrator,
+                                sessionLogger
                             });
                             if (!recovered) {
                                 safeChat(bot, safety, `I got stuck on step ${failed.id}.`, "planner.failed");
                                 sessionLogger.warn("planner.execution.failed", "Plan execution failed", { failed });
+                                const events = goalTracker.notifyEvent("planner.fatal_error", { reason: failed.reason });
+                                events.forEach(e => sessionLogger.info("goal.update", "Goal failed execution", { ...e }));
                             }
                         }
                         else {
                             console.log(`[planner] Plan execution completed for goal: "${currentGoal}"`);
                             safeChat(bot, safety, "I'm done!", "planner.complete");
                             sessionLogger.info("planner.execution.complete", "Plan execution completed", { goal: currentGoal });
+                            const events = goalTracker.notifyEvent("planner.success", {});
+                            events.forEach(e => sessionLogger.info("goal.update", "Goal succeeded via execution", { ...e }));
                         }
-                        currentGoal = null;
                     }
                 }
                 catch (error) {
                     console.error(`[planner] Error generating plan:`, error);
                     safeChat(bot, safety, "My brain hurts. I couldn't make a plan.", "planner.error");
                     sessionLogger.error("planner.error", "Error generating plan", { error: error instanceof Error ? error.message : String(error) });
-                    currentGoal = null;
+                    const events = goalTracker.notifyEvent("planner.fatal_error", {});
+                    events.forEach(e => sessionLogger.info("goal.update", "Goal failed due to planner error", { ...e }));
                 }
                 finally {
                     isPlanning = false;
@@ -238,10 +292,21 @@ async function createBot() {
                     nearby: snap.nearby.entities.slice(0, 3).map(e => ({ kind: e.kind, name: e.name, d: e.distance })),
                     hazards: snap.hazards
                 };
-                console.clear();
-                console.log(JSON.stringify(minimal, null, 2));
                 sessionLogger.logPerceptionSnapshot(minimal);
             }
+        });
+        bot.on("kicked", (reason) => {
+            console.error("[bot] kicked:", reason);
+            sessionLogger.error("bot.kicked", "Bot kicked", { reason: String(reason) });
+            perception.stop();
+            unwireChat();
+            const summaryPath = reflection.writeSummaryFile();
+            console.log(`[reflection] summary written to ${summaryPath}`);
+            process.exit(0);
+        });
+        bot.on("error", (err) => {
+            console.error("[bot] error:", err);
+            sessionLogger.error("bot.error", "Bot encountered an error", { error: err instanceof Error ? err.message : String(err) });
         });
         bot.on("end", () => {
             perception.stop();
@@ -250,14 +315,6 @@ async function createBot() {
             console.log(`[reflection] summary written to ${summaryPath}`);
             sessionLogger.info("session.end", "Bot ended", { summaryPath });
         });
-    });
-    bot.on("kicked", (reason) => {
-        console.error("[bot] kicked:", reason);
-        sessionLogger.error("bot.kicked", "Bot kicked", { reason: String(reason) });
-    });
-    bot.on("error", (err) => {
-        console.error("[bot] error:", err);
-        sessionLogger.error("bot.error", "Bot encountered an error", { error: err instanceof Error ? err.message : String(err) });
     });
     return bot;
 }
@@ -291,6 +348,11 @@ async function attemptRecovery(options) {
         });
         if (plan.steps.length === 0) {
             continue;
+        }
+        const narrative = options.narrator.narrateRecovery({ intent: plan.intent, goal: options.goal, steps: plan.steps }, options.failed.id);
+        if (narrative) {
+            safeChat(options.bot, options.safety, narrative, "planner.narration.recovery");
+            options.sessionLogger.info("planner.narration", "Recovery plan narrated", { message: narrative });
         }
         options.executor.reset();
         const results = await options.executor.executePlan(plan.steps);

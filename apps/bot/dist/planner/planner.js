@@ -6,7 +6,7 @@ const SUPPORTED_ACTIONS = {
     move: "Move. params: { position:{x,y,z} } or { entityName?: string, range?: number }",
     mine: "Break block. params: { block?:string, position:{x,y,z} }",
     gather: "Collect items. params: { item?:string }",
-    build: "Place structure. params: { structure: 'platform'|'wall'|'walls'|'tower'|'roof'|'chimney', origin?:{x,y,z}, material?:string, width?:number, height?:number, length?:number }",
+    build: "Place structure. params: { structure: 'platform'|'wall'|'walls'|'tower'|'roof'|'door', origin?:{x,y,z}, material?:string, width?:number, height?:number, length?:number, door?:boolean }",
     loot: "Open a nearby chest and inspect contents. params: { position?:{x,y,z}, maxDistance?: number }",
     eat: "Eat a food item from inventory. params: { item?: string }",
     smith: "Use an anvil to combine or rename items. params: { item1: string, item2?: string, name?: string }",
@@ -54,7 +54,7 @@ export class HuggingFacePlanner {
         let knowledgeSnippets = [];
         if (this.library) {
             const recipes = this.library.search(request.goal);
-            knowledgeSnippets = recipes.map(r => this.library.formatRecipeFact(r));
+            knowledgeSnippets = recipes.map(r => this.library.formatRecipeFact(r, 12));
         }
         const prompt = this.buildPrompt(request, knowledgeSnippets);
         this.logger?.logPlannerPrompt(prompt, request);

@@ -10,6 +10,8 @@ interface WorkerInit
 
 const data = workerData as WorkerInit;
 const logger = new SessionLogger(data.logDir);
+logger.installGlobalHandlers();
+
 const planner = new HuggingFacePlanner({ ...data.options, logger });
 
 async function initialize()

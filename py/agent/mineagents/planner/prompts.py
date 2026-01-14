@@ -28,6 +28,7 @@ def planner_system_prompt() -> str:
         - Every step must include action, args, and reason.
         - Keep reasons concise (≤100 chars) and grounded in the snapshot.
         - Align goals and post_conditions; if the goal is met early, include a stop_condition.
+        - Verify inventory quantities against estimated build requirements (width*length*height). Gather and craft materials first if inventory is insufficient.
         """
     ).strip()
 

@@ -86,7 +86,7 @@ export class RecipeLibrary
         return results;
     }
 
-    public formatRecipeFact(recipe: Recipe, maxSteps: number = 5): string
+    public formatRecipeFact(recipe: Recipe, maxSteps: number = 10): string
     {
         const stepChunks: string[] = [];
         

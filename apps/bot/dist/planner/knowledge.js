@@ -50,7 +50,7 @@ export class RecipeLibrary {
             .map(item => item.recipe);
         return results;
     }
-    formatRecipeFact(recipe, maxSteps = 5) {
+    formatRecipeFact(recipe, maxSteps = 10) {
         const stepChunks = [];
         for (const step of recipe.steps.slice(0, maxSteps)) {
             let detail = step.details;
