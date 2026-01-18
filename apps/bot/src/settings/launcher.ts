@@ -58,11 +58,11 @@ async function main() {
         let name = `MineAgent${index}`;
         let role = roles[i % roles.length];
 
-        if (nameStrategy === "1") {
+        if (nameStrategy === "2") {
             name = await ask(`Name for Agent ${index}`, name);
         }
 
-        if (roleStrategy === "1") {
+        if (roleStrategy === "2") {
             role = await ask(`Role for ${name} (miner/builder/guide/guard/generalist)`, role);
         }
 

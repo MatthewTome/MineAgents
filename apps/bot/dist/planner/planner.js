@@ -5,9 +5,9 @@ const SUPPORTED_ACTIONS = {
     craft: "Craft an item. params: { recipe: string, count?: number, craftingTable?: {x,y,z} }",
     move: "Move. params: { position:{x,y,z} } or { entityName?: string, range?: number }",
     mine: "Break block. params: { block?:string, position:{x,y,z} }",
-    gather: "Collect items. params: { item?:string }",
+    gather: "Collect items by mining, looting chests, or picking drops. params: { item?:string }",
     build: "Place structure. params: { structure: 'platform'|'wall'|'walls'|'tower'|'roof'|'door', origin?:{x,y,z}, material?:string, width?:number, height?:number, length?:number, door?:boolean }",
-    loot: "Open a nearby chest and inspect contents. params: { position?:{x,y,z}, maxDistance?: number }",
+    loot: "Open a nearby chest and inspect/withdraw contents. params: { position?:{x,y,z}, maxDistance?: number, item?: string, count?: number }",
     eat: "Eat a food item from inventory. params: { item?: string }",
     smith: "Use an anvil to combine or rename items. params: { item1: string, item2?: string, name?: string }",
     hunt: "Hunt mob.",
@@ -184,6 +184,7 @@ export class HuggingFacePlanner {
             "2. If context includes a scouted build site, use its origin for build steps and move there before building.",
             "3. Be complete (include roof, door).",
             "4. Coordinates must be grounded in the provided Perception snapshot. Only use positions from Perception.pose, Perception.nearby/entities, Perception.blocks, or scouted build site. Do not invent random coordinates.",
+            "5. If multiple agents are present (per Context or Perception), return JSON with team_plan and individual_plan fields. team_plan should list shared steps with role assignments, and individual_plan should include intent and steps for this agent plus any chat announcements. If only one agent is present, return intent and steps as usual.",
             "Intent should be fewer than 140 characters.",
             `Goal: ${request.goal}`,
             context ? `Context: ${context}` : "",
@@ -222,10 +223,13 @@ export class HuggingFacePlanner {
                 throw new Error(`Planner response was not valid JSON: ${finalErr}`);
             }
         }
-        if (typeof parsed.intent !== "string" || !Array.isArray(parsed.steps)) {
+        const teamPlan = parsed.team_plan ?? parsed.teamPlan;
+        const individualPlan = parsed.individual_plan ?? parsed.individualPlan;
+        const planSource = individualPlan ?? parsed;
+        if (typeof planSource.intent !== "string" || !Array.isArray(planSource.steps)) {
             throw new Error("Planner response missing intent or steps");
         }
-        const steps = parsed.steps.map((s, idx) => {
+        const steps = planSource.steps.map((s, idx) => {
             if (typeof s !== "object" || !s) {
                 throw new Error(`Invalid step at index ${idx}`);
             }
@@ -241,10 +245,11 @@ export class HuggingFacePlanner {
             };
         });
         return {
-            intent: parsed.intent.trim(),
+            intent: planSource.intent.trim(),
             steps,
             model: this.options.model,
-            raw: text
+            raw: text,
+            teamPlan
         };
     }
     extractJsonBlock(text) {

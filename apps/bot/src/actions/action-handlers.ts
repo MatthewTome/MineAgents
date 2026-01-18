@@ -12,7 +12,7 @@ interface MineParams { block?: string; position?: Vec3Input; maxDistance?: numbe
 interface GatherParams { item?: string; maxDistance?: number; timeoutMs?: number; }
 interface CraftParams { recipe: string; count?: number; craftingTable?: Vec3Input; material?: string; }
 interface SmeltParams { item: string; fuel?: string; furnace?: Vec3Input; count?: number; }
-interface LootParams { position?: Vec3Input; maxDistance?: number; }
+interface LootParams { position?: Vec3Input; maxDistance?: number; item?: string; count?: number; }
 interface EatParams { item?: string; }
 interface SmithParams { item1: string; item2?: string; name?: string; }
 interface HuntParams { target?: string; range?: number; timeoutMs?: number; }
@@ -119,6 +119,8 @@ async function handleLoot(bot: Bot, step: { params?: Record<string, unknown> }):
 {
     const params = (step.params ?? {}) as unknown as LootParams;
     const maxDistance = params.maxDistance ?? 16;
+    const targetItem = params.item?.toLowerCase();
+    const targetCount = params.count ?? 0;
     const chestId = bot.registry?.blocksByName?.chest?.id;
     if (typeof chestId !== "number")
     {
@@ -139,6 +141,35 @@ async function handleLoot(bot: Bot, step: { params?: Record<string, unknown> }):
     const chest = await bot.openContainer(chestBlock);
     const items = chest.containerItems().map((item) => ({ name: item.name, count: item.count ?? 0 }));
     recordChestContents(chestBlock.position, items);
+
+    if (targetItem)
+    {
+        let remaining = targetCount;
+        const matching = chest.containerItems().filter((item) =>
+            item.name.toLowerCase().includes(targetItem)
+        );
+
+        for (const item of matching)
+        {
+            const available = item.count ?? 0;
+            const toWithdraw = remaining > 0 ? Math.min(available, remaining) : available;
+            if (toWithdraw <= 0) { continue; }
+
+            try
+            {
+                await chest.withdraw(item.type, null, toWithdraw);
+                if (remaining > 0)
+                {
+                    remaining -= toWithdraw;
+                    if (remaining <= 0) { break; }
+                }
+            }
+            catch (err)
+            {
+                console.warn(`[loot] Failed to withdraw ${item.name}: ${err}`);
+            }
+        }
+    }
     chest.close();
 }
 
@@ -305,6 +336,7 @@ async function handleGather(bot: Bot, step: { params?: Record<string, unknown> }
     const rawTarget = params.item?.toLowerCase();
     const targetItem = resolveItemName(rawTarget ?? "");
     const timeout = params.timeoutMs ?? 60000;
+    const maxDistance = params.maxDistance ?? 16;
     
     if (!targetItem) throw new Error("Gather requires item name");
 
@@ -317,13 +349,25 @@ async function handleGather(bot: Bot, step: { params?: Record<string, unknown> }
     const chests = listChestMemory().filter(c => c.status === "known" && c.items && c.items.some(i => i.name.includes(targetItem)));
     if (chests.length > 0) {
         console.log(`[gather] Found ${targetItem} in known chest at ${chests[0].position.x},${chests[0].position.y},${chests[0].position.z}`);
-        await handleLoot(bot, { params: { position: chests[0].position } });
+        await handleLoot(bot, { params: { position: chests[0].position, item: targetItem } });
         const nowHas = bot.inventory.items().find(i => i.name.toLowerCase().includes(targetItem));
         if (nowHas) {
             console.log(`[gather] Retrieved ${targetItem} from chest.`);
             return;
         }
     }
+
+    try
+    {
+        await handleLoot(bot, { params: { maxDistance, item: targetItem } });
+        const looted = bot.inventory.items().find(i => i.name.toLowerCase().includes(targetItem));
+        if (looted)
+        {
+            console.log(`[gather] Looted ${targetItem} from a nearby chest.`);
+            return;
+        }
+    }
+    catch { }
 
     console.log(`[gather] Starting cycle for: ${targetItem}`);
     

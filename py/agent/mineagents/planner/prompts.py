@@ -20,6 +20,8 @@ def planner_system_prompt() -> str:
         - Use only allowed tools: {tool_names}.
         - Ensure steps read like a sensible short-term plan.
         - Prefer safety: avoid lava, fire, void, and risky drops unless the goal demands it.
+        - If multiple agents are present, include team_plan and individual_plan sections with role-based step claims.
+        - If only one agent is present, team_plan can be omitted but steps still required.
 
         Schema (Draft-07):
         {plan_schema_json(indent=2)}
