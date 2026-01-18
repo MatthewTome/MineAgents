@@ -45,7 +45,7 @@ export class SessionLogger
             const now = new Date();
             const dateStr = now.toISOString().split("T")[0];
             const timeStr = now.toISOString().replace(/[:.]/g, "-");
-
+            const botName = process.env.BOT_NAME ?? "MineAgent";
             const base = path.join(process.cwd(), "logs", "sessions", dateStr);
             
             if (!fs.existsSync(base))
@@ -53,7 +53,7 @@ export class SessionLogger
                 fs.mkdirSync(base, { recursive: true });
             }
 
-            this.sessionDir = path.join(base, `session-${timeStr}`);
+            this.sessionDir = path.join(base, `${botName}_${timeStr}`);
             fs.mkdirSync(this.sessionDir, { recursive: true });
         }
     }

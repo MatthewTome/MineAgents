@@ -71,6 +71,20 @@ const configSchema = z.object({
                 mine: { max: 50, windowMs: 5000 }
             })
         }).default({})
+    }).default({}),
+    agent: z.object({
+        role: z.enum(["miner", "builder", "guide", "guard", "generalist"]).default("generalist"),
+        mentor: z.object({
+            mode: z.enum(["none", "teacher", "learner"]).default("none"),
+            target: z.string().optional(),
+            adviceCooldownMs: z.number().int().nonnegative().default(15000),
+            requestCooldownMs: z.number().int().nonnegative().default(30000)
+        }).default({})
+    }).default({}),
+    features: z.object({
+        ragEnabled: z.boolean().default(true),
+        narrationEnabled: z.boolean().default(true),
+        safetyEnabled: z.boolean().default(true)
     }).default({})
 });
 export function loadBotConfig(configPath) {

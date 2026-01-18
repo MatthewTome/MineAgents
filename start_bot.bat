@@ -1,12 +1,14 @@
 @echo off
-title MineAgents Bot
-echo Starting MineAgents...
+title MineAgents Launcher
+echo Starting Setup Wizard...
+
+cd apps\bot
 
 if not exist "node_modules" (
-    echo First run detected. Installing libraries...
+    echo Installing dependencies...
     call pnpm install
 )
 
-cd apps\bot
-call pnpm start
+call npx tsx src/settings/launcher.ts
+
 pause

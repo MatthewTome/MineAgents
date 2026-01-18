@@ -21,8 +21,10 @@ import { SessionLogger } from "./logger/session-logger.js";
 import { goalNeedsBuildSite, scoutBuildSite } from "./actions/building/scouting.js";
 import { SafetyRails } from "./safety/safety-rails.js";
 import { RecipeLibrary } from "./planner/knowledge.js";
-import { GoalTracker, GoalDefinition } from "./research/goals.js";
+import { GoalTracker, GoalDefinition, type ResearchCondition } from "./research/goals.js";
 import { PlanNarrator } from "./actions/chat/narration.js";
+import { MentorProtocol } from "./roles/mentor-protocol.js";
+import { RoleManager, resolveRole, listRoleNames, type AgentRole, type MentorMode } from "./roles/roles.js";
 
 const { pathfinder, Movements } = pathfinderPkg;
 
@@ -38,6 +40,17 @@ async function createBot()
     const hfModel = process.env.HF_MODEL ?? "Xenova/Qwen2.5-1.5B-Instruct";
     const hfCache = process.env.HF_CACHE_DIR;
     const hfBackend = (process.env.LLM_MODE as "local" | "remote" | "auto") ?? "auto";
+    const envRole = resolveRole(process.env.BOT_ROLE);
+    const envMentorMode = resolveMentorMode(process.env.BOT_MENTOR_MODE);
+    const envMentorTarget = process.env.BOT_MENTOR_TARGET;
+    const envAgentId = toOptionalInt(process.env.BOT_AGENT_ID);
+    const envAgentCount = toOptionalInt(process.env.BOT_AGENT_COUNT);
+    const envTrialId = process.env.BOT_TRIAL_ID;
+    const envSeed = process.env.BOT_SEED;
+
+    const envEnableRag = parseEnvBoolean(process.env.BOT_ENABLE_RAG);
+    const envEnableNarration = parseEnvBoolean(process.env.BOT_ENABLE_NARRATION);
+    const envEnableSafety = parseEnvBoolean(process.env.BOT_ENABLE_SAFETY);
 
     if (!fs.existsSync(configPath) && !process.env.BOT_CONFIG)
     {
@@ -68,34 +81,64 @@ async function createBot()
         process.exit(1);
     }
 
+    const features =
+    {
+        ragEnabled: envEnableRag ?? cfg.features.ragEnabled,
+        narrationEnabled: envEnableNarration ?? cfg.features.narrationEnabled,
+        safetyEnabled: envEnableSafety ?? cfg.features.safetyEnabled
+    };
+
+    const role: AgentRole = envRole ?? cfg.agent.role ?? "generalist";
+    const mentorMode: MentorMode = envMentorMode ?? cfg.agent.mentor.mode ?? "none";
+    const mentorTarget = envMentorTarget ?? cfg.agent.mentor.target;
+
+    sessionLogger.info("startup", "MineAgent starting", {
+        configPath,
+        model: hfModel,
+        backend: hfBackend,
+        role,
+        mentorMode,
+        features
+    });
+
+    let safety = features.safetyEnabled ? new SafetyRails({ config: cfg.safety, logger: sessionLogger }) : undefined;
+    const roleManager = new RoleManager(role);
+    const mentorProtocol = new MentorProtocol({
+        mode: mentorMode,
+        targetName: mentorTarget,
+        adviceCooldownMs: cfg.agent.mentor.adviceCooldownMs,
+        requestCooldownMs: cfg.agent.mentor.requestCooldownMs
+    });
+
     const defaultRecipePath = path.resolve(process.cwd(), "..", "..", "py", "agent", "recipes");
     const RECIPES_PATH = process.env.RECIPES_DIR ?? defaultRecipePath;
+    const plannerRecipesDir = fs.existsSync(RECIPES_PATH) ? RECIPES_PATH : undefined;
     
     let recipeLibrary: RecipeLibrary | null = null;
-    if (fs.existsSync(RECIPES_PATH))
+    if (features.ragEnabled)
     {
-        console.log(`[startup] RAG Recipes enabled. Loading from: ${RECIPES_PATH}`);
-        recipeLibrary = new RecipeLibrary(RECIPES_PATH);
-        recipeLibrary.loadAll();
+        if (plannerRecipesDir)
+        {
+            console.log(`[startup] RAG Recipes enabled. Loading from: ${RECIPES_PATH}`);
+            recipeLibrary = new RecipeLibrary(RECIPES_PATH);
+            recipeLibrary.loadAll();
+        }
+        else
+        {
+            console.warn(`[startup] WARNING: Recipe path not found at: ${RECIPES_PATH}`);
+            console.warn(`[startup] RAG will be disabled. Ensure you are running from 'apps/bot'.`);
+        }
     }
-    else
-    {
-        console.warn(`[startup] WARNING: Recipe path not found at: ${RECIPES_PATH}`);
-        console.warn(`[startup] RAG will be disabled. Ensure you are running from 'apps/bot'.`);
-    }
-
-    sessionLogger.info("startup", "MineAgent starting", { configPath, model: hfModel, backend: hfBackend });
-    const safety = new SafetyRails({ config: cfg.safety, logger: sessionLogger });
 
     const goalTracker = new GoalTracker();
     const narrator = new PlanNarrator({ maxLength: 200, minIntervalMs: 5000 });
 
     const bot = mineflayer.createBot(
     {
-        host: cfg.connection.host,
-        port: cfg.connection.port,
-        username: cfg.connection.username,
-        version: cfg.connection.version,
+        host: process.env.BOT_HOST ?? cfg.connection.host,
+        port: toOptionalInt(process.env.BOT_PORT) ?? cfg.connection.port,
+        username: process.env.BOT_NAME ?? cfg.connection.username,
+        version: process.env.BOT_VERSION ?? cfg.connection.version,
     });
 
     bot.loadPlugin(pathfinder);
@@ -136,7 +179,7 @@ async function createBot()
                     token: hfToken,
                     cacheDir: hfCache,
                     backend: hfBackend,
-                    recipesDir: RECIPES_PATH
+                    recipesDir: plannerRecipesDir
                 },
                 logDir: sessionLogger.directory
             });
@@ -164,13 +207,28 @@ async function createBot()
                 steps: [],
                 successSignal: { type: "event", channel: "planner.success" },
                 failureSignals: [{ type: "event", channel: "planner.fatal_error" }],
-                timeoutMs: 600000 
+                timeoutMs: 600000,
+                metadata: buildGoalMetadata({
+                    role: roleManager.getRole(),
+                    mentorMode: mentorProtocol.getConfig().mode,
+                    features,
+                    agentId: envAgentId,
+                    agentCount: envAgentCount,
+                    seed: envSeed,
+                    trialId: envTrialId
+                })
             };
             const id = goalTracker.addGoal(def);
             sessionLogger.info("goal.default", "Default goal configured", { goal: initialGoal, id });
+            const adviceRequest = mentorProtocol.maybeRequestAdvice(initialGoal);
+            if (adviceRequest)
+            {
+                safeChat(bot, safety, adviceRequest, "mentor.request");
+            }
         }
 
         let isPlanning = false;
+        let currentGoal: string | null = null;
 
         const handlers = createDefaultActionHandlers();
         const executor = new ActionExecutor(bot, handlers,
@@ -199,11 +257,19 @@ async function createBot()
 
         const unwireChat = wireChatBridge(bot, executor, { safety });
 
-        bot.on("chat", (username, message) => {
-            if (username === bot.username) return;
+        bot.on("chat", (username, message) =>
+        {
+            if (username === bot.username) { return; }
+
+            const myTag = `@${bot.username}`;
+            const isAddressedToMe = message.includes(myTag);
+            if (message.includes("@") && !isAddressedToMe) { return; }
             
-            if (message.startsWith("!goal ")) {
-                const newGoal = message.replace("!goal ", "").trim();
+            const cleanMessage = message.replace(myTag, "").trim();
+
+            if (cleanMessage.startsWith("!goal "))
+            {
+                const newGoal = cleanMessage.replace("!goal ", "").trim();
                 console.log(`[bot] Goal received via chat: "${newGoal}"`);
                 
                 const def: GoalDefinition = {
@@ -211,12 +277,125 @@ async function createBot()
                     steps: [],
                     successSignal: { type: "event", channel: "planner.success" },
                     failureSignals: [{ type: "event", channel: "planner.fatal_error" }],
-                    timeoutMs: 600000
+                    timeoutMs: 600000,
+                    metadata: buildGoalMetadata({
+                        role: roleManager.getRole(),
+                        mentorMode: mentorProtocol.getConfig().mode,
+                        features,
+                        agentId: envAgentId,
+                        agentCount: envAgentCount,
+                        seed: envSeed,
+                        trialId: envTrialId
+                    })
                 };
                 
-                const id = goalTracker.addGoal(def);
-                sessionLogger.info("goal.received", "Goal received via chat", { from: username, goal: newGoal, id });
-                safeChat(bot, safety, `New research goal tracked: ${newGoal}`, "goal.ack");
+                const goalId = goalTracker.addGoal(def);
+                sessionLogger.info("goal.added", "Goal added via chat", { goal: newGoal, id: goalId });
+                safeChat(bot, safety, `Goal accepted: ${newGoal}`, "goal.accept");
+
+                const adviceRequest = mentorProtocol.maybeRequestAdvice(newGoal);
+                if (adviceRequest)
+                {
+                    safeChat(bot, safety, adviceRequest, "mentor.request");
+                }
+                return;
+            }
+
+            if (cleanMessage.startsWith("!role "))
+            {
+                const rawRole = cleanMessage.replace("!role ", "").trim();
+                const nextRole = resolveRole(rawRole);
+                if (!nextRole)
+                {
+                    safeChat(bot, safety, `Unknown role. Available: ${listRoleNames().join(", ")}`, "role.error");
+                    return;
+                }
+
+                roleManager.setRole(nextRole);
+                sessionLogger.info("role.update", "Role updated via chat", { from: username, role: nextRole });
+                safeChat(bot, safety, `Role updated to ${nextRole}.`, "role.update");
+                return;
+            }
+
+            if (cleanMessage.startsWith("!mentor "))
+            {
+                const args = cleanMessage.replace("!mentor ", "").trim().split(/\s+/);
+                const mode = resolveMentorMode(args[0]);
+                if (!mode)
+                {
+                    safeChat(bot, safety, "Usage: !mentor <none|teacher|learner> [targetName]", "mentor.usage");
+                    return;
+                }
+
+                const targetName = args[1];
+                mentorProtocol.updateConfig({ mode, targetName });
+                sessionLogger.info("mentor.update", "Mentor mode updated via chat", { from: username, mode, targetName });
+                safeChat(bot, safety, `Mentor mode updated to ${mode}${targetName ? ` (target ${targetName})` : ""}.`, "mentor.update");
+                return;
+            }
+
+            if (cleanMessage.startsWith("!feature "))
+            {
+                const args = cleanMessage.replace("!feature ", "").trim().split(/\s+/);
+                const featureName = args[0]?.toLowerCase();
+                const enabled = parseEnvBoolean(args[1]);
+                if (!featureName || enabled === null)
+                {
+                    safeChat(bot, safety, "Usage: !feature <rag|narration|safety> <on|off>", "feature.usage");
+                    return;
+                }
+
+                switch (featureName)
+                {
+                    case "rag":
+                        features.ragEnabled = enabled;
+                        if (!enabled)
+                        {
+                            recipeLibrary = null;
+                        }
+                        else if (!recipeLibrary)
+                        {
+                            if (plannerRecipesDir)
+                            {
+                                recipeLibrary = new RecipeLibrary(RECIPES_PATH);
+                                recipeLibrary.loadAll();
+                            }
+                            else
+                            {
+                                console.warn(`[startup] WARNING: Recipe path not found at: ${RECIPES_PATH}`);
+                            }
+                        }
+                        sessionLogger.info("feature.update", "RAG toggled via chat", { enabled });
+                        safeChat(bot, safety, `RAG ${enabled ? "enabled" : "disabled"}.`, "feature.update");
+                        break;
+                    case "narration":
+                        features.narrationEnabled = enabled;
+                        sessionLogger.info("feature.update", "Narration toggled via chat", { enabled });
+                        safeChat(bot, safety, `Narration ${enabled ? "enabled" : "disabled"}.`, "feature.update");
+                        break;
+                    case "safety":
+                        features.safetyEnabled = enabled;
+                        safety = enabled ? new SafetyRails({ config: cfg.safety, logger: sessionLogger }) : undefined;
+                        executor.setSafety(safety);
+                        sessionLogger.info("feature.update", "Safety toggled via chat", { enabled });
+                        safeChat(bot, safety, `Safety rails ${enabled ? "enabled" : "disabled"}.`, "feature.update");
+                        break;
+                    default:
+                        safeChat(bot, safety, "Usage: !feature <rag|narration|safety> <on|off>", "feature.usage");
+                        break;
+                }
+                return;
+            }
+
+            const mentorReply = mentorProtocol.handleChat(cleanMessage,
+            {
+                role: roleManager.getDefinition(),
+                goal: currentGoal,
+                sender: username
+            });
+            if (mentorReply)
+            {
+                safeChat(bot, safety, mentorReply, "mentor.reply");
             }
         });
 
@@ -235,7 +414,7 @@ async function createBot()
             }
 
             const activeGoalObj = (goalTracker as any).goals.values().next().value;
-            const currentGoal = (activeGoalObj && activeGoalObj.status === "pending") ? activeGoalObj.definition.name : null;
+            currentGoal = (activeGoalObj && activeGoalObj.status === "pending") ? activeGoalObj.definition.name : null;
 
             if (currentGoal && !isPlanning && planner)
             {
@@ -245,6 +424,12 @@ async function createBot()
 
                 try {
                     let context = "You are currently in the game. React immediately.";
+                    const roleContext = roleManager.buildPlannerContext();
+                    if (roleContext) { context += ` ${roleContext}`; }
+
+                    const mentorContext = roleManager.buildMentorContext(mentorProtocol.getConfig().mode);
+                    if (mentorContext) { context += ` ${mentorContext}`; }
+
                     if (goalNeedsBuildSite(currentGoal)) {
                         const site = scoutBuildSite(bot, currentGoal);
                         if (site) {
@@ -259,7 +444,8 @@ async function createBot()
                     const plan = await planner.createPlan({
                         goal: currentGoal,
                         perception: snap,
-                        context
+                        context,
+                        ragEnabled: features.ragEnabled
                     });
 
                     if (plan.knowledgeUsed && plan.knowledgeUsed.length > 0)
@@ -287,10 +473,13 @@ async function createBot()
                     }
                     else
                     {
-                        const narrative = narrator.maybeNarrate({ intent: plan.intent, goal: currentGoal, steps: plan.steps });
-                        if (narrative) {
-                            safeChat(bot, safety, narrative, "planner.narration");
-                            sessionLogger.info("planner.narration", "Plan narrated", { message: narrative });
+                        if (features.narrationEnabled)
+                        {
+                            const narrative = narrator.maybeNarrate({ intent: plan.intent, goal: currentGoal, steps: plan.steps });
+                            if (narrative) {
+                                safeChat(bot, safety, narrative, "planner.narration");
+                                sessionLogger.info("planner.narration", "Plan narrated", { message: narrative });
+                            }
                         }
 
                         executor.reset();
@@ -306,6 +495,8 @@ async function createBot()
                                 planner,
                                 executor,
                                 recipeLibrary,
+                                ragEnabled: features.ragEnabled,
+                                narrationEnabled: features.narrationEnabled,
                                 goal: currentGoal,
                                 perception: snap,
                                 baseContext: context,
@@ -399,13 +590,83 @@ async function createBot()
 
 createBot().catch(console.error);
 
-function safeChat(bot: Bot, safety: SafetyRails, message: string, source: string): void
+type FeatureFlags =
 {
-    const result = safety.checkOutgoingChat(message, source);
-    if (!result.allowed)
+    ragEnabled: boolean;
+    narrationEnabled: boolean;
+    safetyEnabled: boolean;
+};
+
+function parseEnvBoolean(value?: string): boolean | null
+{
+    if (value === undefined)  { return null; }
+
+    const normalized = value.trim().toLowerCase();
+    if (["1", "true", "yes", "on", "enable", "enabled"].includes(normalized))  { return true; }
+
+    if (["0", "false", "no", "off", "disable", "disabled"].includes(normalized)) { return false; }
+
+    return null;
+}
+
+function toOptionalInt(value?: string): number | null
+{
+    if (!value) { return null; }
+
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+function resolveMentorMode(value?: string | null): MentorMode | null
+{
+    if (!value) { return null; }
+
+    const normalized = value.trim().toLowerCase();
+    if (["none", "off", "disabled"].includes(normalized)) { return "none"; }
+    if (["teacher", "mentor"].includes(normalized)) { return "teacher"; }
+    if (["learner", "student"].includes(normalized)) { return "learner"; }
+
+    return null;
+}
+
+function buildGoalMetadata(options:
+{
+    role: AgentRole;
+    mentorMode: MentorMode;
+    features: FeatureFlags;
+    agentId: number | null;
+    agentCount: number | null;
+    seed: string | undefined;
+    trialId: string | undefined;
+}): GoalDefinition["metadata"]
+{
+    const condition: ResearchCondition =
     {
+        role: options.role,
+        mentorMode: options.mentorMode,
+        ragEnabled: options.features.ragEnabled,
+        narrationEnabled: options.features.narrationEnabled,
+        safetyEnabled: options.features.safetyEnabled
+    };
+
+    if (options.agentId !== null) { condition.agentId = options.agentId; }
+    if (options.agentCount !== null) { condition.agentCount = options.agentCount; }
+    if (options.seed) { condition.seed = options.seed; }
+    if (options.trialId)  { condition.trialId = options.trialId; }
+
+    return { condition };
+}
+
+function safeChat(bot: Bot, safety: SafetyRails | undefined, message: string, source: string): void
+{
+    if (!safety)
+    {
+        bot.chat(message);
         return;
     }
+
+    const result = safety.checkOutgoingChat(message, source);
+    if (!result.allowed) { return; }
 
     bot.chat(result.message);
 }
@@ -416,26 +677,22 @@ async function attemptRecovery(options:
     planner: PlannerWorkerClient;
     executor: ActionExecutor;
     recipeLibrary: RecipeLibrary | null;
+    ragEnabled: boolean;
+    narrationEnabled: boolean;
     goal: string;
     perception: PerceptionSnapshot;
     baseContext: string;
     failed: { id: string; reason?: string };
-    safety: SafetyRails;
+    safety: SafetyRails | undefined;
     narrator: PlanNarrator;
     sessionLogger: SessionLogger;
 }): Promise<boolean>
 {
-    if (!options.recipeLibrary)
-    {
-        return false;
-    }
+    if (!options.recipeLibrary) { return false; }
 
     const query = `${options.goal} ${options.failed.reason ?? ""}`.trim();
     const recipes = options.recipeLibrary.search(query).slice(0, 3);
-    if (recipes.length === 0)
-    {
-        return false;
-    }
+    if (recipes.length === 0) { return false; }
 
     for (const recipe of recipes)
     {
@@ -448,28 +705,25 @@ async function attemptRecovery(options:
         const plan = await options.planner.createPlan({
             goal: options.goal,
             perception: options.perception,
-            context
+            context,
+            ragEnabled: options.ragEnabled
         });
 
-        if (plan.steps.length === 0)
-        {
-            continue;
-        }
+        if (plan.steps.length === 0) { continue; }
 
-        const narrative = options.narrator.narrateRecovery({ intent: plan.intent, goal: options.goal, steps: plan.steps }, options.failed.id);
-        if (narrative) {
-            safeChat(options.bot, options.safety, narrative, "planner.narration.recovery");
-            options.sessionLogger.info("planner.narration", "Recovery plan narrated", { message: narrative });
+        if (options.narrationEnabled)
+        {
+            const narrative = options.narrator.narrateRecovery({ intent: plan.intent, goal: options.goal, steps: plan.steps }, options.failed.id);
+            if (narrative) {
+                safeChat(options.bot, options.safety, narrative, "planner.narration.recovery");
+                options.sessionLogger.info("planner.narration", "Recovery plan narrated", { message: narrative });
+            }
         }
 
         options.executor.reset();
         const results = await options.executor.executePlan(plan.steps);
         const failed = results.find(r => r.status === "failed");
-        if (!failed)
-        {
-            return true;
-        }
+        if (!failed) { return true; }
     }
-
     return false;
 }

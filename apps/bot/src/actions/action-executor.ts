@@ -96,6 +96,11 @@ export class ActionExecutor
         this.log = [];
     }
 
+    setSafety(safety?: SafetyRails): void
+    {
+        this.safety = safety;
+    }
+
     async executePlan(steps: ActionStep[]): Promise<ActionResult[]>
     {
         const results: ActionResult[] = [];

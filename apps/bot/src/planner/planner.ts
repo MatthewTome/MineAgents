@@ -8,6 +8,7 @@ export interface PlanRequest
     goal: string;
     perception?: PerceptionSnapshot;
     context?: string;
+    ragEnabled?: boolean;
 }
 
 export interface PlanResult
@@ -102,7 +103,7 @@ export class HuggingFacePlanner
     {
         const { generate, backend } = await this.generatorPromise;
         let knowledgeSnippets: string[] = [];
-        if (this.library)
+        if (this.library && request.ragEnabled !== false)
         {
             const recipes = this.library.search(request.goal);
             knowledgeSnippets = recipes.map(r => this.library!.formatRecipeFact(r, 12));

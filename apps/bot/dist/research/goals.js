@@ -93,7 +93,8 @@ export class GoalTracker {
             status,
             ts,
             reason,
-            durationMs
+            durationMs,
+            metadata: goal.definition.metadata
         };
         this.dashboard.record(event);
         return event;

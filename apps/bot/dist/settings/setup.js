@@ -72,6 +72,19 @@ export async function runSetupWizard(destinationPath) {
                     mine: { max: 50, windowMs: 5000 }
                 }
             }
+        },
+        agent: {
+            role: "generalist",
+            mentor: {
+                mode: "none",
+                adviceCooldownMs: 15000,
+                requestCooldownMs: 30000
+            }
+        },
+        features: {
+            ragEnabled: true,
+            narrationEnabled: true,
+            safetyEnabled: true
         }
     };
     const dir = path.dirname(destinationPath);

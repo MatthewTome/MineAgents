@@ -2,6 +2,26 @@ import type { PerceptionSnapshot } from "../settings/types.js";
 
 export type GoalStatus = "pending" | "pass" | "fail";
 
+export interface ResearchCondition
+{
+    role?: string;
+    mentorMode?: "none" | "teacher" | "learner";
+    ragEnabled?: boolean;
+    narrationEnabled?: boolean;
+    safetyEnabled?: boolean;
+    agentId?: number;
+    agentCount?: number;
+    seed?: string;
+    trialId?: string;
+    notes?: string;
+}
+
+export interface GoalMetadata
+{
+    tags?: string[];
+    condition?: ResearchCondition;
+}
+
 export interface GoalDefinition
 {
     name: string;
@@ -9,6 +29,7 @@ export interface GoalDefinition
     successSignal: GoalSignal;
     failureSignals?: GoalSignal[];
     timeoutMs?: number;
+    metadata?: GoalMetadata;
 }
 
 export type GoalSignal =
@@ -24,6 +45,7 @@ export interface GoalEvent
     ts: number;
     reason: string;
     durationMs?: number;
+    metadata?: GoalMetadata;
 }
 
 interface TrackedGoal
@@ -175,7 +197,8 @@ export class GoalTracker
             status,
             ts,
             reason,
-            durationMs
+            durationMs,
+            metadata: goal.definition.metadata
         };
 
         this.dashboard.record(event);

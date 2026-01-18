@@ -52,7 +52,7 @@ export class HuggingFacePlanner {
     async createPlan(request) {
         const { generate, backend } = await this.generatorPromise;
         let knowledgeSnippets = [];
-        if (this.library) {
+        if (this.library && request.ragEnabled !== false) {
             const recipes = this.library.search(request.goal);
             knowledgeSnippets = recipes.map(r => this.library.formatRecipeFact(r, 12));
         }

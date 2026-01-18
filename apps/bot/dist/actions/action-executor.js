@@ -37,6 +37,9 @@ export class ActionExecutor {
         this.executing.clear();
         this.log = [];
     }
+    setSafety(safety) {
+        this.safety = safety;
+    }
     async executePlan(steps) {
         const results = [];
         for (const step of steps) {
