@@ -113,7 +113,8 @@ export class RoleManager
         return [
             `Role: ${def.label}.`,
             def.description,
-            `Planning focus: ${def.planningFocus}`
+            `Planning focus: ${def.planningFocus}`,
+            "Stay within your role unless the team plan explicitly assigns you otherwise."
         ].join(" ");
     }
 

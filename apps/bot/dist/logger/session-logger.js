@@ -12,8 +12,29 @@ function safeStringify(value) {
         return String(value);
     }
 }
+class LogDeduplicator {
+    lastContent = "";
+    count = 0;
+    process(content) {
+        if (content === this.lastContent) {
+            this.count++;
+            return { type: "swallowed" };
+        }
+        const prevCount = this.count;
+        this.lastContent = content;
+        this.count = 0;
+        if (prevCount > 0) {
+            return {
+                type: "summary_and_new",
+                summary: `... (repeated ${prevCount} times) ...`
+            };
+        }
+        return { type: "new" };
+    }
+}
 export class SessionLogger {
     sessionDir;
+    deduplicator = new LogDeduplicator();
     constructor(existingSessionDir) {
         if (existingSessionDir) {
             this.sessionDir = existingSessionDir;
@@ -96,11 +117,32 @@ export class SessionLogger {
         this.append("safety.log", { level, event, message, data });
     }
     append(fileName, entry) {
-        const payload = { ...entry, ts: isoNow() };
-        const line = safeStringify(payload) + "\n";
+        const contentRaw = safeStringify(entry);
+        if (fileName === "session.log") {
+            const result = this.deduplicator.process(contentRaw);
+            if (result.type === "swallowed") {
+                return;
+            }
+            if (result.type === "summary_and_new" && result.summary) {
+                this.writeLine(fileName, safeStringify({
+                    ts: isoNow(),
+                    level: "info",
+                    event: "log.repeated",
+                    message: result.summary
+                }));
+            }
+            const timestampedEntry = { ...entry, ts: isoNow() };
+            this.writeLine(fileName, safeStringify(timestampedEntry));
+        }
+        else {
+            const timestampedEntry = { ...entry, ts: isoNow() };
+            this.writeLine(fileName, safeStringify(timestampedEntry));
+        }
+    }
+    writeLine(fileName, line) {
         const filePath = path.join(this.sessionDir, fileName);
         try {
-            fs.appendFileSync(filePath, line, "utf8");
+            fs.appendFileSync(filePath, line + "\n", "utf8");
         }
         catch (err) {
             process.stdout.write(`[LOGGER FAIL] Could not write to ${filePath}\n`);

@@ -25,6 +25,21 @@ import { GoalTracker, GoalDefinition, type ResearchCondition } from "./research/
 import { PlanNarrator } from "./actions/chat/narration.js";
 import { MentorProtocol } from "./roles/mentor-protocol.js";
 import { RoleManager, resolveRole, listRoleNames, type AgentRole, type MentorMode } from "./roles/roles.js";
+import {
+    advancePlanningTurn,
+    claimPlanningTurn,
+    initTeamPlanFile,
+    isTeamPlanReady,
+    listClaimedSteps,
+    readTeamPlanFile,
+    recordTeamPlanClaim,
+    releaseTeamPlanLock,
+    summarizeTeamPlan,
+    tryAcquireTeamPlanLock,
+    writeTeamPlanFile,
+    type TeamPlanFile
+} from "./planner/team-plan.js";
+import { Vec3 } from "vec3";
 
 const { pathfinder, Movements } = pathfinderPkg;
 
@@ -51,6 +66,9 @@ async function createBot()
     const envEnableRag = parseEnvBoolean(process.env.BOT_ENABLE_RAG);
     const envEnableNarration = parseEnvBoolean(process.env.BOT_ENABLE_NARRATION);
     const envEnableSafety = parseEnvBoolean(process.env.BOT_ENABLE_SAFETY);
+    const teamPlanPath = path.resolve(process.cwd(), ".team-plan.json");
+    const teamPlanLockPath = path.resolve(process.cwd(), ".team-plan.lock");
+    const teamPlanLeadGraceMs = 15000;
 
     if (!fs.existsSync(configPath) && !process.env.BOT_CONFIG)
     {
@@ -228,6 +246,7 @@ async function createBot()
         }
 
         let isPlanning = false;
+        let nextPlanningAttempt = 0;
         let currentGoal: string | null = null;
 
         const handlers = createDefaultActionHandlers();
@@ -256,6 +275,90 @@ async function createBot()
         let lastLog = 0;
 
         const unwireChat = wireChatBridge(bot, executor, { safety });
+
+        const multiAgentSession = (envAgentCount ?? 1) > 1;
+        let teamPlanLeadWaitStartedAt: number | null = null;
+
+        const agentKey = envAgentId !== null ? `agent-${envAgentId}` : `agent-${bot.username}`;
+
+        const ensureTeamPlan = async (goal: string, snap: PerceptionSnapshot, baseContext: string, scoutedOrigin?: { x: number, y: number, z: number }): Promise<{ plan: TeamPlanFile | null; fallbackToIndividual: boolean }> =>
+        {
+            if (!multiAgentSession || !planner) { return { plan: null, fallbackToIndividual: false }; }
+
+            const existing = readTeamPlanFile(teamPlanPath);
+            if (isTeamPlanReady(existing, goal)) { return { plan: existing, fallbackToIndividual: false }; }
+
+            const currentPlan = existing as TeamPlanFile | null;
+
+            if (currentPlan && currentPlan.goal === goal && currentPlan.status === "drafting")
+            {
+                return { plan: null, fallbackToIndividual: false };
+            }
+
+            const isPreferredLead = roleManager.getRole() === "guide";
+            if (!isPreferredLead)
+            {
+                if (!teamPlanLeadWaitStartedAt || currentPlan?.goal !== goal)
+                {
+                    teamPlanLeadWaitStartedAt = Date.now();
+                }
+                if (Date.now() - teamPlanLeadWaitStartedAt < teamPlanLeadGraceMs)
+                {
+                    return { plan: null, fallbackToIndividual: false };
+                }
+            }
+
+            if (!tryAcquireTeamPlanLock(teamPlanLockPath))
+            {
+                return { plan: null, fallbackToIndividual: false };
+            }
+
+            try
+            {
+                const draft = initTeamPlanFile({
+                    goal,
+                    leader: {
+                        name: bot.username,
+                        role: roleManager.getRole(),
+                        agentId: envAgentId
+                    },
+                    agentCount: envAgentCount,
+                    origin: scoutedOrigin
+                });
+                writeTeamPlanFile(teamPlanPath, draft);
+                safeChat(bot, safety, `Drafting team plan for "${goal}"...`, "team.plan.draft");
+
+                const teamPlanContext = `${baseContext} You are the team lead. Produce a shared plan with role assignments.`;
+                const plan = await planner.createPlan({
+                    goal,
+                    perception: snap,
+                    context: teamPlanContext,
+                    ragEnabled: features.ragEnabled,
+                    planningMode: "team"
+                });
+
+                const resolvedTeamPlan = plan.teamPlan ?? { intent: plan.intent, steps: plan.steps };
+                const readyPlan: TeamPlanFile = {
+                    ...draft,
+                    status: "ready",
+                    teamPlan: resolvedTeamPlan,
+                    updatedAt: new Date().toISOString()
+                };
+                writeTeamPlanFile(teamPlanPath, readyPlan);
+                safeChat(bot, safety, summarizeTeamPlan(readyPlan), "team.plan.ready");
+                return { plan: readyPlan, fallbackToIndividual: false };
+            }
+            catch (error)
+            {
+                console.error("[planner] Team plan generation failed:", error);
+                safeChat(bot, safety, "Team plan failed; falling back to individual planning.", "team.plan.error");
+                return { plan: null, fallbackToIndividual: true };
+            }
+            finally
+            {
+                releaseTeamPlanLock(teamPlanLockPath);
+            }
+        };
 
         bot.on("chat", (username, message) =>
         {
@@ -416,12 +519,16 @@ async function createBot()
             const activeGoalObj = (goalTracker as any).goals.values().next().value;
             currentGoal = (activeGoalObj && activeGoalObj.status === "pending") ? activeGoalObj.definition.name : null;
 
-            if (currentGoal && !isPlanning && planner)
+            if (currentGoal && !isPlanning && planner && Date.now() >= nextPlanningAttempt)
             {
                 isPlanning = true;
                 console.log(`[planner] Generating plan with ${planner.modelName} for goal: "${currentGoal}"...`);
                 sessionLogger.info("planner.start", "Generating plan", { goal: currentGoal, tickId: snap.tickId });
 
+                let activeTeamPlan: TeamPlanFile | null = null;
+                let claimedTeamTurn = false;
+                let wroteTeamPlan = false;
+                
                 try {
                     let context = "You are currently in the game. React immediately.";
                     const roleContext = roleManager.buildPlannerContext();
@@ -430,8 +537,21 @@ async function createBot()
                     const mentorContext = roleManager.buildMentorContext(mentorProtocol.getConfig().mode);
                     if (mentorContext) { context += ` ${mentorContext}`; }
 
+                    let site = null;
                     if (goalNeedsBuildSite(currentGoal)) {
-                        const site = scoutBuildSite(bot, currentGoal);
+                        const existingPlan = readTeamPlanFile(teamPlanPath);
+
+                        if (existingPlan && existingPlan.goal === currentGoal && existingPlan.sharedOrigin) {
+                            const o = existingPlan.sharedOrigin;
+                            console.log(`[planner] Using shared build site from team plan: ${o.x},${o.y},${o.z}`);
+                            site = { 
+                                origin: new Vec3(o.x, o.y, o.z), 
+                                size: 7, radius: 0, flatness: 0, coverage: 1 
+                            }; 
+                        } else {
+                            site = scoutBuildSite(bot, currentGoal);
+                        }
+
                         if (site) {
                             context += ` Scouted build site: origin (${site.origin.x}, ${site.origin.y}, ${site.origin.z}), size ${site.size}x${site.size}, flatness ${site.flatness}, coverage ${Math.round(site.coverage * 100)}%, distance ${site.radius}. Move there before building.`;
                             sessionLogger.info("planner.scout.site", "Scouted build site", { goal: currentGoal, site });
@@ -441,11 +561,52 @@ async function createBot()
                         }
                     }
 
+                    let planningMode: "single" | "individual" = "single";
+                    let claimedSteps: string[] | undefined;
+                    if (multiAgentSession)
+                    {
+                        const teamPlanResult = await ensureTeamPlan(
+                            currentGoal, 
+                            snap, 
+                            context, 
+                            site?.origin
+                        );
+                        activeTeamPlan = teamPlanResult.plan;
+
+                        if (!activeTeamPlan && !teamPlanResult.fallbackToIndividual)
+                        {
+                            nextPlanningAttempt = Date.now() + 2000; 
+                            return;
+                        }
+
+                        if (activeTeamPlan)
+                        {
+                            const claimResult = claimPlanningTurn(activeTeamPlan, agentKey, envAgentId);
+                            activeTeamPlan = claimResult.plan;
+                            if (activeTeamPlan.planning.mode === "name-lock")
+                            {
+                                writeTeamPlanFile(teamPlanPath, activeTeamPlan);
+                                wroteTeamPlan = true;
+                            }
+                            if (!claimResult.allowed)
+                            {
+                                return;
+                            }
+                            claimedTeamTurn = true;
+                            planningMode = "individual";
+                            claimedSteps = listClaimedSteps(activeTeamPlan);
+                            context += " Coordinate with the shared team plan and respect assigned roles.";
+                        }
+                    }
+
                     const plan = await planner.createPlan({
                         goal: currentGoal,
                         perception: snap,
                         context,
-                        ragEnabled: features.ragEnabled
+                        ragEnabled: features.ragEnabled,
+                        teamPlan: activeTeamPlan?.teamPlan ?? undefined,
+                        claimedSteps,
+                        planningMode
                     });
 
                     if (plan.knowledgeUsed && plan.knowledgeUsed.length > 0)
@@ -473,6 +634,32 @@ async function createBot()
                     }
                     else
                     {
+                        if (activeTeamPlan)
+                        {
+                            const claimIds = plan.claimedStepIds ?? [];
+                            const claimSummary = claimIds.length > 0 ? claimIds.join(", ") : "support tasks";
+                            const claimMessage = `[team] ${bot.username} (${roleManager.getRole()}) claiming: ${claimSummary}`;
+                            const hasClaimChat = plan.steps.some(step =>
+                                step.action === "chat" &&
+                                typeof step.params?.message === "string" &&
+                                step.params.message.toLowerCase().includes("claim"));
+                            if (!hasClaimChat)
+                            {
+                                plan.steps.unshift({
+                                    id: `team-claim-${Date.now()}`,
+                                    action: "chat",
+                                    params: { message: claimMessage },
+                                    description: "Announce claimed team plan steps"
+                                });
+                            }
+                            if (claimIds.length > 0)
+                            {
+                                activeTeamPlan = recordTeamPlanClaim(activeTeamPlan, agentKey, claimIds);
+                                writeTeamPlanFile(teamPlanPath, activeTeamPlan);
+                                wroteTeamPlan = true;
+                            }
+                        }
+
                         if (features.narrationEnabled)
                         {
                             const narrative = narrator.maybeNarrate({ intent: plan.intent, goal: currentGoal, steps: plan.steps });
@@ -532,6 +719,16 @@ async function createBot()
                     const events = goalTracker.notifyEvent("planner.fatal_error", {});
                     events.forEach(e => sessionLogger.info("goal.update", "Goal failed due to planner error", { ...e }));
                 } finally {
+                    if (activeTeamPlan && claimedTeamTurn)
+                    {
+                        const advanced = advancePlanningTurn(activeTeamPlan, agentKey, envAgentId);
+                        writeTeamPlanFile(teamPlanPath, advanced);
+                        wroteTeamPlan = true;
+                    }
+                    if (wroteTeamPlan)
+                    {
+                        sessionLogger.info("team.plan.update", "Team plan updated", { goal: currentGoal, agentKey });
+                    }
                     isPlanning = false;
                 }
             }

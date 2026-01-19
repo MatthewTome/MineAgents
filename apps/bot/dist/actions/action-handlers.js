@@ -199,7 +199,7 @@ async function handleCraft(bot, step) {
     const itemType = bot.registry.itemsByName[itemName];
     if (!itemType && !itemName.includes("plank"))
         throw new Error(`Unknown item name: ${itemName}`);
-    let recipeList = itemType ? bot.recipesFor(itemType.id, null, 1, true) : [];
+    let recipeList = itemType ? bot.recipesFor(itemType.id, null, 1, false) : [];
     let recipe = recipeList[0];
     if (!recipe && itemName.includes("plank")) {
         const logItem = bot.inventory.items().find(i => i.name.endsWith("_log"));
@@ -207,18 +207,23 @@ async function handleCraft(bot, step) {
             const plankName = logItem.name.replace("_log", "_planks");
             const pType = bot.registry.itemsByName[plankName];
             if (pType) {
-                recipe = bot.recipesFor(pType.id, null, 1, true)[0];
+                recipe = bot.recipesFor(pType.id, null, 1, false)[0];
             }
         }
         if (!recipe) {
             const oak = bot.registry.itemsByName['oak_planks'];
             if (oak)
-                recipe = bot.recipesFor(oak.id, null, 1, true)[0];
+                recipe = bot.recipesFor(oak.id, null, 1, false)[0];
         }
     }
     if (!recipe)
-        throw new Error(`No crafting recipe found for ${itemName}.`);
-    if (recipe.requiresTable) {
+        throw new Error(`No crafting recipe found for ${itemName} in Minecraft data.`);
+    const craftableRecipe = bot.recipesFor(itemType.id, null, 1, true)[0];
+    if (!craftableRecipe) {
+        const req = recipe.delta?.[0];
+        throw new Error(`Insufficient ingredients to craft ${itemName}. Needs ingredients (e.g., ${req ? req.id : 'unknown'}).`);
+    }
+    if (craftableRecipe.requiresTable) {
         let tableBlock = params.craftingTable
             ? bot.blockAt(new Vec3(params.craftingTable.x, params.craftingTable.y, params.craftingTable.z))
             : bot.findBlock({ matching: (b) => b.name === "crafting_table", maxDistance: 32 });
@@ -230,11 +235,11 @@ async function handleCraft(bot, step) {
                 throw new Error("Failed to gather logs for crafting table.");
             const plankItem = bot.registry.itemsByName[log.name.replace("_log", "_planks")];
             if (plankItem) {
-                const plankRecipe = bot.recipesFor(plankItem.id, null, 1, null)[0];
+                const plankRecipe = bot.recipesFor(plankItem.id, null, 1, true)[0];
                 if (plankRecipe)
                     await bot.craft(plankRecipe, 1, undefined);
             }
-            const tRecipe = bot.recipesFor(bot.registry.itemsByName['crafting_table'].id, null, 1, null)[0];
+            const tRecipe = bot.recipesFor(bot.registry.itemsByName['crafting_table'].id, null, 1, true)[0];
             await bot.craft(tRecipe, 1, undefined);
             const pos = bot.entity.position.offset(1, 0, 0).floored();
             const ref = findReferenceBlock(bot, pos);
@@ -251,10 +256,10 @@ async function handleCraft(bot, step) {
         if (!tableBlock)
             throw new Error("Could not access crafting table.");
         await moveToward(bot, tableBlock.position, 3, 15000);
-        await bot.craft(recipe, count, tableBlock);
+        await bot.craft(craftableRecipe, count, tableBlock);
     }
     else {
-        await bot.craft(recipe, count, undefined);
+        await bot.craft(craftableRecipe, count, undefined);
     }
 }
 async function handleGather(bot, step) {

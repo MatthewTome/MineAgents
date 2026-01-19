@@ -9,6 +9,9 @@ export interface PlanRequest
     perception?: PerceptionSnapshot;
     context?: string;
     ragEnabled?: boolean;
+    teamPlan?: unknown;
+    claimedSteps?: string[];
+    planningMode?: "single" | "team" | "individual";
 }
 
 export interface PlanResult
@@ -20,6 +23,7 @@ export interface PlanResult
     raw: string;
     knowledgeUsed?: string[];
     teamPlan?: unknown;
+    claimedStepIds?: string[];
 }
 
 const SUPPORTED_ACTIONS: Record<string, string> =
@@ -128,7 +132,9 @@ export class HuggingFacePlanner
                 model: this.options.model,
                 backend,
                 raw: rawText,
-                knowledgeUsed: knowledgeSnippets
+                knowledgeUsed: knowledgeSnippets,
+                teamPlan: parsed.teamPlan,
+                claimedStepIds: parsed.claimedStepIds
             };
         }
         catch (error)
@@ -267,6 +273,7 @@ export class HuggingFacePlanner
     {
         const perception = request.perception ? JSON.stringify(request.perception) : "";
         const context = request.context ?? "";
+        const planningMode = request.planningMode ?? "single";
 
         const actionsList = Object.entries(SUPPORTED_ACTIONS)
             .map(([name, desc]) => `- ${name}: ${desc}`)
@@ -276,18 +283,47 @@ export class HuggingFacePlanner
             ? `\nRELEVANT KNOW-HOW (Use these recipes to guide your steps):\n${knowledge.join("\n")}\n`
             : "";
 
+        const teamPlanSection = request.teamPlan
+            ? `\nTEAM PLAN (shared, do not modify):\n${JSON.stringify(request.teamPlan)}\n`
+            : "";
+
+        const claimedStepsSection = request.claimedSteps && request.claimedSteps.length > 0
+            ? `\nAlready claimed step ids: ${request.claimedSteps.join(", ")}\n`
+            : "";
+
+        const planningModeRules = planningMode === "team"
+            ? [
+                "TEAM PLAN MODE:",
+                "- You are the team lead. Output JSON with team_plan describing the full team plan.",
+                "- team_plan must include intent and steps. Each step must include a unique id and owner_role (miner|builder|guide|guard|generalist).",
+                "- Also include individual_plan with a brief intent and a chat announcement summarizing the team plan.",
+                "- Keep step descriptions concise and actionable."
+            ].join("\n")
+            : request.teamPlan
+                ? [
+                    "TEAM EXECUTION MODE:",
+                    "- Use the TEAM PLAN above to choose only steps that match your role and are not already claimed.",
+                    "- Return JSON with intent, steps, and claim_ids (array of team plan step ids you will handle).",
+                    "- The first step MUST be a chat action announcing your claimed steps to the team.",
+                    "- Do NOT claim steps assigned to other roles unless absolutely necessary.",
+                ].join("\n")
+                : "";
+
         return [
             "You are MineAgent, a Minecraft planning assistant.",
             "Return JSON with fields intent (short string) and steps (array of {id, action, params?, description?}).",
             "Only use these actions (others will fail):",
             actionsList,
             knowledgeSection,
+            teamPlanSection,
+            claimedStepsSection,
             "CRITICAL RULES:",
             "1. For multi-part builds (house, base), you MUST pick a specific coordinate (e.g. x:0, y:63, z:0) and use it as the 'origin' for EVERY build step (platform, walls, roof). Do NOT omit the origin.",
             "2. If context includes a scouted build site, use its origin for build steps and move there before building.",
             "3. Be complete (include roof, door).",
             "4. Coordinates must be grounded in the provided Perception snapshot. Only use positions from Perception.pose, Perception.nearby/entities, Perception.blocks, or scouted build site. Do not invent random coordinates.",
             "5. If multiple agents are present (per Context or Perception), return JSON with team_plan and individual_plan fields. team_plan should list shared steps with role assignments, and individual_plan should include intent and steps for this agent plus any chat announcements. If only one agent is present, return intent and steps as usual.",
+            planningModeRules,
             "Intent should be fewer than 140 characters.",
             `Goal: ${request.goal}`,
             context ? `Context: ${context}` : "",
@@ -345,6 +381,8 @@ private parsePlan(text: string): Omit<PlanResult, "backend">
         const teamPlan = parsed.team_plan ?? parsed.teamPlan;
         const individualPlan = parsed.individual_plan ?? parsed.individualPlan;
         const planSource = individualPlan ?? parsed;
+        const rawClaimIds = planSource.claim_ids ?? planSource.claimed_step_ids ?? planSource.claimedSteps ?? planSource.claimIds;
+        const claimedStepIds = Array.isArray(rawClaimIds) ? rawClaimIds.map((id: any) => String(id)) : [];
 
         if (typeof planSource.intent !== "string" || !Array.isArray(planSource.steps))
         {
@@ -377,7 +415,8 @@ private parsePlan(text: string): Omit<PlanResult, "backend">
             steps,
             model: this.options.model,
             raw: text,
-            teamPlan
+            teamPlan,
+            claimedStepIds
         };
     }
 

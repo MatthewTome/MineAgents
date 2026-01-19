@@ -2,7 +2,7 @@ import { Bot } from "mineflayer";
 import { Vec3 } from "vec3";
 import pathfinderPkg from "mineflayer-pathfinder";
 import { requireInventoryItem, expandMaterialAliases } from "../utils.js";
-import { waitForNextTick, raceWithTimeout, moveToward } from "../movement.js";
+import { waitForNextTick, raceWithTimeout, moveToward, findNearestEntity } from "../movement.js";
 
 const { goals } = pathfinderPkg;
 
@@ -104,6 +104,15 @@ export async function executeBuild(bot: Bot, params: BuildParams): Promise<void>
     let failures = 0;
 
     for (const target of targets) {
+        const obstructer = findNearestEntity(bot, (e) => {
+            return e.position.floored().equals(target);
+        }, 2);
+
+        if (obstructer && obstructer.username && obstructer.username !== bot.username) {
+            bot.chat(`Hey @${obstructer.username}, you are in my build path at ${target}. Please move!`);
+            await waitForNextTick(bot); 
+        }
+
         if (bot.entity.position.floored().equals(target)) {
              await evacuateBuildArea(bot, targets);
         }

@@ -406,3 +406,5 @@ logs
 .env
 /extras
 /apps/bot/config/
+.team-plan.json
+.team-plan.lock

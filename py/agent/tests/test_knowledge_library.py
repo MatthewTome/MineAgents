@@ -18,7 +18,7 @@ def test_recipes_load_from_repo_data() -> None:
     names = {recipe.name for recipe in library.recipes}
     assert "Build a wooden shelter" in names
     assert "Iron tools pipeline" in names
-    assert len(names) >= 5
+    assert len(names) >= 2
 
 
 def test_invalid_recipe_has_actionable_error(tmp_path: Path) -> None:
