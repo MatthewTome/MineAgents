@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import type { AgentRole } from "../roles/roles.js";
+import type { AgentRole } from "./roles.js";
 
 export type TeamPlanStep = {
     id: string;

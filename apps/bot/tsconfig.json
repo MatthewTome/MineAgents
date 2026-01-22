@@ -1,6 +1,5 @@
 {
-  "compilerOptions":
-  {
+  "compilerOptions": {
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
@@ -8,18 +7,17 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "outDir": "dist",
-    "rootDir": "src",
+    "rootDir": ".", 
     "types": ["node"]
   },
   "include": [
     "src",
+    "tests",
     "src/**/*.ts",
     "src/types/**/*.d.ts"
   ],
   "exclude": [
-    "tests",
     "node_modules",
-    "dist",
-    "src/**/*.spec.ts",
+    "dist"
   ]
 }

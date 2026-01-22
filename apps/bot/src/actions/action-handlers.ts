@@ -4,6 +4,7 @@ import type { Item } from "prismarine-item";
 import { Vec3 } from "vec3";
 import type { ActionHandler } from "./action-executor.js";
 import { recordChestContents, listChestMemory } from "../perception/chest-memory.js";
+import { ResourceLockManager } from "../teamwork/coordination.js";
 import { moveToward, resolveTargetPosition, findNearestEntity, waitForNextTick, raceWithTimeout, type Vec3Input, type MoveParams } from "./movement.js";
 import { executeBuild, type BuildParams } from "./building/building.js";
 import { requireInventoryItem, ensureToolFor, expandMaterialAliases, resolveItemName, resolveWoodType } from "./utils.js";
@@ -20,18 +21,19 @@ interface FightParams { target?: string; aggression?: "passive" | "aggressive" |
 interface FishParams { casts?: number; }
 interface PerceiveParams { check?: string; }
 
-export function createDefaultActionHandlers(): Record<string, ActionHandler>
+export function createDefaultActionHandlers(options?: { resourceLocks?: ResourceLockManager }): Record<string, ActionHandler>
 {
+    const resourceLocks = options?.resourceLocks;
     return {
         move: handleMove,
         mine: handleMine,
-        gather: handleGather,
-        craft: handleCraft,
-        smelt: handleSmelt,
+        gather: (bot, step) => handleGather(bot, step, resourceLocks),
+        craft: (bot, step) => handleCraft(bot, step, resourceLocks),
+        smelt: (bot, step) => handleSmelt(bot, step, resourceLocks),
         build: handleBuild,
-        loot: handleLoot,
+        loot: (bot, step) => handleLoot(bot, step, resourceLocks),
         eat: handleEat,
-        smith: handleSmith,
+        smith: (bot, step) => handleSmith(bot, step, resourceLocks),
         hunt: handleHunt,
         fish: handleFish,
         fight: handleFight,
@@ -40,28 +42,28 @@ export function createDefaultActionHandlers(): Record<string, ActionHandler>
     } satisfies Record<string, ActionHandler>;
 }
 
-async function handleMove(bot: Bot, step: { params?: Record<string, unknown> }): Promise<void> 
+async function handleMove(bot: Bot, step: { params?: Record<string, unknown> }): Promise<void>
 {
     const params = (step.params ?? {}) as unknown as MoveParams;
     const targetPos = resolveTargetPosition(bot, params || {});
     await moveToward(bot, targetPos, params?.range ?? 1.5, params?.timeoutMs ?? 15000);
 }
 
-async function handleBuild(bot: Bot, step: { params?: Record<string, unknown> }): Promise<void> 
+async function handleBuild(bot: Bot, step: { params?: Record<string, unknown> }): Promise<void>
 {
     const params = (step.params ?? {}) as unknown as BuildParams;
     const timeout = 180000; 
     await raceWithTimeout(executeBuild(bot, params), timeout);
 }
 
-async function handlePerceive(bot: Bot, step: { params?: Record<string, unknown> }): Promise<void> 
+async function handlePerceive(bot: Bot, step: { params?: Record<string, unknown> }): Promise<void>
 {
     const params = (step.params ?? {}) as unknown as PerceiveParams;
     console.log(`[bot] Perceiving: ${params?.check ?? "surroundings/inventory"}`);
     await waitForNextTick(bot); 
 }
 
-async function handleSmelt(bot: Bot, step: { params?: Record<string, unknown> }): Promise<void> 
+async function handleSmelt(bot: Bot, step: { params?: Record<string, unknown> }, resourceLocks?: ResourceLockManager): Promise<void>
 {
     const params = (step.params ?? {}) as unknown as SmeltParams;
     if (!params.item) throw new Error("Smelt requires item name");
@@ -93,29 +95,33 @@ async function handleSmelt(bot: Bot, step: { params?: Record<string, unknown> })
 
     if (!furnaceBlock) throw new Error("Failed to secure a furnace.");
 
-    await moveToward(bot, furnaceBlock.position, 3, 15000);
+    const lockKey = buildLockKey("furnace", furnaceBlock.position);
+    await withResourceLock(resourceLocks, lockKey, async () =>
+    {
+        await moveToward(bot, furnaceBlock.position, 3, 15000);
 
-    const furnace = await bot.openFurnace(furnaceBlock);
-    
-    const fuel = bot.inventory.items().find(i => i.name.includes(fuelItem) || i.name.includes("wood") || i.name.includes("plank") || i.name.includes("coal"));
-    if (!fuel) throw new Error(`No fuel found for smelting (looked for ${fuelItem} or wood)`);
-    await furnace.putFuel(fuel.type, null, fuel.count);
+        const furnace = await bot.openFurnace(furnaceBlock);
+        
+        const fuel = bot.inventory.items().find(i => i.name.includes(fuelItem) || i.name.includes("wood") || i.name.includes("plank") || i.name.includes("coal"));
+        if (!fuel) throw new Error(`No fuel found for smelting (looked for ${fuelItem} or wood)`);
+        await furnace.putFuel(fuel.type, null, fuel.count);
 
-    const input = bot.inventory.items().find(i => i.name.includes(rawItem));
-    if (!input) throw new Error(`No input item ${rawItem} found to smelt`);
-    await furnace.putInput(input.type, null, input.count);
+        const input = bot.inventory.items().find(i => i.name.includes(rawItem));
+        if (!input) throw new Error(`No input item ${rawItem} found to smelt`);
+        await furnace.putInput(input.type, null, input.count);
 
-    console.log("[smelt] Cooking... waiting 10s");
-    await new Promise(r => setTimeout(r, 10000));
-    
-    try {
-        await furnace.takeOutput();
-    } catch(e) { }
-    
-    furnace.close();
+        console.log("[smelt] Cooking... waiting 10s");
+        await new Promise(r => setTimeout(r, 10000));
+        
+        try {
+            await furnace.takeOutput();
+        } catch(e) { }
+        
+        furnace.close();
+    });
 }
 
-async function handleLoot(bot: Bot, step: { params?: Record<string, unknown> }): Promise<void>
+async function handleLoot(bot: Bot, step: { params?: Record<string, unknown> }, resourceLocks?: ResourceLockManager): Promise<void>
 {
     const params = (step.params ?? {}) as unknown as LootParams;
     const maxDistance = params.maxDistance ?? 16;
@@ -136,41 +142,45 @@ async function handleLoot(bot: Bot, step: { params?: Record<string, unknown> }):
         throw new Error("No chest found nearby.");
     }
 
-    await moveToward(bot, chestBlock.position, 2.5, 15000);
-
-    const chest = await bot.openContainer(chestBlock);
-    const items = chest.containerItems().map((item) => ({ name: item.name, count: item.count ?? 0 }));
-    recordChestContents(chestBlock.position, items);
-
-    if (targetItem)
+    const lockKey = buildLockKey("chest", chestBlock.position);
+    await withResourceLock(resourceLocks, lockKey, async () =>
     {
-        let remaining = targetCount;
-        const matching = chest.containerItems().filter((item) =>
-            item.name.toLowerCase().includes(targetItem)
-        );
+        await moveToward(bot, chestBlock.position, 2.5, 15000);
 
-        for (const item of matching)
+        const chest = await bot.openContainer(chestBlock);
+        const items = chest.containerItems().map((item) => ({ name: item.name, count: item.count ?? 0 }));
+        recordChestContents(chestBlock.position, items);
+
+        if (targetItem)
         {
-            const available = item.count ?? 0;
-            const toWithdraw = remaining > 0 ? Math.min(available, remaining) : available;
-            if (toWithdraw <= 0) { continue; }
+            let remaining = targetCount;
+            const matching = chest.containerItems().filter((item) =>
+                item.name.toLowerCase().includes(targetItem)
+            );
 
-            try
+            for (const item of matching)
             {
-                await chest.withdraw(item.type, null, toWithdraw);
-                if (remaining > 0)
+                const available = item.count ?? 0;
+                const toWithdraw = remaining > 0 ? Math.min(available, remaining) : available;
+                if (toWithdraw <= 0) { continue; }
+
+                try
                 {
-                    remaining -= toWithdraw;
-                    if (remaining <= 0) { break; }
+                    await chest.withdraw(item.type, null, toWithdraw);
+                    if (remaining > 0)
+                    {
+                        remaining -= toWithdraw;
+                        if (remaining <= 0) { break; }
+                    }
+                }
+                catch (err)
+                {
+                    console.warn(`[loot] Failed to withdraw ${item.name}: ${err}`);
                 }
             }
-            catch (err)
-            {
-                console.warn(`[loot] Failed to withdraw ${item.name}: ${err}`);
-            }
         }
-    }
-    chest.close();
+        chest.close();
+    });
 }
 
 async function handleEat(bot: Bot, step: { params?: Record<string, unknown> }): Promise<void>
@@ -207,7 +217,7 @@ async function handleEat(bot: Bot, step: { params?: Record<string, unknown> }): 
     await bot.consume();
 }
 
-async function handleSmith(bot: Bot, step: { params?: Record<string, unknown> }): Promise<void>
+async function handleSmith(bot: Bot, step: { params?: Record<string, unknown> }, resourceLocks?: ResourceLockManager): Promise<void>
 {
     const params = (step.params ?? {}) as unknown as SmithParams;
     if (!params.item1)
@@ -229,20 +239,24 @@ async function handleSmith(bot: Bot, step: { params?: Record<string, unknown> })
     const item1 = requireInventoryItem(bot, params.item1);
     const item2 = params.item2 ? requireInventoryItem(bot, params.item2) : null;
 
-    await moveToward(bot, anvilBlock.position, 2.5, 15000);
-    const anvil = await bot.openAnvil(anvilBlock);
-    if (item2)
+    const lockKey = buildLockKey("anvil", anvilBlock.position);
+    await withResourceLock(resourceLocks, lockKey, async () =>
     {
-        await anvil.combine(item1, item2, params.name);
-    }
-    else
-    {
-        await anvil.rename(item1, params.name ?? item1.name);
-    }
-    (anvil as any).close();
+        await moveToward(bot, anvilBlock.position, 2.5, 15000);
+        const anvil = await bot.openAnvil(anvilBlock);
+        if (item2)
+        {
+            await anvil.combine(item1, item2, params.name);
+        }
+        else
+        {
+            await anvil.rename(item1, params.name ?? item1.name);
+        }
+        (anvil as any).close();
+    });
 }
 
-async function handleCraft(bot: Bot, step: { params?: Record<string, unknown> }): Promise<void>
+async function handleCraft(bot: Bot, step: { params?: Record<string, unknown> }, resourceLocks?: ResourceLockManager): Promise<void>
 {
     const params = (step.params ?? {}) as unknown as CraftParams;
     let itemName = params.recipe.toLowerCase();
@@ -330,14 +344,18 @@ async function handleCraft(bot: Bot, step: { params?: Record<string, unknown> })
         }
         
         if (!tableBlock) throw new Error("Could not access crafting table.");
-        await moveToward(bot, tableBlock.position, 3, 15000);
-        await bot.craft(craftableRecipe, count, tableBlock);
+        const lockKey = buildLockKey("crafting_table", tableBlock.position);
+        await withResourceLock(resourceLocks, lockKey, async () =>
+        {
+            await moveToward(bot, tableBlock.position, 3, 15000);
+            await bot.craft(craftableRecipe, count, tableBlock);
+        });
     } else {
         await bot.craft(craftableRecipe, count, undefined);
     }
 }
 
-async function handleGather(bot: Bot, step: { params?: Record<string, unknown> }): Promise<void>
+async function handleGather(bot: Bot, step: { params?: Record<string, unknown> }, resourceLocks?: ResourceLockManager): Promise<void>
 {
     const params = (step.params ?? {}) as unknown as GatherParams;
     const rawTarget = params.item?.toLowerCase();
@@ -356,7 +374,7 @@ async function handleGather(bot: Bot, step: { params?: Record<string, unknown> }
     const chests = listChestMemory().filter(c => c.status === "known" && c.items && c.items.some(i => i.name.includes(targetItem)));
     if (chests.length > 0) {
         console.log(`[gather] Found ${targetItem} in known chest at ${chests[0].position.x},${chests[0].position.y},${chests[0].position.z}`);
-        await handleLoot(bot, { params: { position: chests[0].position, item: targetItem } });
+        await handleLoot(bot, { params: { position: chests[0].position, item: targetItem } }, resourceLocks);
         const nowHas = bot.inventory.items().find(i => i.name.toLowerCase().includes(targetItem));
         if (nowHas) {
             console.log(`[gather] Retrieved ${targetItem} from chest.`);
@@ -366,7 +384,7 @@ async function handleGather(bot: Bot, step: { params?: Record<string, unknown> }
 
     try
     {
-        await handleLoot(bot, { params: { maxDistance, item: targetItem } });
+        await handleLoot(bot, { params: { maxDistance, item: targetItem } }, resourceLocks);
         const looted = bot.inventory.items().find(i => i.name.toLowerCase().includes(targetItem));
         if (looted)
         {
@@ -444,8 +462,8 @@ async function handleGather(bot: Bot, step: { params?: Record<string, unknown> }
         const raw = resolveProductToRaw(targetItem);
         if (raw) {
             console.log(`[gather] Producing ${targetItem} from ${raw}...`);
-            await handleGather(bot, { params: { item: raw, timeoutMs: timeout/2 } });
-            await handleCraft(bot, { params: { recipe: targetItem } });
+            await handleGather(bot, { params: { item: raw, timeoutMs: timeout/2 } }, resourceLocks);
+            await handleCraft(bot, { params: { recipe: targetItem } }, resourceLocks);
             return;
         }
 
@@ -456,6 +474,23 @@ async function handleGather(bot: Bot, step: { params?: Record<string, unknown> }
         await waitForNextTick(bot);
     }
     throw new Error(`Gather ${targetItem} failed.`);
+}
+
+async function withResourceLock<T>(resourceLocks: ResourceLockManager | undefined, resourceKey: string | null, action: () => Promise<T>): Promise<T>
+{
+    if (!resourceLocks || !resourceKey) { return action(); }
+
+    const acquired = await resourceLocks.acquire(resourceKey);
+    if (!acquired) { throw new Error(`Resource locked: ${resourceKey}`); }
+
+    try  { return await action(); }
+    finally { resourceLocks.release(resourceKey); }
+}
+
+function buildLockKey(resourceType: string, position?: Vec3 | null): string | null
+{
+    if (!position) { return null; }
+    return `${resourceType}:${position.toString()}`;
 }
 
 async function handleMine(bot: Bot, step: { params?: Record<string, unknown> }): Promise<void> 

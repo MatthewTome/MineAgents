@@ -23,8 +23,9 @@ import { SafetyRails } from "./safety/safety-rails.js";
 import { RecipeLibrary } from "./planner/knowledge.js";
 import { GoalTracker, GoalDefinition, type ResearchCondition } from "./research/goals.js";
 import { PlanNarrator } from "./actions/chat/narration.js";
-import { MentorProtocol } from "./roles/mentor-protocol.js";
-import { RoleManager, resolveRole, listRoleNames, type AgentRole, type MentorMode } from "./roles/roles.js";
+import { MentorProtocol } from "./teamwork/mentor-protocol.js";
+import { RoleManager, resolveRole, listRoleNames, type AgentRole, type MentorMode } from "./teamwork/roles.js";
+import { ResourceLockManager, resolveLeaderForGoal } from "./teamwork/coordination.js";
 import {
     advancePlanningTurn,
     claimPlanningTurn,
@@ -38,7 +39,7 @@ import {
     tryAcquireTeamPlanLock,
     writeTeamPlanFile,
     type TeamPlanFile
-} from "./planner/team-plan.js";
+} from "./teamwork/team-plan.js";
 import { Vec3 } from "vec3";
 
 const { pathfinder, Movements } = pathfinderPkg;
@@ -68,6 +69,8 @@ async function createBot()
     const envEnableSafety = parseEnvBoolean(process.env.BOT_ENABLE_SAFETY);
     const teamPlanPath = path.resolve(process.cwd(), ".team-plan.json");
     const teamPlanLockPath = path.resolve(process.cwd(), ".team-plan.lock");
+    const coordinationPath = path.resolve(process.cwd(), ".team-coordination.json");
+    const coordinationLockPath = path.resolve(process.cwd(), ".team-coordination.lock");
     const teamPlanLeadGraceMs = 15000;
 
     if (!fs.existsSync(configPath) && !process.env.BOT_CONFIG)
@@ -249,7 +252,13 @@ async function createBot()
         let nextPlanningAttempt = 0;
         let currentGoal: string | null = null;
 
-        const handlers = createDefaultActionHandlers();
+        const agentKey = envAgentId !== null ? `agent-${envAgentId}` : `agent-${bot.username}`;
+        const resourceLocks = new ResourceLockManager({
+            filePath: coordinationPath,
+            lockPath: coordinationLockPath,
+            owner: agentKey
+        });
+        const handlers = createDefaultActionHandlers({ resourceLocks });
         const executor = new ActionExecutor(bot, handlers,
         {
             logger: (entry) =>
@@ -279,8 +288,6 @@ async function createBot()
         const multiAgentSession = (envAgentCount ?? 1) > 1;
         let teamPlanLeadWaitStartedAt: number | null = null;
 
-        const agentKey = envAgentId !== null ? `agent-${envAgentId}` : `agent-${bot.username}`;
-
         const ensureTeamPlan = async (goal: string, snap: PerceptionSnapshot, baseContext: string, scoutedOrigin?: { x: number, y: number, z: number }): Promise<{ plan: TeamPlanFile | null; fallbackToIndividual: boolean }> =>
         {
             if (!multiAgentSession || !planner) { return { plan: null, fallbackToIndividual: false }; }
@@ -308,6 +315,25 @@ async function createBot()
                 }
             }
 
+            const leaderResult = resolveLeaderForGoal({
+                filePath: coordinationPath,
+                lockPath: coordinationLockPath,
+                goal,
+                candidate: {
+                    name: bot.username,
+                    role: roleManager.getRole(),
+                    agentId: envAgentId
+                }
+            });
+            if (!leaderResult)
+            {
+                return { plan: null, fallbackToIndividual: false };
+            }
+            if (!leaderResult.isLeader)
+            {
+                return { plan: null, fallbackToIndividual: false };
+            }
+
             if (!tryAcquireTeamPlanLock(teamPlanLockPath))
             {
                 return { plan: null, fallbackToIndividual: false };
@@ -318,9 +344,9 @@ async function createBot()
                 const draft = initTeamPlanFile({
                     goal,
                     leader: {
-                        name: bot.username,
-                        role: roleManager.getRole(),
-                        agentId: envAgentId
+                        name: leaderResult.leader.name,
+                        role: leaderResult.leader.role as AgentRole,
+                        agentId: leaderResult.leader.agentId
                     },
                     agentCount: envAgentCount,
                     origin: scoutedOrigin

@@ -90,8 +90,6 @@ importers:
 
   apps/dashboard: {}
 
-  packages/shared: {}
-
 packages:
 
   '@azure/msal-common@14.16.1':
