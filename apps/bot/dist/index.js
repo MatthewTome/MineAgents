@@ -21,9 +21,10 @@ import { SafetyRails } from "./safety/safety-rails.js";
 import { RecipeLibrary } from "./planner/knowledge.js";
 import { GoalTracker } from "./research/goals.js";
 import { PlanNarrator } from "./actions/chat/narration.js";
-import { MentorProtocol } from "./roles/mentor-protocol.js";
-import { RoleManager, resolveRole, listRoleNames } from "./roles/roles.js";
-import { advancePlanningTurn, claimPlanningTurn, initTeamPlanFile, isTeamPlanReady, listClaimedSteps, readTeamPlanFile, recordTeamPlanClaim, releaseTeamPlanLock, summarizeTeamPlan, tryAcquireTeamPlanLock, writeTeamPlanFile } from "./planner/team-plan.js";
+import { MentorProtocol } from "./teamwork/mentor-protocol.js";
+import { RoleManager, resolveRole, listRoleNames } from "./teamwork/roles.js";
+import { ResourceLockManager, resolveLeaderForGoal } from "./teamwork/coordination.js";
+import { advancePlanningTurn, claimPlanningTurn, initTeamPlanFile, isTeamPlanReady, listClaimedSteps, readTeamPlanFile, recordTeamPlanClaim, releaseTeamPlanLock, summarizeTeamPlan, tryAcquireTeamPlanLock, writeTeamPlanFile } from "./teamwork/team-plan.js";
 import { Vec3 } from "vec3";
 const { pathfinder, Movements } = pathfinderPkg;
 async function createBot() {
@@ -47,6 +48,8 @@ async function createBot() {
     const envEnableSafety = parseEnvBoolean(process.env.BOT_ENABLE_SAFETY);
     const teamPlanPath = path.resolve(process.cwd(), ".team-plan.json");
     const teamPlanLockPath = path.resolve(process.cwd(), ".team-plan.lock");
+    const coordinationPath = path.resolve(process.cwd(), ".team-coordination.json");
+    const coordinationLockPath = path.resolve(process.cwd(), ".team-coordination.lock");
     const teamPlanLeadGraceMs = 15000;
     if (!fs.existsSync(configPath) && !process.env.BOT_CONFIG) {
         try {
@@ -192,7 +195,13 @@ async function createBot() {
         let isPlanning = false;
         let nextPlanningAttempt = 0;
         let currentGoal = null;
-        const handlers = createDefaultActionHandlers();
+        const agentKey = envAgentId !== null ? `agent-${envAgentId}` : `agent-${bot.username}`;
+        const resourceLocks = new ResourceLockManager({
+            filePath: coordinationPath,
+            lockPath: coordinationLockPath,
+            owner: agentKey
+        });
+        const handlers = createDefaultActionHandlers({ resourceLocks });
         const executor = new ActionExecutor(bot, handlers, {
             logger: (entry) => {
                 reflection.record(entry);
@@ -214,13 +223,39 @@ async function createBot() {
         const unwireChat = wireChatBridge(bot, executor, { safety });
         const multiAgentSession = (envAgentCount ?? 1) > 1;
         let teamPlanLeadWaitStartedAt = null;
-        const agentKey = envAgentId !== null ? `agent-${envAgentId}` : `agent-${bot.username}`;
         const ensureTeamPlan = async (goal, snap, baseContext, scoutedOrigin) => {
             if (!multiAgentSession || !planner) {
                 return { plan: null, fallbackToIndividual: false };
             }
             const existing = readTeamPlanFile(teamPlanPath);
+            if (existing && existing.goal !== goal) {
+                console.log(`[planner] Goal changed from "${existing.goal}" to "${goal}", clearing team plan...`);
+                try {
+                    fs.unlinkSync(teamPlanPath);
+                }
+                catch { }
+                try {
+                    fs.unlinkSync(teamPlanLockPath);
+                }
+                catch { }
+            }
             if (isTeamPlanReady(existing, goal)) {
+                const allAgentsCompleted = existing.planning.mode === "agent-id"
+                    && existing.planning.completedAgentIds
+                    && existing.planning.agentCount
+                    && existing.planning.completedAgentIds.length >= existing.planning.agentCount;
+                if (allAgentsCompleted) {
+                    console.log("[planner] Team plan fully completed, clearing for new planning cycle...");
+                    try {
+                        fs.unlinkSync(teamPlanPath);
+                    }
+                    catch { }
+                    try {
+                        fs.unlinkSync(teamPlanLockPath);
+                    }
+                    catch { }
+                    return { plan: null, fallbackToIndividual: false };
+                }
                 return { plan: existing, fallbackToIndividual: false };
             }
             const currentPlan = existing;
@@ -236,6 +271,22 @@ async function createBot() {
                     return { plan: null, fallbackToIndividual: false };
                 }
             }
+            const leaderResult = resolveLeaderForGoal({
+                filePath: coordinationPath,
+                lockPath: coordinationLockPath,
+                goal,
+                candidate: {
+                    name: bot.username,
+                    role: roleManager.getRole(),
+                    agentId: envAgentId
+                }
+            });
+            if (!leaderResult) {
+                return { plan: null, fallbackToIndividual: false };
+            }
+            if (!leaderResult.isLeader) {
+                return { plan: null, fallbackToIndividual: false };
+            }
             if (!tryAcquireTeamPlanLock(teamPlanLockPath)) {
                 return { plan: null, fallbackToIndividual: false };
             }
@@ -243,9 +294,9 @@ async function createBot() {
                 const draft = initTeamPlanFile({
                     goal,
                     leader: {
-                        name: bot.username,
-                        role: roleManager.getRole(),
-                        agentId: envAgentId
+                        name: leaderResult.leader.name,
+                        role: leaderResult.leader.role,
+                        agentId: leaderResult.leader.agentId
                     },
                     agentCount: envAgentCount,
                     origin: scoutedOrigin
@@ -450,12 +501,14 @@ async function createBot() {
                             sessionLogger.warn("planner.scout.none", "No suitable build site found", { goal: currentGoal });
                         }
                     }
+                    console.log("[planner] Context prepared. Checking multi-agent session...");
                     let planningMode = "single";
                     let claimedSteps;
                     if (multiAgentSession) {
                         const teamPlanResult = await ensureTeamPlan(currentGoal, snap, context, site?.origin);
                         activeTeamPlan = teamPlanResult.plan;
                         if (!activeTeamPlan && !teamPlanResult.fallbackToIndividual) {
+                            console.log("[planner] Waiting for team plan availability...");
                             nextPlanningAttempt = Date.now() + 2000;
                             return;
                         }
@@ -467,6 +520,8 @@ async function createBot() {
                                 wroteTeamPlan = true;
                             }
                             if (!claimResult.allowed) {
+                                console.log("[planner] Waiting for my planning turn...");
+                                nextPlanningAttempt = Date.now() + 1000;
                                 return;
                             }
                             claimedTeamTurn = true;
@@ -475,6 +530,7 @@ async function createBot() {
                             context += " Coordinate with the shared team plan and respect assigned roles.";
                         }
                     }
+                    console.log("[planner] Calling createPlan...");
                     const plan = await planner.createPlan({
                         goal: currentGoal,
                         perception: snap,
@@ -484,6 +540,7 @@ async function createBot() {
                         claimedSteps,
                         planningMode
                     });
+                    console.log("[planner] createPlan returned.");
                     if (plan.knowledgeUsed && plan.knowledgeUsed.length > 0) {
                         console.log(`[planner] RAG injected ${plan.knowledgeUsed.length} recipes.`);
                         sessionLogger.info("planner.rag", "Recipes injected", { recipes: plan.knowledgeUsed });
@@ -493,7 +550,6 @@ async function createBot() {
                         sessionLogger.info("planner.rag", "No relevant recipes found for this goal");
                     }
                     console.log(`[planner] Plan generated! Intent: ${plan.intent}`);
-                    console.log(`[planner] Raw steps:`, plan.steps);
                     sessionLogger.info("planner.result", "Plan generated", { intent: plan.intent, steps: plan.steps, backend: plan.backend, model: plan.model });
                     if (plan.steps.length === 0) {
                         console.warn("[planner] Plan contained no steps; clearing goal.");
@@ -567,11 +623,25 @@ async function createBot() {
                     }
                 }
                 catch (error) {
-                    console.error(`[planner] Error generating plan:`, error);
-                    safeChat(bot, safety, "My brain hurts. I couldn't make a plan.", "planner.error");
-                    sessionLogger.error("planner.error", "Error generating plan", { error: error instanceof Error ? error.message : String(error) });
-                    const events = goalTracker.notifyEvent("planner.fatal_error", {});
-                    events.forEach(e => sessionLogger.info("goal.update", "Goal failed due to planner error", { ...e }));
+                    try {
+                        const errMsg = error instanceof Error ? error.message : String(error);
+                        console.error(`[planner] CRITICAL ERROR: ${errMsg}`);
+                        console.error(error);
+                        sessionLogger.error("planner.error", "Error generating plan", { error: errMsg });
+                        try {
+                            safeChat(bot, safety, "My brain hurts. I couldn't make a plan.", "planner.error");
+                        }
+                        catch (chatErr) {
+                            console.error("[planner] Failed to chat error message:", chatErr);
+                        }
+                        const events = goalTracker.notifyEvent("planner.fatal_error", {});
+                        events.forEach(e => sessionLogger.info("goal.update", "Goal failed due to planner error", { ...e }));
+                    }
+                    catch (loggingError) {
+                        console.error("[planner] DOUBLE FAULT: Error handler crashed:", loggingError);
+                    }
+                    nextPlanningAttempt = Date.now() + 5000;
+                    console.log("[planner] Backing off for 5 seconds...");
                 }
                 finally {
                     if (activeTeamPlan && claimedTeamTurn) {

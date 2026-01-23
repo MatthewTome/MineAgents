@@ -3,17 +3,18 @@ import { recordChestContents, listChestMemory } from "../perception/chest-memory
 import { moveToward, resolveTargetPosition, findNearestEntity, waitForNextTick, raceWithTimeout } from "./movement.js";
 import { executeBuild } from "./building/building.js";
 import { requireInventoryItem, ensureToolFor, expandMaterialAliases, resolveItemName, resolveWoodType } from "./utils.js";
-export function createDefaultActionHandlers() {
+export function createDefaultActionHandlers(options) {
+    const resourceLocks = options?.resourceLocks;
     return {
         move: handleMove,
         mine: handleMine,
-        gather: handleGather,
-        craft: handleCraft,
-        smelt: handleSmelt,
+        gather: (bot, step) => handleGather(bot, step, resourceLocks),
+        craft: (bot, step) => handleCraft(bot, step, resourceLocks),
+        smelt: (bot, step) => handleSmelt(bot, step, resourceLocks),
         build: handleBuild,
-        loot: handleLoot,
+        loot: (bot, step) => handleLoot(bot, step, resourceLocks),
         eat: handleEat,
-        smith: handleSmith,
+        smith: (bot, step) => handleSmith(bot, step, resourceLocks),
         hunt: handleHunt,
         fish: handleFish,
         fight: handleFight,
@@ -36,7 +37,7 @@ async function handlePerceive(bot, step) {
     console.log(`[bot] Perceiving: ${params?.check ?? "surroundings/inventory"}`);
     await waitForNextTick(bot);
 }
-async function handleSmelt(bot, step) {
+async function handleSmelt(bot, step, resourceLocks) {
     const params = (step.params ?? {});
     if (!params.item)
         throw new Error("Smelt requires item name");
@@ -63,25 +64,28 @@ async function handleSmelt(bot, step) {
     }
     if (!furnaceBlock)
         throw new Error("Failed to secure a furnace.");
-    await moveToward(bot, furnaceBlock.position, 3, 15000);
-    const furnace = await bot.openFurnace(furnaceBlock);
-    const fuel = bot.inventory.items().find(i => i.name.includes(fuelItem) || i.name.includes("wood") || i.name.includes("plank") || i.name.includes("coal"));
-    if (!fuel)
-        throw new Error(`No fuel found for smelting (looked for ${fuelItem} or wood)`);
-    await furnace.putFuel(fuel.type, null, fuel.count);
-    const input = bot.inventory.items().find(i => i.name.includes(rawItem));
-    if (!input)
-        throw new Error(`No input item ${rawItem} found to smelt`);
-    await furnace.putInput(input.type, null, input.count);
-    console.log("[smelt] Cooking... waiting 10s");
-    await new Promise(r => setTimeout(r, 10000));
-    try {
-        await furnace.takeOutput();
-    }
-    catch (e) { }
-    furnace.close();
+    const lockKey = buildLockKey("furnace", furnaceBlock.position);
+    await withResourceLock(resourceLocks, lockKey, async () => {
+        await moveToward(bot, furnaceBlock.position, 3, 15000);
+        const furnace = await bot.openFurnace(furnaceBlock);
+        const fuel = bot.inventory.items().find(i => i.name.includes(fuelItem) || i.name.includes("wood") || i.name.includes("plank") || i.name.includes("coal"));
+        if (!fuel)
+            throw new Error(`No fuel found for smelting (looked for ${fuelItem} or wood)`);
+        await furnace.putFuel(fuel.type, null, fuel.count);
+        const input = bot.inventory.items().find(i => i.name.includes(rawItem));
+        if (!input)
+            throw new Error(`No input item ${rawItem} found to smelt`);
+        await furnace.putInput(input.type, null, input.count);
+        console.log("[smelt] Cooking... waiting 10s");
+        await new Promise(r => setTimeout(r, 10000));
+        try {
+            await furnace.takeOutput();
+        }
+        catch (e) { }
+        furnace.close();
+    });
 }
-async function handleLoot(bot, step) {
+async function handleLoot(bot, step, resourceLocks) {
     const params = (step.params ?? {});
     const maxDistance = params.maxDistance ?? 16;
     const targetItem = params.item?.toLowerCase();
@@ -96,34 +100,37 @@ async function handleLoot(bot, step) {
     if (!chestBlock) {
         throw new Error("No chest found nearby.");
     }
-    await moveToward(bot, chestBlock.position, 2.5, 15000);
-    const chest = await bot.openContainer(chestBlock);
-    const items = chest.containerItems().map((item) => ({ name: item.name, count: item.count ?? 0 }));
-    recordChestContents(chestBlock.position, items);
-    if (targetItem) {
-        let remaining = targetCount;
-        const matching = chest.containerItems().filter((item) => item.name.toLowerCase().includes(targetItem));
-        for (const item of matching) {
-            const available = item.count ?? 0;
-            const toWithdraw = remaining > 0 ? Math.min(available, remaining) : available;
-            if (toWithdraw <= 0) {
-                continue;
-            }
-            try {
-                await chest.withdraw(item.type, null, toWithdraw);
-                if (remaining > 0) {
-                    remaining -= toWithdraw;
-                    if (remaining <= 0) {
-                        break;
+    const lockKey = buildLockKey("chest", chestBlock.position);
+    await withResourceLock(resourceLocks, lockKey, async () => {
+        await moveToward(bot, chestBlock.position, 2.5, 15000);
+        const chest = await bot.openContainer(chestBlock);
+        const items = chest.containerItems().map((item) => ({ name: item.name, count: item.count ?? 0 }));
+        recordChestContents(chestBlock.position, items);
+        if (targetItem) {
+            let remaining = targetCount;
+            const matching = chest.containerItems().filter((item) => item.name.toLowerCase().includes(targetItem));
+            for (const item of matching) {
+                const available = item.count ?? 0;
+                const toWithdraw = remaining > 0 ? Math.min(available, remaining) : available;
+                if (toWithdraw <= 0) {
+                    continue;
+                }
+                try {
+                    await chest.withdraw(item.type, null, toWithdraw);
+                    if (remaining > 0) {
+                        remaining -= toWithdraw;
+                        if (remaining <= 0) {
+                            break;
+                        }
                     }
                 }
-            }
-            catch (err) {
-                console.warn(`[loot] Failed to withdraw ${item.name}: ${err}`);
+                catch (err) {
+                    console.warn(`[loot] Failed to withdraw ${item.name}: ${err}`);
+                }
             }
         }
-    }
-    chest.close();
+        chest.close();
+    });
 }
 async function handleEat(bot, step) {
     const params = (step.params ?? {});
@@ -152,7 +159,7 @@ async function handleEat(bot, step) {
     await bot.equip(food, "hand");
     await bot.consume();
 }
-async function handleSmith(bot, step) {
+async function handleSmith(bot, step, resourceLocks) {
     const params = (step.params ?? {});
     if (!params.item1) {
         throw new Error("Smith requires item1");
@@ -167,17 +174,20 @@ async function handleSmith(bot, step) {
     }
     const item1 = requireInventoryItem(bot, params.item1);
     const item2 = params.item2 ? requireInventoryItem(bot, params.item2) : null;
-    await moveToward(bot, anvilBlock.position, 2.5, 15000);
-    const anvil = await bot.openAnvil(anvilBlock);
-    if (item2) {
-        await anvil.combine(item1, item2, params.name);
-    }
-    else {
-        await anvil.rename(item1, params.name ?? item1.name);
-    }
-    anvil.close();
+    const lockKey = buildLockKey("anvil", anvilBlock.position);
+    await withResourceLock(resourceLocks, lockKey, async () => {
+        await moveToward(bot, anvilBlock.position, 2.5, 15000);
+        const anvil = await bot.openAnvil(anvilBlock);
+        if (item2) {
+            await anvil.combine(item1, item2, params.name);
+        }
+        else {
+            await anvil.rename(item1, params.name ?? item1.name);
+        }
+        anvil.close();
+    });
 }
-async function handleCraft(bot, step) {
+async function handleCraft(bot, step, resourceLocks) {
     const params = (step.params ?? {});
     let itemName = params.recipe.toLowerCase();
     const count = params.count ?? 1;
@@ -196,29 +206,25 @@ async function handleCraft(bot, step) {
         console.log(`[craft] Already have ${existing.count} ${itemName}, skipping craft.`);
         return;
     }
-    const itemType = bot.registry.itemsByName[itemName];
-    if (!itemType && !itemName.includes("plank"))
-        throw new Error(`Unknown item name: ${itemName}`);
-    let recipeList = itemType ? bot.recipesFor(itemType.id, null, 1, false) : [];
-    let recipe = recipeList[0];
-    if (!recipe && itemName.includes("plank")) {
+    let itemType = bot.registry.itemsByName[itemName];
+    if (!itemType && itemName.includes("plank")) {
         const logItem = bot.inventory.items().find(i => i.name.endsWith("_log"));
-        if (logItem) {
-            const plankName = logItem.name.replace("_log", "_planks");
-            const pType = bot.registry.itemsByName[plankName];
-            if (pType) {
-                recipe = bot.recipesFor(pType.id, null, 1, false)[0];
-            }
-        }
-        if (!recipe) {
-            const oak = bot.registry.itemsByName['oak_planks'];
-            if (oak)
-                recipe = bot.recipesFor(oak.id, null, 1, false)[0];
+        const fallbackPlank = logItem ? logItem.name.replace("_log", "_planks") : "oak_planks";
+        itemType = bot.registry.itemsByName[fallbackPlank];
+        if (itemType) {
+            itemName = itemType.name ?? fallbackPlank;
         }
     }
-    if (!recipe)
+    if (!itemType) {
+        throw new Error(`Unknown item name: ${itemName}`);
+    }
+    const noTableRecipes = bot.recipesFor(itemType.id, null, 1, false);
+    const tableRecipes = bot.recipesFor(itemType.id, null, 1, true);
+    const recipe = noTableRecipes[0] ?? tableRecipes[0];
+    if (!recipe) {
         throw new Error(`No crafting recipe found for ${itemName} in Minecraft data.`);
-    const craftableRecipe = bot.recipesFor(itemType.id, null, 1, true)[0];
+    }
+    const craftableRecipe = bot.recipesFor(itemType.id, null, 1, true)[0] ?? recipe;
     if (!craftableRecipe) {
         const req = recipe.delta?.[0];
         throw new Error(`Insufficient ingredients to craft ${itemName}. Needs ingredients (e.g., ${req ? req.id : 'unknown'}).`);
@@ -255,14 +261,17 @@ async function handleCraft(bot, step) {
         }
         if (!tableBlock)
             throw new Error("Could not access crafting table.");
-        await moveToward(bot, tableBlock.position, 3, 15000);
-        await bot.craft(craftableRecipe, count, tableBlock);
+        const lockKey = buildLockKey("crafting_table", tableBlock.position);
+        await withResourceLock(resourceLocks, lockKey, async () => {
+            await moveToward(bot, tableBlock.position, 3, 15000);
+            await bot.craft(craftableRecipe, count, tableBlock);
+        });
     }
     else {
         await bot.craft(craftableRecipe, count, undefined);
     }
 }
-async function handleGather(bot, step) {
+async function handleGather(bot, step, resourceLocks) {
     const params = (step.params ?? {});
     const rawTarget = params.item?.toLowerCase();
     const targetItem = resolveItemName(rawTarget ?? "");
@@ -278,7 +287,7 @@ async function handleGather(bot, step) {
     const chests = listChestMemory().filter(c => c.status === "known" && c.items && c.items.some(i => i.name.includes(targetItem)));
     if (chests.length > 0) {
         console.log(`[gather] Found ${targetItem} in known chest at ${chests[0].position.x},${chests[0].position.y},${chests[0].position.z}`);
-        await handleLoot(bot, { params: { position: chests[0].position, item: targetItem } });
+        await handleLoot(bot, { params: { position: chests[0].position, item: targetItem } }, resourceLocks);
         const nowHas = bot.inventory.items().find(i => i.name.toLowerCase().includes(targetItem));
         if (nowHas) {
             console.log(`[gather] Retrieved ${targetItem} from chest.`);
@@ -286,7 +295,7 @@ async function handleGather(bot, step) {
         }
     }
     try {
-        await handleLoot(bot, { params: { maxDistance, item: targetItem } });
+        await handleLoot(bot, { params: { maxDistance, item: targetItem } }, resourceLocks);
         const looted = bot.inventory.items().find(i => i.name.toLowerCase().includes(targetItem));
         if (looted) {
             console.log(`[gather] Looted ${targetItem} from a nearby chest.`);
@@ -359,8 +368,8 @@ async function handleGather(bot, step) {
         const raw = resolveProductToRaw(targetItem);
         if (raw) {
             console.log(`[gather] Producing ${targetItem} from ${raw}...`);
-            await handleGather(bot, { params: { item: raw, timeoutMs: timeout / 2 } });
-            await handleCraft(bot, { params: { recipe: targetItem } });
+            await handleGather(bot, { params: { item: raw, timeoutMs: timeout / 2 } }, resourceLocks);
+            await handleCraft(bot, { params: { recipe: targetItem } }, resourceLocks);
             return;
         }
         console.log(`[gather] Searching...`);
@@ -370,6 +379,27 @@ async function handleGather(bot, step) {
         await waitForNextTick(bot);
     }
     throw new Error(`Gather ${targetItem} failed.`);
+}
+async function withResourceLock(resourceLocks, resourceKey, action) {
+    if (!resourceLocks || !resourceKey) {
+        return action();
+    }
+    const acquired = await resourceLocks.acquire(resourceKey);
+    if (!acquired) {
+        throw new Error(`Resource locked: ${resourceKey}`);
+    }
+    try {
+        return await action();
+    }
+    finally {
+        resourceLocks.release(resourceKey);
+    }
+}
+function buildLockKey(resourceType, position) {
+    if (!position) {
+        return null;
+    }
+    return `${resourceType}:${position.toString()}`;
 }
 async function handleMine(bot, step) {
     const params = (step.params ?? {});

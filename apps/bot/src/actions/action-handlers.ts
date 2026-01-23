@@ -280,29 +280,29 @@ async function handleCraft(bot: Bot, step: { params?: Record<string, unknown> },
         return;
     }
 
-    const itemType = bot.registry.itemsByName[itemName];
-    if (!itemType && !itemName.includes("plank")) throw new Error(`Unknown item name: ${itemName}`);
-
-    let recipeList = itemType ? bot.recipesFor(itemType.id, null, 1, false) : [];
-    
-    let recipe = recipeList[0];
-    if (!recipe && itemName.includes("plank")) {
+    let itemType = bot.registry.itemsByName[itemName];
+    if (!itemType && itemName.includes("plank")) {
         const logItem = bot.inventory.items().find(i => i.name.endsWith("_log"));
-        if (logItem) {
-            const plankName = logItem.name.replace("_log", "_planks");
-            const pType = bot.registry.itemsByName[plankName];
-            if (pType) { recipe = bot.recipesFor(pType.id, null, 1, false)[0];}
-        }
-         
-        if (!recipe) {
-            const oak = bot.registry.itemsByName['oak_planks'];
-            if (oak) recipe = bot.recipesFor(oak.id, null, 1, false)[0];
+        const fallbackPlank = logItem ? logItem.name.replace("_log", "_planks") : "oak_planks";
+        itemType = bot.registry.itemsByName[fallbackPlank];
+        if (itemType) {
+            itemName = itemType.name ?? fallbackPlank;
         }
     }
 
-    if (!recipe) throw new Error(`No crafting recipe found for ${itemName} in Minecraft data.`);
+    if (!itemType) {
+        throw new Error(`Unknown item name: ${itemName}`);
+    }
 
-    const craftableRecipe = bot.recipesFor(itemType.id, null, 1, true)[0];
+    const noTableRecipes = bot.recipesFor(itemType.id, null, 1, false);
+    const tableRecipes = bot.recipesFor(itemType.id, null, 1, true);
+    const recipe = noTableRecipes[0] ?? tableRecipes[0];
+
+    if (!recipe) {
+        throw new Error(`No crafting recipe found for ${itemName} in Minecraft data.`);
+    }
+
+    const craftableRecipe = bot.recipesFor(itemType.id, null, 1, true)[0] ?? recipe;
 
     if (!craftableRecipe) {
         const req = recipe.delta?.[0];

@@ -293,7 +293,31 @@ async function createBot()
             if (!multiAgentSession || !planner) { return { plan: null, fallbackToIndividual: false }; }
 
             const existing = readTeamPlanFile(teamPlanPath);
-            if (isTeamPlanReady(existing, goal)) { return { plan: existing, fallbackToIndividual: false }; }
+
+            if (existing && existing.goal !== goal)
+            {
+                console.log(`[planner] Goal changed from "${existing.goal}" to "${goal}", clearing team plan...`);
+                try { fs.unlinkSync(teamPlanPath); } catch {}
+                try { fs.unlinkSync(teamPlanLockPath); } catch {}
+            }
+
+            if (isTeamPlanReady(existing, goal))
+            {
+                const allAgentsCompleted = existing.planning.mode === "agent-id"
+                    && existing.planning.completedAgentIds
+                    && existing.planning.agentCount
+                    && existing.planning.completedAgentIds.length >= existing.planning.agentCount;
+
+                if (allAgentsCompleted)
+                {
+                    console.log("[planner] Team plan fully completed, clearing for new planning cycle...");
+                    try { fs.unlinkSync(teamPlanPath); } catch {}
+                    try { fs.unlinkSync(teamPlanLockPath); } catch {}
+                    return { plan: null, fallbackToIndividual: false };
+                }
+
+                return { plan: existing, fallbackToIndividual: false };
+            }
 
             const currentPlan = existing as TeamPlanFile | null;
 
@@ -587,6 +611,8 @@ async function createBot()
                         }
                     }
 
+                    console.log("[planner] Context prepared. Checking multi-agent session...");
+
                     let planningMode: "single" | "individual" = "single";
                     let claimedSteps: string[] | undefined;
                     if (multiAgentSession)
@@ -601,6 +627,7 @@ async function createBot()
 
                         if (!activeTeamPlan && !teamPlanResult.fallbackToIndividual)
                         {
+                            console.log("[planner] Waiting for team plan availability...");
                             nextPlanningAttempt = Date.now() + 2000; 
                             return;
                         }
@@ -616,6 +643,8 @@ async function createBot()
                             }
                             if (!claimResult.allowed)
                             {
+                                console.log("[planner] Waiting for my planning turn...");
+                                nextPlanningAttempt = Date.now() + 1000;
                                 return;
                             }
                             claimedTeamTurn = true;
@@ -625,6 +654,7 @@ async function createBot()
                         }
                     }
 
+                    console.log("[planner] Calling createPlan...");
                     const plan = await planner.createPlan({
                         goal: currentGoal,
                         perception: snap,
@@ -634,6 +664,7 @@ async function createBot()
                         claimedSteps,
                         planningMode
                     });
+                    console.log("[planner] createPlan returned.");
 
                     if (plan.knowledgeUsed && plan.knowledgeUsed.length > 0)
                     {
@@ -647,7 +678,6 @@ async function createBot()
                     }
 
                     console.log(`[planner] Plan generated! Intent: ${plan.intent}`);
-                    console.log(`[planner] Raw steps:`, plan.steps);
                     sessionLogger.info("planner.result", "Plan generated", { intent: plan.intent, steps: plan.steps, backend: plan.backend, model: plan.model });
 
                     if (plan.steps.length === 0)
@@ -738,12 +768,27 @@ async function createBot()
                         }
                     }
                 } catch (error) {
-                    console.error(`[planner] Error generating plan:`, error);
-                    safeChat(bot, safety, "My brain hurts. I couldn't make a plan.", "planner.error");
-                    sessionLogger.error("planner.error", "Error generating plan", { error: error instanceof Error ? error.message : String(error) });
+                    try {
+                        const errMsg = error instanceof Error ? error.message : String(error);
+                        console.error(`[planner] CRITICAL ERROR: ${errMsg}`);
+                        console.error(error); 
+                        
+                        sessionLogger.error("planner.error", "Error generating plan", { error: errMsg });
+                        
+                        try {
+                            safeChat(bot, safety, "My brain hurts. I couldn't make a plan.", "planner.error");
+                        } catch (chatErr) {
+                            console.error("[planner] Failed to chat error message:", chatErr);
+                        }
+                        
+                        const events = goalTracker.notifyEvent("planner.fatal_error", {});
+                        events.forEach(e => sessionLogger.info("goal.update", "Goal failed due to planner error", { ...e }));
+                    } catch (loggingError) {
+                        console.error("[planner] DOUBLE FAULT: Error handler crashed:", loggingError);
+                    }
                     
-                    const events = goalTracker.notifyEvent("planner.fatal_error", {});
-                    events.forEach(e => sessionLogger.info("goal.update", "Goal failed due to planner error", { ...e }));
+                    nextPlanningAttempt = Date.now() + 5000;
+                    console.log("[planner] Backing off for 5 seconds...");
                 } finally {
                     if (activeTeamPlan && claimedTeamTurn)
                     {
