@@ -1,8 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import readline from "node:readline";
 import { exec, execSync } from "node:child_process";
 import { dump as dumpYaml } from "js-yaml";
+import { createRoster, writeRoster } from "../teamwork/roster.js";
 const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
@@ -37,7 +39,7 @@ async function main() {
     const nameStrategy = await ask("Would you like to customize your agent names? (1: Auto-assign them for me, 2: Customize each)", "1");
     const roleStrategy = await ask("Would like to customize your agent roles? (1: Auto-assign them for me, 2: Customize each)", "1");
     const agents = [];
-    const roles = ["miner", "builder", "guide", "guard"];
+    const roles = ["gatherer", "builder", "supervisor", "guard"];
     for (let i = 0; i < count; i++) {
         const index = i + 1;
         let name = `MineAgent${index}`;
@@ -46,7 +48,7 @@ async function main() {
             name = await ask(`Name for Agent ${index}`, name);
         }
         if (roleStrategy === "2") {
-            role = await ask(`Role for ${name} (miner/builder/guide/guard/generalist)`, role);
+            role = await ask(`Role for ${name} (gatherer/builder/supervisor/guard/generalist)`, role);
         }
         const configDir = path.join(process.cwd(), "config", "generated");
         if (!fs.existsSync(configDir))
@@ -79,6 +81,21 @@ async function main() {
     catch (e) {
         console.error("[Launcher] Build failed. Please check errors above.");
         process.exit(1);
+    }
+    if (count > 1) {
+        const __dirname = path.dirname(fileURLToPath(import.meta.url));
+        const coordinationDir = path.resolve(__dirname, "..", "teamwork", ".data");
+        if (!fs.existsSync(coordinationDir)) {
+            fs.mkdirSync(coordinationDir, { recursive: true });
+        }
+        const rosterPath = path.join(coordinationDir, "roster.json");
+        const roster = createRoster(agents.map((a, i) => ({
+            name: a.name,
+            agentId: i + 1,
+            role: a.role
+        })));
+        writeRoster(rosterPath, roster);
+        console.log(`[Launcher] Team roster created: ${count} agents`);
     }
     console.log("\n" + "=".repeat(50));
     console.log(`Launching ${count} agents in separate windows...`);

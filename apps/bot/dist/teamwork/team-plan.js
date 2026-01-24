@@ -35,19 +35,26 @@ export function releaseTeamPlanLock(lockPath) {
 }
 export function initTeamPlanFile(options) {
     const now = new Date().toISOString();
-    const planning = options.agentCount && options.agentCount > 1 && options.leader.agentId !== null
+    const useSupervisorMode = options.leader.role === "supervisor" && options.agentCount && options.agentCount > 1;
+    const planning = useSupervisorMode
         ? {
-            mode: "agent-id",
-            agentCount: options.agentCount,
-            currentAgentId: 1,
+            mode: "supervisor-assigned",
+            agentCount: options.agentCount ?? undefined,
             completedAgentIds: []
         }
-        : {
-            mode: "name-lock",
-            owner: null,
-            ownerSince: null,
-            completedOwners: []
-        };
+        : options.agentCount && options.agentCount > 1 && options.leader.agentId !== null
+            ? {
+                mode: "agent-id",
+                agentCount: options.agentCount,
+                currentAgentId: 1,
+                completedAgentIds: []
+            }
+            : {
+                mode: "name-lock",
+                owner: null,
+                ownerSince: null,
+                completedOwners: []
+            };
     return {
         goal: options.goal,
         status: "drafting",
@@ -57,6 +64,7 @@ export function initTeamPlanFile(options) {
         teamPlan: null,
         planning,
         claims: {},
+        assignments: useSupervisorMode ? {} : undefined,
         sharedOrigin: options.origin
     };
 }
@@ -65,6 +73,17 @@ export function isTeamPlanReady(plan, goal) {
 }
 export function claimPlanningTurn(plan, agentKey, agentId) {
     const updated = { ...plan, planning: { ...plan.planning } };
+    if (updated.planning.mode === "supervisor-assigned") {
+        if (agentId === null) {
+            return { plan: updated, allowed: false };
+        }
+        const completed = updated.planning.completedAgentIds ?? [];
+        if (completed.includes(agentId)) {
+            return { plan: updated, allowed: false };
+        }
+        const hasAssignedSteps = (updated.assignments?.[agentKey]?.length ?? 0) > 0;
+        return { plan: updated, allowed: hasAssignedSteps };
+    }
     if (updated.planning.mode === "agent-id") {
         if (agentId === null || updated.planning.currentAgentId === undefined) {
             return { plan: updated, allowed: false };

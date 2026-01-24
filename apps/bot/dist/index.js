@@ -2,6 +2,7 @@ import "dotenv/config";
 import mineflayer from "mineflayer";
 import path from "node:path";
 import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 import minecraftData from "minecraft-data";
 import pathfinderPkg from "mineflayer-pathfinder";
 import { plugin as movementPlugin } from "mineflayer-movement";
@@ -25,6 +26,8 @@ import { MentorProtocol } from "./teamwork/mentor-protocol.js";
 import { RoleManager, resolveRole, listRoleNames } from "./teamwork/roles.js";
 import { ResourceLockManager, resolveLeaderForGoal } from "./teamwork/coordination.js";
 import { advancePlanningTurn, claimPlanningTurn, initTeamPlanFile, isTeamPlanReady, listClaimedSteps, readTeamPlanFile, recordTeamPlanClaim, releaseTeamPlanLock, summarizeTeamPlan, tryAcquireTeamPlanLock, writeTeamPlanFile } from "./teamwork/team-plan.js";
+import { readRoster, validateRoster } from "./teamwork/roster.js";
+import { assignStepsToAgents } from "./teamwork/step-assignment.js";
 import { Vec3 } from "vec3";
 const { pathfinder, Movements } = pathfinderPkg;
 async function createBot() {
@@ -46,10 +49,16 @@ async function createBot() {
     const envEnableRag = parseEnvBoolean(process.env.BOT_ENABLE_RAG);
     const envEnableNarration = parseEnvBoolean(process.env.BOT_ENABLE_NARRATION);
     const envEnableSafety = parseEnvBoolean(process.env.BOT_ENABLE_SAFETY);
-    const teamPlanPath = path.resolve(process.cwd(), ".team-plan.json");
-    const teamPlanLockPath = path.resolve(process.cwd(), ".team-plan.lock");
-    const coordinationPath = path.resolve(process.cwd(), ".team-coordination.json");
-    const coordinationLockPath = path.resolve(process.cwd(), ".team-coordination.lock");
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    const coordinationDir = path.resolve(__dirname, "teamwork", ".data");
+    if (!fs.existsSync(coordinationDir)) {
+        fs.mkdirSync(coordinationDir, { recursive: true });
+    }
+    const teamPlanPath = path.join(coordinationDir, "team-plan.json");
+    const teamPlanLockPath = path.join(coordinationDir, "team-plan.lock");
+    const coordinationPath = path.join(coordinationDir, "coordination.json");
+    const coordinationLockPath = path.join(coordinationDir, "coordination.lock");
+    const rosterPath = path.join(coordinationDir, "roster.json");
     const teamPlanLeadGraceMs = 15000;
     if (!fs.existsSync(configPath) && !process.env.BOT_CONFIG) {
         try {
@@ -78,7 +87,7 @@ async function createBot() {
         narrationEnabled: envEnableNarration ?? cfg.features.narrationEnabled,
         safetyEnabled: envEnableSafety ?? cfg.features.safetyEnabled
     };
-    const role = envRole ?? cfg.agent.role ?? "generalist";
+    const role = envRole ?? resolveRole(cfg.agent.role) ?? "generalist";
     const mentorMode = envMentorMode ?? cfg.agent.mentor.mode ?? "none";
     const mentorTarget = envMentorTarget ?? cfg.agent.mentor.target;
     sessionLogger.info("startup", "MineAgent starting", {
@@ -262,7 +271,7 @@ async function createBot() {
             if (currentPlan && currentPlan.goal === goal && currentPlan.status === "drafting") {
                 return { plan: null, fallbackToIndividual: false };
             }
-            const isPreferredLead = roleManager.getRole() === "guide";
+            const isPreferredLead = roleManager.getRole() === "supervisor";
             if (!isPreferredLead) {
                 if (!teamPlanLeadWaitStartedAt || currentPlan?.goal !== goal) {
                     teamPlanLeadWaitStartedAt = Date.now();
@@ -291,6 +300,16 @@ async function createBot() {
                 return { plan: null, fallbackToIndividual: false };
             }
             try {
+                if (roleManager.getRole() === "supervisor") {
+                    const roster = readRoster(rosterPath);
+                    const expectedCount = envAgentCount ?? 1;
+                    if (!validateRoster(roster, expectedCount)) {
+                        console.warn("[planner] Team roster validation failed or missing");
+                    }
+                    else if (roster) {
+                        console.log("[planner] Team roster validated:", roster.agents.length, "agents");
+                    }
+                }
                 const draft = initTeamPlanFile({
                     goal,
                     leader: {
@@ -312,12 +331,26 @@ async function createBot() {
                     planningMode: "team"
                 });
                 const resolvedTeamPlan = plan.teamPlan ?? { intent: plan.intent, steps: plan.steps };
-                const readyPlan = {
+                let readyPlan = {
                     ...draft,
                     status: "ready",
                     teamPlan: resolvedTeamPlan,
                     updatedAt: new Date().toISOString()
                 };
+                if (draft.planning.mode === "supervisor-assigned" && resolvedTeamPlan) {
+                    const roster = readRoster(rosterPath);
+                    if (roster) {
+                        const steps = resolvedTeamPlan.steps;
+                        if (Array.isArray(steps)) {
+                            const { assignments, unassigned } = assignStepsToAgents(steps, roster);
+                            if (unassigned.length > 0) {
+                                console.warn(`[planner] Warning: ${unassigned.length} steps could not be assigned:`, unassigned);
+                            }
+                            readyPlan.assignments = assignments;
+                            console.log("[planner] Supervisor assigned steps:", assignments);
+                        }
+                    }
+                }
                 writeTeamPlanFile(teamPlanPath, readyPlan);
                 safeChat(bot, safety, summarizeTeamPlan(readyPlan), "team.plan.ready");
                 return { plan: readyPlan, fallbackToIndividual: false };
@@ -504,30 +537,40 @@ async function createBot() {
                     console.log("[planner] Context prepared. Checking multi-agent session...");
                     let planningMode = "single";
                     let claimedSteps;
+                    let assignedSteps;
                     if (multiAgentSession) {
                         const teamPlanResult = await ensureTeamPlan(currentGoal, snap, context, site?.origin);
                         activeTeamPlan = teamPlanResult.plan;
                         if (!activeTeamPlan && !teamPlanResult.fallbackToIndividual) {
                             console.log("[planner] Waiting for team plan availability...");
-                            nextPlanningAttempt = Date.now() + 2000;
+                            nextPlanningAttempt = Date.now() + 500;
                             return;
                         }
                         if (activeTeamPlan) {
-                            const claimResult = claimPlanningTurn(activeTeamPlan, agentKey, envAgentId);
-                            activeTeamPlan = claimResult.plan;
-                            if (activeTeamPlan.planning.mode === "name-lock") {
-                                writeTeamPlanFile(teamPlanPath, activeTeamPlan);
-                                wroteTeamPlan = true;
+                            if (activeTeamPlan.planning.mode === "supervisor-assigned") {
+                                claimedTeamTurn = false;
+                                planningMode = "individual";
+                                assignedSteps = activeTeamPlan.assignments?.[agentKey] ?? [];
+                                console.log(`[planner] My assigned steps:`, assignedSteps);
+                                context += " Execute your assigned tasks from the supervisor.";
                             }
-                            if (!claimResult.allowed) {
-                                console.log("[planner] Waiting for my planning turn...");
-                                nextPlanningAttempt = Date.now() + 1000;
-                                return;
+                            else {
+                                const claimResult = claimPlanningTurn(activeTeamPlan, agentKey, envAgentId);
+                                activeTeamPlan = claimResult.plan;
+                                if (activeTeamPlan.planning.mode === "name-lock") {
+                                    writeTeamPlanFile(teamPlanPath, activeTeamPlan);
+                                    wroteTeamPlan = true;
+                                }
+                                if (!claimResult.allowed) {
+                                    console.log("[planner] Waiting for my planning turn...");
+                                    nextPlanningAttempt = Date.now() + 1000;
+                                    return;
+                                }
+                                claimedTeamTurn = true;
+                                planningMode = "individual";
+                                claimedSteps = listClaimedSteps(activeTeamPlan);
+                                context += " Coordinate with the shared team plan and respect assigned roles.";
                             }
-                            claimedTeamTurn = true;
-                            planningMode = "individual";
-                            claimedSteps = listClaimedSteps(activeTeamPlan);
-                            context += " Coordinate with the shared team plan and respect assigned roles.";
                         }
                     }
                     console.log("[planner] Calling createPlan...");
@@ -538,6 +581,7 @@ async function createBot() {
                         ragEnabled: features.ragEnabled,
                         teamPlan: activeTeamPlan?.teamPlan ?? undefined,
                         claimedSteps,
+                        assignedSteps,
                         planningMode
                     });
                     console.log("[planner] createPlan returned.");
@@ -559,7 +603,30 @@ async function createBot() {
                     }
                     else {
                         if (activeTeamPlan) {
-                            const claimIds = plan.claimedStepIds ?? [];
+                            let claimIds = plan.claimedStepIds ?? [];
+                            if (activeTeamPlan.planning.mode === "supervisor-assigned") {
+                                const assignedRaw = activeTeamPlan.assignments?.[agentKey] ?? [];
+                                const assigned = assignedRaw.map((id) => String(id));
+                                const invalidClaims = claimIds.filter(id => !assigned.includes(String(id)));
+                                if (invalidClaims.length > 0) {
+                                    console.error(`[planner] ERROR: Agent tried to claim non-assigned steps:`, invalidClaims);
+                                    console.error(`[planner] Assigned steps were:`, assigned);
+                                    claimIds = claimIds.filter(id => assigned.includes(String(id)));
+                                }
+                                const originalStepCount = plan.steps.length;
+                                plan.steps = plan.steps.filter(step => step.action === "chat" || assigned.includes(String(step.id)));
+                                const filteredCount = originalStepCount - plan.steps.length;
+                                if (filteredCount > 0) {
+                                    console.warn(`[planner] ENFORCED: Filtered out ${filteredCount} non-assigned steps from execution`);
+                                    sessionLogger.warn("planner.assignment.enforced", "Filtered non-assigned steps", {
+                                        agent: agentKey,
+                                        assigned,
+                                        originalCount: originalStepCount,
+                                        filteredCount,
+                                        remainingSteps: plan.steps.map(s => s.id)
+                                    });
+                                }
+                            }
                             const claimSummary = claimIds.length > 0 ? claimIds.join(", ") : "support tasks";
                             const claimMessage = `[team] ${bot.username} (${roleManager.getRole()}) claiming: ${claimSummary}`;
                             const hasClaimChat = plan.steps.some(step => step.action === "chat" &&
@@ -644,7 +711,7 @@ async function createBot() {
                     console.log("[planner] Backing off for 5 seconds...");
                 }
                 finally {
-                    if (activeTeamPlan && claimedTeamTurn) {
+                    if (activeTeamPlan && claimedTeamTurn && activeTeamPlan.planning.mode !== "supervisor-assigned") {
                         const advanced = advancePlanningTurn(activeTeamPlan, agentKey, envAgentId);
                         writeTeamPlanFile(teamPlanPath, advanced);
                         wroteTeamPlan = true;

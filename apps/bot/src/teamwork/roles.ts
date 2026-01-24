@@ -1,7 +1,7 @@
 export type AgentRole =
-    | "miner"
+    | "gatherer"
     | "builder"
-    | "guide"
+    | "supervisor"
     | "guard"
     | "generalist";
 
@@ -18,26 +18,26 @@ export interface RoleDefinition
 
 const ROLE_DEFINITIONS: Record<AgentRole, RoleDefinition> =
 {
-    miner: {
-        id: "miner",
-        label: "Miner",
-        description: "Prioritize resource gathering, mining, and tool upgrades.",
-        planningFocus: "Gather ore, keep tools ready, and maintain a safe inventory buffer.",
-        mentoringFocus: "Share efficient mining routes, tool progression, and safety tips."
+    gatherer: {
+        id: "gatherer",
+        label: "Gatherer",
+        description: "Always ready to gather supplies and provide them to the team.",
+        planningFocus: "Continuously monitor team needs, gather resources proactively, maintain inventory buffer.",
+        mentoringFocus: "Share efficient gathering routes, resource locations, and inventory management."
     },
     builder: {
         id: "builder",
         label: "Builder",
-        description: "Focus on shelter construction, crafting, and base improvements.",
-        planningFocus: "Select build sites, gather materials, and complete structures.",
+        description: "Always working on construction when tasks are available.",
+        planningFocus: "Execute building tasks continuously, request materials as needed, complete structures efficiently.",
         mentoringFocus: "Offer building sequences, material lists, and layout tips."
     },
-    guide: {
-        id: "guide",
-        label: "Guide",
-        description: "Coordinate tasks, provide instructions, and support teammates.",
-        planningFocus: "Explain next steps clearly and watch overall progress.",
-        mentoringFocus: "Give concise, actionable advice tailored to the learner."
+    supervisor: {
+        id: "supervisor",
+        label: "Supervisor",
+        description: "Coordinates team, assigns work, stays out of the way to avoid interfering with labor.",
+        planningFocus: "Create comprehensive team plans, assign tasks based on roles, monitor progress from safe distance.",
+        mentoringFocus: "Provide strategic guidance, coordinate team efforts, delegate effectively."
     },
     guard: {
         id: "guard",
@@ -57,11 +57,15 @@ const ROLE_DEFINITIONS: Record<AgentRole, RoleDefinition> =
 
 const ROLE_ALIASES: Record<string, AgentRole> =
 {
-    miner: "miner",
+    gatherer: "gatherer",
+    supervisor: "supervisor",
     builder: "builder",
-    guide: "guide",
     guard: "guard",
     generalist: "generalist",
+
+    miner: "gatherer",
+    guide: "supervisor",
+
     default: "generalist",
     general: "generalist",
     helper: "generalist"

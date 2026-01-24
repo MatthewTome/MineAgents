@@ -11,6 +11,7 @@ export interface PlanRequest
     ragEnabled?: boolean;
     teamPlan?: unknown;
     claimedSteps?: string[];
+    assignedSteps?: string[];
     planningMode?: "single" | "team" | "individual";
 }
 
@@ -291,15 +292,27 @@ export class HuggingFacePlanner
             ? `\nAlready claimed step ids: ${request.claimedSteps.join(", ")}\n`
             : "";
 
+        const assignedStepsSection = request.assignedSteps && request.assignedSteps.length > 0
+            ? `\nSTEPS ASSIGNED TO YOU: ${request.assignedSteps.join(", ")}\n`
+            : "";
+
         const planningModeRules = planningMode === "team"
             ? [
                 "TEAM PLAN MODE:",
                 "- You are the team lead. Output JSON with team_plan describing the full team plan.",
-                "- team_plan must include intent and steps. Each step must include a unique id and owner_role (miner|builder|guide|guard|generalist).",
+                "- team_plan must include intent and steps. Each step must include a unique id and owner_role (gatherer|builder|supervisor|guard|generalist).",
                 "- Also include individual_plan with a brief intent and a chat announcement summarizing the team plan.",
                 "- Keep step descriptions concise and actionable."
             ].join("\n")
-            : request.teamPlan
+            : request.assignedSteps && request.assignedSteps.length > 0
+                ? [
+                    "SUPERVISOR-ASSIGNED MODE:",
+                    "- The supervisor has assigned specific steps to you.",
+                    "- You may ONLY claim and execute the assigned step IDs.",
+                    "- Return JSON with intent, steps, and claim_ids (must match your assigned steps).",
+                    "- Do NOT claim steps assigned to other agents."
+                ].join("\n")
+                : request.teamPlan
                 ? [
                     "TEAM EXECUTION MODE:",
                     "- Use the TEAM PLAN above to choose only steps that match your role and are not already claimed.",
@@ -317,6 +330,7 @@ export class HuggingFacePlanner
             knowledgeSection,
             teamPlanSection,
             claimedStepsSection,
+            assignedStepsSection,
             "CRITICAL RULES:",
             "1. For multi-part builds (house, base), you MUST pick a specific coordinate (e.g. x:0, y:63, z:0) and use it as the 'origin' for EVERY build step (platform, walls, roof). Do NOT omit the origin.",
             "2. If context includes a scouted build site, use its origin for build steps and move there before building.",

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { load as loadYaml, YAMLException } from "js-yaml";
 import { z } from "zod";
+import { resolveRole } from "../teamwork/roles.js";
 export class ConfigError extends Error {
     line;
     field;
@@ -73,7 +74,15 @@ const configSchema = z.object({
         }).default({})
     }).default({}),
     agent: z.object({
-        role: z.enum(["miner", "builder", "guide", "guard", "generalist"]).default("generalist"),
+        role: z.enum(["gatherer", "builder", "supervisor", "guard", "generalist", "miner", "guide"])
+            .default("generalist")
+            .transform((val) => {
+            const resolved = resolveRole(val);
+            if (!resolved) {
+                throw new Error(`Invalid role: ${val}`);
+            }
+            return resolved;
+        }),
         mentor: z.object({
             mode: z.enum(["none", "teacher", "learner"]).default("none"),
             target: z.string().optional(),

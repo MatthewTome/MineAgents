@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { load as loadYaml, YAMLException } from "js-yaml";
 import { z } from "zod";
+import { resolveRole, type AgentRole } from "../teamwork/roles.js";
 
 export interface BotConfig
 {
@@ -34,7 +35,7 @@ export interface BotConfig
     };
     agent:
     {
-        role: "miner" | "builder" | "guide" | "guard" | "generalist";
+        role: "gatherer" | "builder" | "supervisor" | "guard" | "generalist";
         mentor:
         {
             mode: "none" | "teacher" | "learner";
@@ -134,7 +135,15 @@ const configSchema = z.object(
     }).default({}),
     agent: z.object(
     {
-        role: z.enum(["miner", "builder", "guide", "guard", "generalist"]).default("generalist"),
+        role: z.enum(["gatherer", "builder", "supervisor", "guard", "generalist", "miner", "guide"])
+            .default("generalist")
+            .transform((val): AgentRole => {
+                const resolved = resolveRole(val);
+                if (!resolved) {
+                    throw new Error(`Invalid role: ${val}`);
+                }
+                return resolved;
+            }),
         mentor: z.object(
         {
             mode: z.enum(["none", "teacher", "learner"]).default("none"),

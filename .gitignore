@@ -406,5 +406,6 @@ logs
 .env
 /extras
 /apps/bot/config/
-.team-plan.json
-.team-plan.lock
+
+# MineAgents coordination files (temporary runtime data)
+apps/bot/src/teamwork/.data/
