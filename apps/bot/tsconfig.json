@@ -1,23 +1,16 @@
 {
-  "compilerOptions":
-  {
-    "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "outDir": "dist",
-    "types": ["node"]
+  "extends": "./tsconfig.build.json",
+  "compilerOptions": {
+    "noEmit": true
   },
   "include": [
     "src",
+    "tests",
     "src/**/*.ts",
-    "src/types/**/*.d.ts"
+    "tests/**/*.ts"
   ],
   "exclude": [
     "node_modules",
-    "dist",
-    "tests"
+    "dist"
   ]
 }

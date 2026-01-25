@@ -41,7 +41,11 @@ const SUPPORTED_ACTIONS: Record<string, string> =
     smith: "Use an anvil to combine or rename items. params: { item1: string, item2?: string, name?: string }",
     hunt: "Hunt mob.",
     fight: "Fight mob.",
-    fish: "Fish."
+    fish: "Fish.",
+    give: "Give items to a teammate. params: { target: string, item: string, count?: number, method?: 'drop'|'chest' }",
+    drop: "Drop items on ground. params: { item?: string, count?: number } - use item:'all' to drop everything",
+    requestResource: "Request items from team via chat. params: { item: string, count?: number, urgent?: boolean }",
+    pickup: "Pick up nearby dropped items. params: { item?: string }"
 };
 
 export interface HuggingFacePlannerOptions
@@ -71,7 +75,7 @@ export class HuggingFacePlanner
     {
         this.options =
         {
-            model: options?.model ?? "onnx-community/Qwen2.5-0.5B-Instruct",
+            model: options?.model ?? "ServiceNow-AI/Apriel-1.6-15b-Thinker:together",
             temperature: options?.temperature ?? 0.2,
             maxTokens: options?.maxTokens ?? 2000,
             cacheDir: options?.cacheDir,

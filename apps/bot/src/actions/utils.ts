@@ -68,13 +68,77 @@ export async function ensureToolFor(bot: Bot, block: Block): Promise<void>
     throw new Error("Tool plugin unavailable for equipping tools");
 }
 
-export function resolveItemName(name: string): string 
+const GENERIC_ITEM_CATEGORIES: Record<string, string[]> = {
+    "log": ["oak_log", "spruce_log", "birch_log", "jungle_log", "acacia_log", "dark_oak_log", "mangrove_log", "cherry_log", "pale_oak_log"],
+    "wood": ["oak_log", "spruce_log", "birch_log", "jungle_log", "acacia_log", "dark_oak_log", "mangrove_log", "cherry_log", "pale_oak_log"],
+    "planks": ["oak_planks", "spruce_planks", "birch_planks", "jungle_planks", "acacia_planks", "dark_oak_planks", "mangrove_planks", "cherry_planks", "pale_oak_planks"],
+    "stem": ["crimson_stem", "warped_stem"],
+    "stone": ["cobblestone", "stone", "andesite", "diorite", "granite", "deepslate"],
+    "coal": ["coal", "charcoal"],
+    "food": ["bread", "cooked_beef", "cooked_porkchop", "cooked_chicken", "cooked_mutton", "apple", "golden_apple", "carrot", "baked_potato"],
+    "wool": ["white_wool", "orange_wool", "magenta_wool", "light_blue_wool", "yellow_wool", "lime_wool", "pink_wool", "gray_wool", "light_gray_wool", "cyan_wool", "purple_wool", "blue_wool", "brown_wool", "green_wool", "red_wool", "black_wool"],
+    "dye": ["white_dye", "orange_dye", "magenta_dye", "light_blue_dye", "yellow_dye", "lime_dye", "pink_dye", "gray_dye", "light_gray_dye", "cyan_dye", "purple_dye", "blue_dye", "brown_dye", "green_dye", "red_dye", "black_dye"]
+};
+
+export function resolveItemName(name: string): string
 {
     const lower = name.toLowerCase();
-    if (lower === "wood") return "oak_log";
+    if (lower === "wood") return "log";
     if (lower === "stone") return "cobblestone";
-    if (lower === "planks") return "oak_planks";
+    if (lower === "planks") return "planks";
+    if (lower === "log") return "log";
     return lower;
+}
+
+export function isItemMatch(itemName: string, requestedItem: string): boolean
+{
+    const item = itemName.toLowerCase();
+    const requested = requestedItem.toLowerCase();
+
+    if (item === requested) return true;
+
+    if (item.includes(requested)) return true;
+
+    const category = GENERIC_ITEM_CATEGORIES[requested];
+    if (category && category.some(variant => item === variant || item.includes(variant.replace("_", "")))) {
+        return true;
+    }
+
+    for (const [categoryName, variants] of Object.entries(GENERIC_ITEM_CATEGORIES)) {
+        const requestedIsInCategory = variants.some(v => requested.includes(v) || v.includes(requested));
+        const itemIsInCategory = variants.some(v => item === v || item.includes(v.replace("_", "")));
+        if (requestedIsInCategory && itemIsInCategory) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+export function getAcceptableVariants(requestedItem: string): string[]
+{
+    const lower = requestedItem.toLowerCase();
+
+    if (GENERIC_ITEM_CATEGORIES[lower]) {
+        return GENERIC_ITEM_CATEGORIES[lower];
+    }
+
+    for (const [categoryName, variants] of Object.entries(GENERIC_ITEM_CATEGORIES)) {
+        if (variants.includes(lower)) {
+            return variants;
+        }
+        if (variants.some(v => lower.includes(v) || v.includes(lower))) {
+            return variants;
+        }
+    }
+
+    return [lower];
+}
+
+export function isGenericCategory(itemName: string): boolean
+{
+    const lower = itemName.toLowerCase();
+    return Object.keys(GENERIC_ITEM_CATEGORIES).includes(lower);
 }
 
 export function resolveWoodType(bot: Bot): string 

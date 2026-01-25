@@ -12,7 +12,7 @@ import { loadBotConfig, ConfigError } from "./settings/config.js";
 import { PerceptionCollector } from "./perception/perception.js";
 import { runSetupWizard } from "./settings/setup.js";
 import { ActionExecutor } from "./actions/action-executor.js";
-import { createDefaultActionHandlers } from "./actions/action-handlers.js";
+import { createDefaultActionHandlers, clearInventory } from "./actions/action-handlers.js";
 import { wireChatBridge } from "./actions/chat/chat-commands.js";
 import { ReflectionLogger } from "./logger/reflection-log.js";
 import { PlannerWorkerClient } from "./planner/planner-worker-client.js";
@@ -24,9 +24,10 @@ import { GoalTracker } from "./research/goals.js";
 import { PlanNarrator } from "./actions/chat/narration.js";
 import { MentorProtocol } from "./teamwork/mentor-protocol.js";
 import { RoleManager, resolveRole, listRoleNames } from "./teamwork/roles.js";
+import { StandbyManager } from "./teamwork/standby-manager.js";
 import { ResourceLockManager, resolveLeaderForGoal } from "./teamwork/coordination.js";
-import { advancePlanningTurn, claimPlanningTurn, initTeamPlanFile, isTeamPlanReady, listClaimedSteps, readTeamPlanFile, recordTeamPlanClaim, releaseTeamPlanLock, summarizeTeamPlan, tryAcquireTeamPlanLock, writeTeamPlanFile } from "./teamwork/team-plan.js";
-import { readRoster, validateRoster } from "./teamwork/roster.js";
+import { advancePlanningTurn, claimPlanningTurn, initTeamPlanFile, isTeamPlanReady, isTeamPlanComplete, getTeamPlanProgress, markStepsComplete, listClaimedSteps, readTeamPlanFile, recordTeamPlanClaim, releaseTeamPlanLock, summarizeTeamPlan, tryAcquireTeamPlanLock, writeTeamPlanFile } from "./teamwork/team-plan.js";
+import { readRoster, validateRoster, writeRoster, updateAgentInventory, teamHasItem, getRawMaterialsFor } from "./teamwork/roster.js";
 import { assignStepsToAgents } from "./teamwork/step-assignment.js";
 import { Vec3 } from "vec3";
 const { pathfinder, Movements } = pathfinderPkg;
@@ -36,7 +37,7 @@ async function createBot() {
     const defaultPath = path.join(process.cwd(), "config", "bot.config.yaml");
     const configPath = process.env.BOT_CONFIG ?? defaultPath;
     const hfToken = process.env.HF_TOKEN;
-    const hfModel = process.env.HF_MODEL ?? "Xenova/Qwen2.5-1.5B-Instruct";
+    const hfModel = process.env.HF_MODEL ?? "ServiceNow-AI/Apriel-1.6-15b-Thinker:together";
     const hfCache = process.env.HF_CACHE_DIR;
     const hfBackend = process.env.LLM_MODE ?? "auto";
     const envRole = resolveRole(process.env.BOT_ROLE);
@@ -50,7 +51,7 @@ async function createBot() {
     const envEnableNarration = parseEnvBoolean(process.env.BOT_ENABLE_NARRATION);
     const envEnableSafety = parseEnvBoolean(process.env.BOT_ENABLE_SAFETY);
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
-    const coordinationDir = path.resolve(__dirname, "teamwork", ".data");
+    const coordinationDir = path.resolve(__dirname, ".", "teamwork", ".data");
     if (!fs.existsSync(coordinationDir)) {
         fs.mkdirSync(coordinationDir, { recursive: true });
     }
@@ -87,7 +88,11 @@ async function createBot() {
         narrationEnabled: envEnableNarration ?? cfg.features.narrationEnabled,
         safetyEnabled: envEnableSafety ?? cfg.features.safetyEnabled
     };
-    const role = envRole ?? resolveRole(cfg.agent.role) ?? "generalist";
+    let role = envRole ?? resolveRole(cfg.agent.role) ?? "generalist";
+    if ((envAgentCount ?? 1) === 1 && role !== "generalist") {
+        console.log(`[startup] Single agent session detected - overriding role "${role}" to "generalist"`);
+        role = "generalist";
+    }
     const mentorMode = envMentorMode ?? cfg.agent.mentor.mode ?? "none";
     const mentorTarget = envMentorTarget ?? cfg.agent.mentor.target;
     sessionLogger.info("startup", "MineAgent starting", {
@@ -133,6 +138,8 @@ async function createBot() {
     bot.loadPlugin(movementPlugin);
     bot.loadPlugin(collectBlock);
     bot.loadPlugin(toolPlugin);
+    const standbyManager = new StandbyManager(role, bot.username);
+    bot.__roleName = role;
     bot.once("spawn", () => {
         console.log("[bot] spawned");
         sessionLogger.info("bot.spawn", "Bot spawned", { position: bot.entity.position, dimension: bot.game.dimension });
@@ -340,8 +347,40 @@ async function createBot() {
                 if (draft.planning.mode === "supervisor-assigned" && resolvedTeamPlan) {
                     const roster = readRoster(rosterPath);
                     if (roster) {
-                        const steps = resolvedTeamPlan.steps;
+                        let steps = resolvedTeamPlan.steps;
                         if (Array.isArray(steps)) {
+                            const stepsToInsert = [];
+                            for (let i = 0; i < steps.length; i++) {
+                                const step = steps[i];
+                                if (step.action === "craft") {
+                                    const recipe = step.params?.recipe ?? step.description ?? "";
+                                    const rawMaterials = getRawMaterialsFor(recipe);
+                                    if (rawMaterials) {
+                                        for (const mat of rawMaterials) {
+                                            if (!teamHasItem(roster, mat.material, mat.count)) {
+                                                console.log(`[planner] Team missing ${mat.count} ${mat.material} for crafting ${recipe} - injecting gather step`);
+                                                stepsToInsert.push({
+                                                    index: i,
+                                                    step: {
+                                                        id: `gather-${mat.material}-${Date.now()}`,
+                                                        action: "gather",
+                                                        params: { item: mat.material },
+                                                        description: `Gather ${mat.material} for crafting ${recipe}`,
+                                                        owner_role: "gatherer"
+                                                    }
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            for (const insertion of stepsToInsert.reverse()) {
+                                steps.splice(insertion.index, 0, insertion.step);
+                            }
+                            if (stepsToInsert.length > 0) {
+                                console.log(`[planner] Injected ${stepsToInsert.length} gather steps for missing materials`);
+                                resolvedTeamPlan.steps = steps;
+                            }
                             const { assignments, unassigned } = assignStepsToAgents(steps, roster);
                             if (unassigned.length > 0) {
                                 console.warn(`[planner] Warning: ${unassigned.length} steps could not be assigned:`, unassigned);
@@ -364,7 +403,7 @@ async function createBot() {
                 releaseTeamPlanLock(teamPlanLockPath);
             }
         };
-        bot.on("chat", (username, message) => {
+        bot.on("chat", async (username, message) => {
             if (username === bot.username) {
                 return;
             }
@@ -377,6 +416,7 @@ async function createBot() {
             if (cleanMessage.startsWith("!goal ")) {
                 const newGoal = cleanMessage.replace("!goal ", "").trim();
                 console.log(`[bot] Goal received via chat: "${newGoal}"`);
+                standbyManager.resetAwaitingTeamPlan();
                 const def = {
                     name: newGoal,
                     steps: [],
@@ -395,10 +435,21 @@ async function createBot() {
                 };
                 const goalId = goalTracker.addGoal(def);
                 sessionLogger.info("goal.added", "Goal added via chat", { goal: newGoal, id: goalId });
-                safeChat(bot, safety, `Goal accepted: ${newGoal}`, "goal.accept");
-                const adviceRequest = mentorProtocol.maybeRequestAdvice(newGoal);
-                if (adviceRequest) {
-                    safeChat(bot, safety, adviceRequest, "mentor.request");
+                if (multiAgentSession && standbyManager.isSpecialistRole()) {
+                    safeChat(bot, safety, `Goal acknowledged: ${newGoal}. Waiting for team plan...`, "goal.accept.specialist");
+                    standbyManager.enterStandby(bot, "Specialist waiting for team plan");
+                    sessionLogger.info("goal.standby", "Specialist entering standby for team plan", {
+                        goal: newGoal,
+                        role: roleManager.getRole()
+                    });
+                }
+                else {
+                    safeChat(bot, safety, `Goal accepted: ${newGoal}`, "goal.accept");
+                    standbyManager.exitStandby("Goal received - ready to plan");
+                    const adviceRequest = mentorProtocol.maybeRequestAdvice(newGoal);
+                    if (adviceRequest) {
+                        safeChat(bot, safety, adviceRequest, "mentor.request");
+                    }
                 }
                 return;
             }
@@ -410,6 +461,8 @@ async function createBot() {
                     return;
                 }
                 roleManager.setRole(nextRole);
+                standbyManager.setRole(nextRole);
+                standbyManager.resetAnnouncementFlag();
                 sessionLogger.info("role.update", "Role updated via chat", { from: username, role: nextRole });
                 safeChat(bot, safety, `Role updated to ${nextRole}.`, "role.update");
                 return;
@@ -471,6 +524,46 @@ async function createBot() {
                 }
                 return;
             }
+            if (cleanMessage === "!reset") {
+                console.log(`[bot] Inventory reset requested by ${username}`);
+                sessionLogger.info("command.reset", "Inventory reset requested", { from: username });
+                try {
+                    await clearInventory(bot);
+                    safeChat(bot, safety, "Inventory cleared. Starting fresh!", "command.reset.success");
+                }
+                catch (err) {
+                    const errMsg = err instanceof Error ? err.message : String(err);
+                    safeChat(bot, safety, `Failed to clear inventory: ${errMsg}`, "command.reset.error");
+                }
+                return;
+            }
+            if (standbyManager.shouldRespondToMessage(cleanMessage, username)) {
+                const resourceRequest = standbyManager.parseResourceRequest(cleanMessage);
+                if (resourceRequest) {
+                    const responseGoal = standbyManager.buildResponseGoal(resourceRequest);
+                    console.log(`[standby] Responding to team request with goal: ${responseGoal}`);
+                    standbyManager.startResponding();
+                    const def = {
+                        name: responseGoal,
+                        steps: [],
+                        successSignal: { type: "event", channel: "planner.success" },
+                        failureSignals: [{ type: "event", channel: "planner.fatal_error" }],
+                        timeoutMs: 300000,
+                        metadata: buildGoalMetadata({
+                            role: roleManager.getRole(),
+                            mentorMode: mentorProtocol.getConfig().mode,
+                            features,
+                            agentId: envAgentId,
+                            agentCount: envAgentCount,
+                            seed: envSeed,
+                            trialId: envTrialId
+                        })
+                    };
+                    goalTracker.addGoal(def);
+                    safeChat(bot, safety, `Responding to ${resourceRequest.requester}'s request for ${resourceRequest.item}`, "standby.respond");
+                    return;
+                }
+            }
             const mentorReply = mentorProtocol.handleChat(cleanMessage, {
                 role: roleManager.getDefinition(),
                 goal: currentGoal,
@@ -494,7 +587,47 @@ async function createBot() {
             }
             const activeGoalObj = goalTracker.goals.values().next().value;
             currentGoal = (activeGoalObj && activeGoalObj.status === "pending") ? activeGoalObj.definition.name : null;
+            if (!currentGoal && !isPlanning && standbyManager.getState() !== "standby") {
+                standbyManager.enterStandby(bot, "No active goals");
+            }
+            else if (currentGoal && standbyManager.getState() === "standby") {
+                if (roleManager.getRole() === "supervisor" && multiAgentSession) {
+                    const latestPlan = readTeamPlanFile(teamPlanPath);
+                    if (latestPlan && latestPlan.goal === currentGoal) {
+                        if (isTeamPlanComplete(latestPlan)) {
+                            console.log("[supervisor] All team plan steps complete - marking goal as success");
+                            safeChat(bot, safety, "All team tasks complete! Goal achieved.", "supervisor.complete");
+                            const events = goalTracker.notifyEvent("planner.success", {});
+                            events.forEach(e => sessionLogger.info("goal.update", "Goal succeeded via full team execution", { ...e }));
+                            standbyManager.exitStandby("Team plan completed");
+                        }
+                        else {
+                            const progress = getTeamPlanProgress(latestPlan);
+                            if (Date.now() % 10000 < 100) {
+                                console.log(`[supervisor] Monitoring: ${progress.success}/${progress.total} steps complete, ${progress.failed} failed`);
+                            }
+                        }
+                    }
+                }
+                else if (!standbyManager.isAwaitingTeamPlan()) {
+                    standbyManager.exitStandby("New goal received");
+                }
+            }
             if (currentGoal && !isPlanning && planner && Date.now() >= nextPlanningAttempt) {
+                if (multiAgentSession && standbyManager.isAwaitingTeamPlan()) {
+                    const existingPlan = readTeamPlanFile(teamPlanPath);
+                    const hasAssignments = existingPlan?.assignments?.[agentKey]?.length ?? 0;
+                    if (!isTeamPlanReady(existingPlan, currentGoal) || hasAssignments === 0) {
+                        if (Date.now() % 5000 < 100) {
+                            console.log(`[planner] ${roleManager.getRole()} waiting for team plan assignments...`);
+                        }
+                        nextPlanningAttempt = Date.now() + 1000;
+                        return;
+                    }
+                    console.log(`[planner] Team plan ready with ${hasAssignments} assignments for ${roleManager.getRole()}`);
+                    standbyManager.acknowledgeTeamPlan();
+                    standbyManager.exitStandby("Team plan received with assignments");
+                }
                 isPlanning = true;
                 console.log(`[planner] Generating plan with ${planner.modelName} for goal: "${currentGoal}"...`);
                 sessionLogger.info("planner.start", "Generating plan", { goal: currentGoal, tickId: snap.tickId });
@@ -506,6 +639,10 @@ async function createBot() {
                     const roleContext = roleManager.buildPlannerContext();
                     if (roleContext) {
                         context += ` ${roleContext}`;
+                    }
+                    const standbyContext = standbyManager.buildStandbyContext();
+                    if (standbyContext) {
+                        context += ` ${standbyContext}`;
                     }
                     const mentorContext = roleManager.buildMentorContext(mentorProtocol.getConfig().mode);
                     if (mentorContext) {
@@ -653,9 +790,69 @@ async function createBot() {
                                 sessionLogger.info("planner.narration", "Plan narrated", { message: narrative });
                             }
                         }
+                        if (roleManager.getRole() === "builder" || roleManager.getRole() === "generalist") {
+                            const buildSteps = plan.steps.filter((s) => s.action === "build");
+                            for (const step of buildSteps) {
+                                const params = step.params ?? {};
+                                const material = params.material ?? "oak_planks";
+                                const width = params.width ?? 5;
+                                const length = params.length ?? 5;
+                                const height = params.height ?? 3;
+                                const structure = params.structure ?? "platform";
+                                let estimatedNeeded = 0;
+                                if (structure === "platform")
+                                    estimatedNeeded = width * length;
+                                else if (structure === "walls")
+                                    estimatedNeeded = (width * 2 + length * 2) * height;
+                                else if (structure === "wall")
+                                    estimatedNeeded = width * height;
+                                else if (structure === "roof")
+                                    estimatedNeeded = width * length;
+                                else
+                                    estimatedNeeded = 20;
+                                const inventoryItems = bot.inventory.items();
+                                const materialLower = material.toLowerCase();
+                                const materialNormalized = materialLower.replace(/_/g, "");
+                                let materialCount = 0;
+                                for (const item of inventoryItems) {
+                                    const itemName = item.name.toLowerCase();
+                                    const itemNormalized = itemName.replace(/_/g, "");
+                                    if (itemName === materialLower ||
+                                        itemNormalized.includes(materialNormalized) ||
+                                        materialNormalized.includes(itemNormalized)) {
+                                        materialCount += item.count;
+                                    }
+                                }
+                                console.log(`[builder] Material check for '${material}': found ${materialCount} items, need ${estimatedNeeded}`);
+                                if (materialCount < estimatedNeeded) {
+                                    const deficit = estimatedNeeded - materialCount;
+                                    console.log(`[builder] Material shortage: need ${estimatedNeeded} ${material}, have ${materialCount}`);
+                                    safeChat(bot, safety, `[team] ${bot.username} (${roleManager.getRole()}) needs ${deficit} ${material}`, "builder.material_request");
+                                }
+                                else {
+                                    console.log(`[builder] Material sufficient: have ${materialCount} ${material}, need ${estimatedNeeded}`);
+                                }
+                            }
+                        }
                         executor.reset();
                         const results = await executor.executePlan(plan.steps);
                         const failed = results.find(r => r.status === "failed");
+                        const succeeded = results.filter(r => r.status === "success").map(r => r.id);
+                        const failedIds = results.filter(r => r.status === "failed").map(r => r.id);
+                        if (activeTeamPlan && multiAgentSession) {
+                            let updatedPlan = activeTeamPlan;
+                            if (succeeded.length > 0) {
+                                updatedPlan = markStepsComplete(updatedPlan, succeeded, "success");
+                            }
+                            if (failedIds.length > 0) {
+                                updatedPlan = markStepsComplete(updatedPlan, failedIds, "failed", failed?.reason);
+                            }
+                            writeTeamPlanFile(teamPlanPath, updatedPlan);
+                            wroteTeamPlan = true;
+                            const progress = getTeamPlanProgress(updatedPlan);
+                            console.log(`[planner] Team plan progress: ${progress.success}/${progress.total} complete, ${progress.failed} failed`);
+                            sessionLogger.info("team.plan.progress", "Team plan progress updated", progress);
+                        }
                         if (failed) {
                             console.warn(`[planner] Plan execution failed at ${failed.id}: ${failed.reason ?? "unknown reason"}`);
                             const recovered = await attemptRecovery({
@@ -676,16 +873,42 @@ async function createBot() {
                             if (!recovered) {
                                 safeChat(bot, safety, `I got stuck on step ${failed.id}.`, "planner.failed");
                                 sessionLogger.warn("planner.execution.failed", "Plan execution failed", { failed });
-                                const events = goalTracker.notifyEvent("planner.fatal_error", { reason: failed.reason });
-                                events.forEach(e => sessionLogger.info("goal.update", "Goal failed execution", { ...e }));
+                                if (roleManager.getRole() !== "supervisor") {
+                                    const events = goalTracker.notifyEvent("planner.fatal_error", { reason: failed.reason });
+                                    events.forEach(e => sessionLogger.info("goal.update", "Goal failed execution", { ...e }));
+                                }
                             }
                         }
                         else {
                             console.log(`[planner] Plan execution completed for goal: "${currentGoal}"`);
-                            safeChat(bot, safety, "I'm done!", "planner.complete");
-                            sessionLogger.info("planner.execution.complete", "Plan execution completed", { goal: currentGoal });
-                            const events = goalTracker.notifyEvent("planner.success", {});
-                            events.forEach(e => sessionLogger.info("goal.update", "Goal succeeded via execution", { ...e }));
+                            if (roleManager.getRole() === "supervisor" && multiAgentSession) {
+                                const latestPlan = readTeamPlanFile(teamPlanPath);
+                                if (latestPlan && !isTeamPlanComplete(latestPlan)) {
+                                    const progress = getTeamPlanProgress(latestPlan);
+                                    safeChat(bot, safety, `My tasks done. Monitoring team... (${progress.success}/${progress.total} steps complete)`, "supervisor.monitoring");
+                                    sessionLogger.info("supervisor.monitoring", "Supervisor waiting for team completion", progress);
+                                    standbyManager.enterStandby(bot, "Supervisor monitoring team progress");
+                                }
+                                else if (latestPlan && isTeamPlanComplete(latestPlan)) {
+                                    safeChat(bot, safety, "All team tasks complete! Goal achieved.", "planner.complete");
+                                    sessionLogger.info("planner.execution.complete", "Full team plan completed", { goal: currentGoal });
+                                    const events = goalTracker.notifyEvent("planner.success", {});
+                                    events.forEach(e => sessionLogger.info("goal.update", "Goal succeeded via full team execution", { ...e }));
+                                }
+                                else {
+                                    safeChat(bot, safety, "I'm done!", "planner.complete");
+                                    const events = goalTracker.notifyEvent("planner.success", {});
+                                    events.forEach(e => sessionLogger.info("goal.update", "Goal succeeded via execution", { ...e }));
+                                }
+                            }
+                            else {
+                                safeChat(bot, safety, "I'm done!", "planner.complete");
+                                sessionLogger.info("planner.execution.complete", "Plan execution completed", { goal: currentGoal });
+                                if (!multiAgentSession) {
+                                    const events = goalTracker.notifyEvent("planner.success", {});
+                                    events.forEach(e => sessionLogger.info("goal.update", "Goal succeeded via execution", { ...e }));
+                                }
+                            }
                         }
                     }
                 }
@@ -738,6 +961,20 @@ async function createBot() {
                     hazards: snap.hazards
                 };
                 sessionLogger.logPerceptionSnapshot(minimal);
+                if (multiAgentSession) {
+                    try {
+                        const roster = readRoster(rosterPath);
+                        if (roster) {
+                            const invItems = bot.inventory.items().map(item => ({
+                                name: item.name,
+                                count: item.count
+                            }));
+                            const updatedRoster = updateAgentInventory(roster, agentKey, invItems);
+                            writeRoster(rosterPath, updatedRoster);
+                        }
+                    }
+                    catch (err) { }
+                }
             }
         });
         bot.on("kicked", (reason) => {

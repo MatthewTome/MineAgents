@@ -2,36 +2,68 @@
   "name": "Build a wooden shelter",
   "goal": "Safe shelter with foundation, walls, roof, and door",
   "tags": ["shelter", "building", "safety", "house"],
+  "material_requirements": {
+    "description": "Pre-calculated material needs for a 7x7 shelter",
+    "logs_needed": 50,
+    "planks_needed": 200,
+    "door_needed": 1,
+    "breakdown": {
+      "foundation_7x7": 49,
+      "walls_7x7x4_perimeter": 96,
+      "roof_7x7": 49,
+      "door": 1,
+      "buffer": 5
+    }
+  },
   "steps": [
     {
-      "title": "Analyze & Inventory Check",
+      "title": "Check Inventory",
       "action": "perceive",
-      "details": "Check inventory. Calculate total blocks needed (approx 200 for 7x7 house). IF INSUFFICIENT: Generate 'craft' or 'gather' steps IMMEDIATELY."
+      "details": "Use perceive to check current inventory. You need ~200 planks (from ~50 logs) for a 7x7 shelter. If insufficient materials, add gather and craft steps before building."
     },
     {
-      "title": "Clear & Level",
+      "title": "Gather Wood (if needed)",
+      "action": "gather",
+      "details": "Only if inventory check shows insufficient planks: gather logs (any wood type works). params: { \"item\": \"log\" }",
+      "conditional": "inventory.planks < 200 AND inventory.logs < 50"
+    },
+    {
+      "title": "Craft Planks (if needed)",
+      "action": "craft",
+      "details": "Only if you have logs but not enough planks: craft planks. params: { \"recipe\": \"planks\", \"count\": 4 }",
+      "conditional": "inventory.logs > 0 AND inventory.planks < 200"
+    },
+    {
+      "title": "Move to Build Site",
       "action": "move",
-      "details": "Move to the planned origin and clear space if needed."
+      "details": "Move to the planned build site origin. Choose a flat, clear area. Store this origin coordinate - ALL build steps must use the SAME origin."
     },
     {
-      "title": "Foundation",
+      "title": "Build Foundation",
       "action": "build",
-      "details": "Place the floor. USE THE SAME ORIGIN COORDINATE FOR ALL STEPS. params: { \"structure\": \"platform\", \"width\": 7, \"length\": 7, \"material\": \"oak_planks\", \"origin\": {x,y,z} }"
+      "details": "Place the floor platform. params: { \"structure\": \"platform\", \"width\": 7, \"length\": 7, \"material\": \"oak_planks\", \"origin\": {x, y, z} }"
     },
     {
       "title": "Install Door",
       "action": "build",
-      "details": "Place the door BEFORE walls to ensure the 2x1 block gap is correct. params: { \"structure\": \"door\", \"material\": \"oak_door\", \"origin\": {SAME_AS_ABOVE} }"
+      "details": "Place door BEFORE walls to ensure proper 2x1 gap. params: { \"structure\": \"door\", \"material\": \"oak_door\", \"origin\": {SAME origin as foundation} }"
     },
     {
-      "title": "Walls",
+      "title": "Build Walls",
       "action": "build",
-      "details": "Build perimeter walls. params: { \"structure\": \"walls\", \"width\": 7, \"length\": 7, \"height\": 4, \"material\": \"oak_planks\", \"door\": true, \"origin\": {SAME_AS_ABOVE} }"
+      "details": "Build perimeter walls around the foundation. params: { \"structure\": \"walls\", \"width\": 7, \"length\": 7, \"height\": 4, \"material\": \"oak_planks\", \"door\": true, \"origin\": {SAME origin as foundation} }"
     },
     {
-      "title": "Roof",
+      "title": "Build Roof",
       "action": "build",
-      "details": "Build the roof last on top (y+4). params: { \"structure\": \"roof\", \"width\": 7, \"length\": 7, \"material\": \"oak_planks\", \"origin\": {SAME_AS_ABOVE, but y+4} }"
+      "details": "Build roof on top of walls. The roof origin Y should be foundation_y + 4 (wall height). params: { \"structure\": \"roof\", \"width\": 7, \"length\": 7, \"material\": \"oak_planks\", \"origin\": {x: same, y: foundation_y + 4, z: same} }"
     }
+  ],
+  "important_notes": [
+    "ALL build steps must use the SAME X and Z origin coordinates",
+    "Roof Y-coordinate = Foundation Y + 4 (on top of 4-high walls)",
+    "Any wood type works (oak, spruce, birch, etc.) - use what's available",
+    "Door must be placed BEFORE walls to ensure proper gap",
+    "The bot will automatically handle material variants (oak_planks, spruce_planks, etc.)"
   ]
 }

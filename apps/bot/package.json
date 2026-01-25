@@ -9,13 +9,13 @@
     "clean": "rimraf dist",
     "dev": "node --import tsx src/index.ts",
     "prebuild": "pnpm clean",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "prestart": "pnpm build",
     "start": "node dist/index.js",
     "test": "vitest",
     "test:watch": "vitest --watch",
     "coverage": "vitest run --coverage"
-  },
+},
   "dependencies": {
     "@huggingface/transformers": "^3.1.0",
     "bad-words": "^4.0.0",

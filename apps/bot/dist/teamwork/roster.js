@@ -35,3 +35,88 @@ export function validateRoster(roster, expectedCount) {
     const activeAgents = roster.agents.filter(a => a.status === "active");
     return activeAgents.length === expectedCount;
 }
+export function updateAgentInventory(roster, agentKey, items) {
+    const updatedAgents = roster.agents.map(agent => {
+        const key = `agent-${agent.agentId}`;
+        const nameKey = `agent-${agent.name}`;
+        if (key === agentKey || nameKey === agentKey) {
+            return {
+                ...agent,
+                inventory: {
+                    totalItems: items.reduce((sum, i) => sum + i.count, 0),
+                    items,
+                    updatedAt: new Date().toISOString()
+                }
+            };
+        }
+        return agent;
+    });
+    return {
+        ...roster,
+        updatedAt: new Date().toISOString(),
+        agents: updatedAgents
+    };
+}
+export function getTeamInventory(roster) {
+    const combined = new Map();
+    for (const agent of roster.agents) {
+        if (agent.status !== "active" || !agent.inventory) {
+            continue;
+        }
+        for (const item of agent.inventory.items) {
+            const current = combined.get(item.name) ?? 0;
+            combined.set(item.name, current + item.count);
+        }
+    }
+    return combined;
+}
+export function teamHasItem(roster, itemName, requiredCount = 1) {
+    const teamInv = getTeamInventory(roster);
+    const exact = teamInv.get(itemName) ?? 0;
+    if (exact >= requiredCount) {
+        return true;
+    }
+    let total = 0;
+    for (const [name, count] of teamInv) {
+        if (name.includes(itemName) || itemName.includes(name)) {
+            total += count;
+        }
+    }
+    return total >= requiredCount;
+}
+export function getRawMaterialsFor(item) {
+    const recipes = {
+        // Wood products
+        "planks": [{ material: "log", count: 1 }],
+        "oak_planks": [{ material: "oak_log", count: 1 }],
+        "spruce_planks": [{ material: "spruce_log", count: 1 }],
+        "birch_planks": [{ material: "birch_log", count: 1 }],
+        "stick": [{ material: "planks", count: 2 }],
+        "crafting_table": [{ material: "planks", count: 4 }],
+        // Tools
+        "wooden_pickaxe": [{ material: "planks", count: 3 }, { material: "stick", count: 2 }],
+        "stone_pickaxe": [{ material: "cobblestone", count: 3 }, { material: "stick", count: 2 }],
+        "iron_pickaxe": [{ material: "iron_ingot", count: 3 }, { material: "stick", count: 2 }],
+        // Building
+        "furnace": [{ material: "cobblestone", count: 8 }],
+        "chest": [{ material: "planks", count: 8 }],
+        "door": [{ material: "planks", count: 6 }],
+        "oak_door": [{ material: "oak_planks", count: 6 }],
+        // Smelted items
+        "iron_ingot": [{ material: "iron_ore", count: 1 }],
+        "gold_ingot": [{ material: "gold_ore", count: 1 }],
+        "glass": [{ material: "sand", count: 1 }],
+        "stone": [{ material: "cobblestone", count: 1 }],
+        "smooth_stone": [{ material: "stone", count: 1 }],
+    };
+    const normalized = item.toLowerCase();
+    if (recipes[normalized]) {
+        return recipes[normalized];
+    }
+    for (const [key, value] of Object.entries(recipes)) {
+        if (normalized.includes(key) || key.includes(normalized)) {
+            return value;
+        }
+    }
+    return null;
+}

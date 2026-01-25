@@ -2,7 +2,7 @@ import { Vec3 } from "vec3";
 import { recordChestContents, listChestMemory } from "../perception/chest-memory.js";
 import { moveToward, resolveTargetPosition, findNearestEntity, waitForNextTick, raceWithTimeout } from "./movement.js";
 import { executeBuild } from "./building/building.js";
-import { requireInventoryItem, ensureToolFor, expandMaterialAliases, resolveItemName, resolveWoodType } from "./utils.js";
+import { requireInventoryItem, ensureToolFor, expandMaterialAliases, resolveItemName, resolveWoodType, isItemMatch, getAcceptableVariants, isGenericCategory } from "./utils.js";
 export function createDefaultActionHandlers(options) {
     const resourceLocks = options?.resourceLocks;
     return {
@@ -19,7 +19,11 @@ export function createDefaultActionHandlers(options) {
         fish: handleFish,
         fight: handleFight,
         perceive: handlePerceive,
-        analyzeInventory: handlePerceive
+        analyzeInventory: handlePerceive,
+        give: handleGive,
+        drop: handleDrop,
+        requestResource: handleRequestResource,
+        pickup: handlePickup
     };
 }
 async function handleMove(bot, step) {
@@ -187,6 +191,24 @@ async function handleSmith(bot, step, resourceLocks) {
         anvil.close();
     });
 }
+const CRAFT_RAW_MATERIALS = {
+    "planks": "log",
+    "oak_planks": "oak_log",
+    "spruce_planks": "spruce_log",
+    "birch_planks": "birch_log",
+    "jungle_planks": "jungle_log",
+    "acacia_planks": "acacia_log",
+    "dark_oak_planks": "dark_oak_log",
+    "stick": "planks",
+    "crafting_table": "planks",
+    "chest": "planks",
+    "furnace": "cobblestone",
+    "wooden_pickaxe": "planks",
+    "stone_pickaxe": "cobblestone",
+    "iron_pickaxe": "iron_ingot",
+    "door": "planks",
+    "oak_door": "oak_planks",
+};
 async function handleCraft(bot, step, resourceLocks) {
     const params = (step.params ?? {});
     let itemName = params.recipe.toLowerCase();
@@ -222,12 +244,32 @@ async function handleCraft(bot, step, resourceLocks) {
     const tableRecipes = bot.recipesFor(itemType.id, null, 1, true);
     const recipe = noTableRecipes[0] ?? tableRecipes[0];
     if (!recipe) {
+        const rawMaterial = CRAFT_RAW_MATERIALS[itemName] ?? CRAFT_RAW_MATERIALS[itemName.split("_").pop() ?? ""];
+        if (rawMaterial) {
+            console.log(`[craft] No recipe for ${itemName}, attempting to gather ${rawMaterial} first...`);
+            await handleGather(bot, { params: { item: rawMaterial } }, resourceLocks);
+            const retryRecipes = bot.recipesFor(itemType.id, null, 1, true);
+            if (retryRecipes.length > 0) {
+                await bot.craft(retryRecipes[0], count, undefined);
+                return;
+            }
+        }
         throw new Error(`No crafting recipe found for ${itemName} in Minecraft data.`);
     }
     const craftableRecipe = bot.recipesFor(itemType.id, null, 1, true)[0] ?? recipe;
     if (!craftableRecipe) {
+        const rawMaterial = CRAFT_RAW_MATERIALS[itemName] ?? CRAFT_RAW_MATERIALS[itemName.split("_").pop() ?? ""];
+        if (rawMaterial) {
+            console.log(`[craft] Missing ingredients for ${itemName}, gathering ${rawMaterial}...`);
+            await handleGather(bot, { params: { item: rawMaterial } }, resourceLocks);
+            const retryRecipes = bot.recipesFor(itemType.id, null, 1, true);
+            if (retryRecipes.length > 0) {
+                await bot.craft(retryRecipes[0], count, undefined);
+                return;
+            }
+        }
         const req = recipe.delta?.[0];
-        throw new Error(`Insufficient ingredients to craft ${itemName}. Needs ingredients (e.g., ${req ? req.id : 'unknown'}).`);
+        throw new Error(`Insufficient ingredients to craft ${itemName}. Needs ingredients (e.g., ${req ? req.id : 'unknown'}). Missing materials.`);
     }
     if (craftableRecipe.requiresTable) {
         let tableBlock = params.craftingTable
@@ -235,7 +277,7 @@ async function handleCraft(bot, step, resourceLocks) {
             : bot.findBlock({ matching: (b) => b.name === "crafting_table", maxDistance: 32 });
         if (!tableBlock) {
             console.log("[craft] Crafting new table...");
-            await handleGather(bot, { params: { item: "log" } });
+            await handleGather(bot, { params: { item: "log" } }, resourceLocks);
             const log = bot.inventory.items().find(i => i.name.endsWith("_log"));
             if (!log)
                 throw new Error("Failed to gather logs for crafting table.");
@@ -279,26 +321,32 @@ async function handleGather(bot, step, resourceLocks) {
     const maxDistance = params.maxDistance ?? 16;
     if (!targetItem)
         throw new Error("Gather requires item name");
-    const existing = bot.inventory.items().find(i => i.name.toLowerCase().includes(targetItem));
+    const acceptableVariants = getAcceptableVariants(targetItem);
+    const useLooseMatching = isGenericCategory(targetItem) || acceptableVariants.length > 1;
+    if (useLooseMatching) {
+        console.log(`[gather] Using loose matching for "${targetItem}" - accepting: ${acceptableVariants.slice(0, 3).join(", ")}${acceptableVariants.length > 3 ? "..." : ""}`);
+    }
+    const existing = bot.inventory.items().find(i => isItemMatch(i.name, targetItem));
     if (existing) {
-        console.log(`[gather] Already have ${targetItem} (${existing.count}), skipping gather.`);
+        console.log(`[gather] Already have ${existing.name} (${existing.count}) which satisfies "${targetItem}", skipping gather.`);
         return;
     }
-    const chests = listChestMemory().filter(c => c.status === "known" && c.items && c.items.some(i => i.name.includes(targetItem)));
+    const chests = listChestMemory().filter(c => c.status === "known" && c.items && c.items.some(i => isItemMatch(i.name, targetItem)));
     if (chests.length > 0) {
-        console.log(`[gather] Found ${targetItem} in known chest at ${chests[0].position.x},${chests[0].position.y},${chests[0].position.z}`);
-        await handleLoot(bot, { params: { position: chests[0].position, item: targetItem } }, resourceLocks);
-        const nowHas = bot.inventory.items().find(i => i.name.toLowerCase().includes(targetItem));
+        const chestItem = chests[0].items?.find(i => isItemMatch(i.name, targetItem));
+        console.log(`[gather] Found ${chestItem?.name ?? targetItem} in known chest at ${chests[0].position.x},${chests[0].position.y},${chests[0].position.z}`);
+        await handleLoot(bot, { params: { position: chests[0].position, item: chestItem?.name ?? targetItem } }, resourceLocks);
+        const nowHas = bot.inventory.items().find(i => isItemMatch(i.name, targetItem));
         if (nowHas) {
-            console.log(`[gather] Retrieved ${targetItem} from chest.`);
+            console.log(`[gather] Retrieved ${nowHas.name} from chest (satisfies "${targetItem}").`);
             return;
         }
     }
     try {
         await handleLoot(bot, { params: { maxDistance, item: targetItem } }, resourceLocks);
-        const looted = bot.inventory.items().find(i => i.name.toLowerCase().includes(targetItem));
+        const looted = bot.inventory.items().find(i => isItemMatch(i.name, targetItem));
         if (looted) {
-            console.log(`[gather] Looted ${targetItem} from a nearby chest.`);
+            console.log(`[gather] Looted ${looted.name} from a nearby chest (satisfies "${targetItem}").`);
             return;
         }
     }
@@ -307,37 +355,64 @@ async function handleGather(bot, step, resourceLocks) {
     const start = Date.now();
     const failedBlocks = new Set();
     let consecutiveFailures = 0;
+    let fallbackAttempted = false;
     while (Date.now() - start < timeout) {
+        const acquired = bot.inventory.items().find(i => isItemMatch(i.name, targetItem));
+        if (acquired) {
+            console.log(`[gather] Successfully gathered ${acquired.name} (satisfies "${targetItem}").`);
+            return;
+        }
         if (consecutiveFailures >= 3) {
-            console.log("[gather] Relocating to new area...");
-            const escape = bot.entity.position.offset((Math.random() - 0.5) * 30, 0, (Math.random() - 0.5) * 30);
-            await moveToward(bot, escape, 2, 8000).catch(() => { });
-            consecutiveFailures = 0;
+            if (!fallbackAttempted && !useLooseMatching && acceptableVariants.length > 1) {
+                console.log(`[gather] Specific "${targetItem}" not found after 3 attempts, trying any variant...`);
+                fallbackAttempted = true;
+                consecutiveFailures = 0;
+            }
+            else {
+                console.log("[gather] Relocating to new area...");
+                const escape = bot.entity.position.offset((Math.random() - 0.5) * 30, 0, (Math.random() - 0.5) * 30);
+                await moveToward(bot, escape, 2, 8000).catch(() => { });
+                consecutiveFailures = 0;
+            }
             continue;
         }
         const dropped = findNearestEntity(bot, (e) => {
             if (e.name !== "item")
                 return false;
             const d = e.getDroppedItem?.();
-            return d?.name?.toLowerCase().includes(targetItem) || false;
+            if (!d?.name)
+                return false;
+            return isItemMatch(d.name, targetItem);
         }, 32);
         if (dropped) {
-            console.log(`[gather] Found dropped ${targetItem}.`);
+            const droppedItem = dropped.getDroppedItem?.();
+            console.log(`[gather] Found dropped ${droppedItem?.name ?? "item"} (satisfies "${targetItem}").`);
             await moveToward(bot, dropped.position, 1.0, 15000);
             return;
         }
         const blockName = resolveItemToBlock(targetItem);
         if (blockName) {
-            const aliases = expandMaterialAliases(blockName);
+            const allAliases = new Set();
+            allAliases.add(blockName);
+            expandMaterialAliases(blockName).forEach(a => allAliases.add(a));
+            if (fallbackAttempted || useLooseMatching) {
+                for (const variant of acceptableVariants) {
+                    const variantBlock = resolveItemToBlock(variant);
+                    if (variantBlock) {
+                        allAliases.add(variantBlock);
+                        expandMaterialAliases(variantBlock).forEach(a => allAliases.add(a));
+                    }
+                }
+            }
+            const aliasArray = Array.from(allAliases);
             const block = bot.findBlock({
                 matching: (b) => {
                     if (!b || !b.position)
                         return false;
-                    if (!aliases.includes(b.name) && !b.name.includes(blockName))
-                        return false;
+                    const bName = b.name.toLowerCase();
                     if (failedBlocks.has(b.position.toString()))
                         return false;
-                    return true;
+                    return aliasArray.some(alias => bName === alias || bName.includes(alias));
                 },
                 maxDistance: 32
             });
@@ -378,7 +453,7 @@ async function handleGather(bot, step, resourceLocks) {
         consecutiveFailures++;
         await waitForNextTick(bot);
     }
-    throw new Error(`Gather ${targetItem} failed.`);
+    throw new Error(`Gather ${targetItem} failed. Tried variants: ${acceptableVariants.join(", ")}`);
 }
 async function withResourceLock(resourceLocks, resourceKey, action) {
     if (!resourceLocks || !resourceKey) {
@@ -467,14 +542,41 @@ async function collectBlocks(bot, blocks) {
     return true;
 }
 function resolveItemToBlock(item) {
-    if (item.includes("cobblestone"))
+    const lower = item.toLowerCase();
+    if (lower.includes("cobblestone"))
         return "stone";
-    if (item.includes("dirt"))
+    if (lower.includes("dirt"))
         return "dirt";
-    if (item.includes("log") || item.includes("wood"))
-        return "oak_log";
-    if (item.includes("iron"))
+    if (lower.includes("iron"))
         return "iron_ore";
+    if (lower.includes("gold"))
+        return "gold_ore";
+    if (lower.includes("diamond"))
+        return "diamond_ore";
+    if (lower.includes("coal"))
+        return "coal_ore";
+    if (lower.includes("copper"))
+        return "copper_ore";
+    if (lower.includes("redstone") && !lower.includes("block"))
+        return "redstone_ore";
+    if (lower.includes("lapis"))
+        return "lapis_ore";
+    if (lower.includes("emerald"))
+        return "emerald_ore";
+    if (lower === "log" || lower === "wood")
+        return "log";
+    if (lower.includes("_log"))
+        return lower;
+    if (lower.includes("_stem"))
+        return lower;
+    if (lower.includes("log") || lower.includes("wood"))
+        return "log";
+    if (lower.includes("sand") && !lower.includes("stone"))
+        return "sand";
+    if (lower.includes("gravel"))
+        return "gravel";
+    if (lower.includes("clay"))
+        return "clay";
     return null;
 }
 function resolveProductToRaw(product) {
@@ -485,4 +587,158 @@ function resolveProductToRaw(product) {
     if (product.includes("pickaxe"))
         return "stick";
     return null;
+}
+async function handleGive(bot, step) {
+    const params = (step.params ?? {});
+    if (!params.target)
+        throw new Error("Give requires target player name");
+    if (!params.item)
+        throw new Error("Give requires item name");
+    const targetName = params.target.toLowerCase();
+    const itemName = params.item.toLowerCase();
+    const method = params.method ?? "drop";
+    const targetEntity = findNearestEntity(bot, (e) => e.type === "player" && (e.username?.toLowerCase().includes(targetName) ?? false), 64);
+    if (!targetEntity)
+        throw new Error(`Target player "${params.target}" not found nearby`);
+    const items = bot.inventory.items().filter(i => i.name.toLowerCase().includes(itemName));
+    if (items.length === 0)
+        throw new Error(`No ${params.item} in inventory`);
+    if (method === "chest") {
+        const chestId = bot.registry?.blocksByName?.chest?.id;
+        let chestBlock = typeof chestId === "number"
+            ? bot.findBlock({ matching: chestId, maxDistance: 16 })
+            : null;
+        if (!chestBlock) {
+            const chestItem = bot.inventory.items().find(i => i.name === "chest");
+            if (chestItem) {
+                const pos = bot.entity.position.offset(1, 0, 0).floored();
+                const ref = bot.blockAt(pos.offset(0, -1, 0));
+                if (ref && ref.boundingBox !== "empty") {
+                    await bot.equip(chestItem, "hand");
+                    await bot.placeBlock(ref, new Vec3(0, 1, 0));
+                    await waitForNextTick(bot);
+                    chestBlock = bot.blockAt(pos);
+                }
+            }
+        }
+        if (!chestBlock)
+            throw new Error("No chest available for deposit");
+        await moveToward(bot, chestBlock.position, 2.5, 15000);
+        const chest = await bot.openContainer(chestBlock);
+        let deposited = 0;
+        for (const item of items) {
+            const toDeposit = params.count ? Math.min(params.count - deposited, item.count) : item.count;
+            if (toDeposit <= 0)
+                continue;
+            try {
+                await chest.deposit(item.type, null, toDeposit);
+                deposited += toDeposit;
+            }
+            catch (err) {
+                console.warn(`[give] Failed to deposit ${item.name}: ${err}`);
+            }
+            if (params.count && deposited >= params.count)
+                break;
+        }
+        chest.close();
+        const pos = chestBlock.position;
+        bot.chat(`[team] Deposited ${deposited} ${params.item} in chest at ${pos.x},${pos.y},${pos.z} for ${params.target}`);
+    }
+    else {
+        await moveToward(bot, targetEntity.position, 3, 15000);
+        await bot.lookAt(targetEntity.position.offset(0, 1, 0), true);
+        let tossed = 0;
+        for (const item of items) {
+            const toToss = params.count ? Math.min(params.count - tossed, item.count) : item.count;
+            if (toToss <= 0)
+                continue;
+            try {
+                await bot.toss(item.type, item.metadata, toToss);
+                tossed += toToss;
+                await waitForNextTick(bot);
+            }
+            catch (err) {
+                console.warn(`[give] Failed to toss ${item.name}: ${err}`);
+            }
+            if (params.count && tossed >= params.count)
+                break;
+        }
+        bot.chat(`[team] Tossed ${tossed} ${params.item} to ${params.target}`);
+    }
+}
+async function handleDrop(bot, step) {
+    const params = (step.params ?? {});
+    const itemName = params.item?.toLowerCase();
+    if (!itemName || itemName === "all") {
+        await clearInventory(bot);
+        return;
+    }
+    const items = bot.inventory.items().filter(i => i.name.toLowerCase().includes(itemName));
+    if (items.length === 0) {
+        console.log(`[drop] No ${params.item} found in inventory`);
+        return;
+    }
+    let dropped = 0;
+    for (const item of items) {
+        const toDrop = params.count ? Math.min(params.count - dropped, item.count) : item.count;
+        if (toDrop <= 0)
+            continue;
+        try {
+            await bot.toss(item.type, item.metadata, toDrop);
+            dropped += toDrop;
+            await waitForNextTick(bot);
+        }
+        catch (err) {
+            console.warn(`[drop] Failed to drop ${item.name}: ${err}`);
+        }
+        if (params.count && dropped >= params.count)
+            break;
+    }
+    console.log(`[drop] Dropped ${dropped} ${params.item}`);
+}
+async function handleRequestResource(bot, step) {
+    const params = (step.params ?? {});
+    if (!params.item)
+        throw new Error("RequestResource requires item name");
+    const urgency = params.urgent ? "[URGENT] " : "";
+    const count = params.count ?? "some";
+    const roleName = bot.__roleName ?? "agent";
+    bot.chat(`${urgency}[team] ${bot.username} (${roleName}) needs ${count} ${params.item}`);
+    console.log(`[requestResource] Announced need for ${count} ${params.item}`);
+}
+async function handlePickup(bot, step) {
+    const params = (step.params ?? {});
+    const itemName = params.item?.toLowerCase();
+    const droppedItem = findNearestEntity(bot, (e) => {
+        if (e.name !== "item")
+            return false;
+        const dropped = e.getDroppedItem?.();
+        if (!dropped)
+            return false;
+        if (itemName && !dropped.name?.toLowerCase().includes(itemName))
+            return false;
+        return true;
+    }, 32);
+    if (!droppedItem) {
+        console.log(`[pickup] No dropped items found${itemName ? ` matching "${itemName}"` : ""}`);
+        return;
+    }
+    console.log(`[pickup] Moving to collect dropped item at ${droppedItem.position}`);
+    await moveToward(bot, droppedItem.position, 0.5, 15000);
+    await waitForNextTick(bot);
+    console.log("[pickup] Item collected");
+}
+export async function clearInventory(bot) {
+    const items = bot.inventory.items();
+    console.log(`[clearInventory] Dropping ${items.length} item stacks...`);
+    for (const item of items) {
+        try {
+            await bot.tossStack(item);
+            await waitForNextTick(bot);
+        }
+        catch (err) {
+            console.warn(`[clearInventory] Failed to drop ${item.name}: ${err}`);
+        }
+    }
+    console.log("[clearInventory] Inventory cleared.");
 }

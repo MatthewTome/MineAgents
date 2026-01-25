@@ -1,11 +1,17 @@
 import fs from "node:fs";
 import type { AgentRole } from "./roles.js";
 
+export type TeamPlanStepStatus = "pending" | "in_progress" | "success" | "failed";
+
 export type TeamPlanStep = {
     id: string;
     description?: string;
     owner_role?: string;
     action?: string;
+    status?: TeamPlanStepStatus;
+    assignedTo?: string;
+    completedAt?: string;
+    failureReason?: string;
 };
 
 export type TeamPlanDocument = {
@@ -233,4 +239,89 @@ export function summarizeTeamPlan(plan: TeamPlanFile, maxSteps: number = 4): str
 
     const more = steps.length > maxSteps ? ` (+${steps.length - maxSteps} more)` : "";
     return `Team plan ready: ${summary}${more}`;
+}
+
+export function updateStepStatus(
+    plan: TeamPlanFile,
+    stepId: string,
+    status: TeamPlanStepStatus,
+    reason?: string
+): TeamPlanFile
+{
+    if (!plan.teamPlan?.steps) { return plan; }
+
+    const updatedSteps = plan.teamPlan.steps.map(step =>
+    {
+        if (step.id === stepId)
+        {
+            return {
+                ...step,
+                status,
+                completedAt: status === "success" || status === "failed" ? new Date().toISOString() : undefined,
+                failureReason: status === "failed" ? reason : undefined
+            };
+        }
+        return step;
+    });
+
+    return {
+        ...plan,
+        teamPlan: {
+            ...plan.teamPlan,
+            steps: updatedSteps
+        },
+        updatedAt: new Date().toISOString()
+    };
+}
+
+export function markStepsComplete(
+    plan: TeamPlanFile,
+    stepIds: string[],
+    status: "success" | "failed",
+    reason?: string
+): TeamPlanFile
+{
+    let updated = plan;
+    for (const stepId of stepIds)
+    {
+        updated = updateStepStatus(updated, stepId, status, reason);
+    }
+    return updated;
+}
+
+export function getTeamPlanProgress(plan: TeamPlanFile): {
+    total: number;
+    pending: number;
+    inProgress: number;
+    success: number;
+    failed: number;
+    isComplete: boolean;
+}
+{
+    const steps = plan.teamPlan?.steps ?? [];
+    const total = steps.length;
+    const pending = steps.filter(s => !s.status || s.status === "pending").length;
+    const inProgress = steps.filter(s => s.status === "in_progress").length;
+    const success = steps.filter(s => s.status === "success").length;
+    const failed = steps.filter(s => s.status === "failed").length;
+
+    const isComplete = total > 0 && pending === 0 && inProgress === 0;
+
+    return { total, pending, inProgress, success, failed, isComplete };
+}
+
+export function isTeamPlanComplete(plan: TeamPlanFile | null): boolean
+{
+    if (!plan || !plan.teamPlan?.steps) { return false; }
+
+    const steps = plan.teamPlan.steps;
+    if (steps.length === 0) { return false; }
+
+    return steps.every(s => s.status === "success");
+}
+
+export function hasTeamPlanFailures(plan: TeamPlanFile | null): boolean
+{
+    if (!plan || !plan.teamPlan?.steps) { return false; }
+    return plan.teamPlan.steps.some(s => s.status === "failed");
 }

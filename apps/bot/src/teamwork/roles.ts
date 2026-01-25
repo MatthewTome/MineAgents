@@ -22,35 +22,35 @@ const ROLE_DEFINITIONS: Record<AgentRole, RoleDefinition> =
         id: "gatherer",
         label: "Gatherer",
         description: "Always ready to gather supplies and provide them to the team.",
-        planningFocus: "Continuously monitor team needs, gather resources proactively, maintain inventory buffer.",
+        planningFocus: "Listen for '[team] X needs Y' resource requests in chat. When a teammate announces they need materials, use the 'give' action to deliver items. Gather resources proactively and maintain inventory buffer. When idle with no goal, enter standby and wait for team requests.",
         mentoringFocus: "Share efficient gathering routes, resource locations, and inventory management."
     },
     builder: {
         id: "builder",
         label: "Builder",
         description: "Always working on construction when tasks are available.",
-        planningFocus: "Execute building tasks continuously, request materials as needed, complete structures efficiently.",
+        planningFocus: "BEFORE starting any build, check if you have enough materials. If short on materials, use 'requestResource' action to announce your needs (e.g., '[team] Builder needs 20 oak_planks'). Continue with available work while waiting. Use 'give' to share excess materials with teammates.",
         mentoringFocus: "Offer building sequences, material lists, and layout tips."
     },
     supervisor: {
         id: "supervisor",
         label: "Supervisor",
         description: "Coordinates team, assigns work, stays out of the way to avoid interfering with labor.",
-        planningFocus: "Create comprehensive team plans, assign tasks based on roles, monitor progress from safe distance.",
+        planningFocus: "Monitor team chat for '[problem]' or '[URGENT]' messages. When team members announce issues, create new assignments or plans to resolve them. Stay in standby mode when not actively planning. Reassign tasks dynamically based on team needs.",
         mentoringFocus: "Provide strategic guidance, coordinate team efforts, delegate effectively."
     },
     guard: {
         id: "guard",
         label: "Guard",
         description: "Keep the team safe by watching for hazards and mobs.",
-        planningFocus: "Monitor threats, stock food, and secure the perimeter.",
+        planningFocus: "Monitor threats, stock food, and secure the perimeter. Respond to danger alerts from teammates. When idle, patrol and watch for threats.",
         mentoringFocus: "Warn about dangers and recommend defensive actions."
     },
     generalist: {
         id: "generalist",
         label: "Generalist",
         description: "Flexible helper with balanced priorities.",
-        planningFocus: "Balance gathering, crafting, and safety depending on the goal.",
+        planningFocus: "Balance gathering, crafting, building, and safety depending on the goal. Can respond to any team request. Use 'requestResource' when short on materials and 'give' to share with teammates.",
         mentoringFocus: "Provide balanced advice across gathering, building, and safety."
     }
 };

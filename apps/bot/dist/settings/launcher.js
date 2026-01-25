@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import readline from "node:readline";
 import { exec, execSync } from "node:child_process";
 import { dump as dumpYaml } from "js-yaml";
@@ -43,12 +42,15 @@ async function main() {
     for (let i = 0; i < count; i++) {
         const index = i + 1;
         let name = `MineAgent${index}`;
-        let role = roles[i % roles.length];
+        let role = count === 1 ? "generalist" : roles[i % roles.length];
         if (nameStrategy === "2") {
             name = await ask(`Name for Agent ${index}`, name);
         }
-        if (roleStrategy === "2") {
+        if (roleStrategy === "2" && count > 1) {
             role = await ask(`Role for ${name} (gatherer/builder/supervisor/guard/generalist)`, role);
+        }
+        else if (count === 1) {
+            console.log("[Launcher] Single agent mode - using generalist role");
         }
         const configDir = path.join(process.cwd(), "config", "generated");
         if (!fs.existsSync(configDir))
@@ -83,8 +85,7 @@ async function main() {
         process.exit(1);
     }
     if (count > 1) {
-        const __dirname = path.dirname(fileURLToPath(import.meta.url));
-        const coordinationDir = path.resolve(__dirname, "..", "teamwork", ".data");
+        const coordinationDir = path.join(process.cwd(), "dist", "teamwork", ".data");
         if (!fs.existsSync(coordinationDir)) {
             fs.mkdirSync(coordinationDir, { recursive: true });
         }

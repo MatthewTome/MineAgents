@@ -52,7 +52,7 @@ describe("coordination", () =>
         expect(second?.leader.name).toBe("alpha");
     });
 
-    it("prevents concurrent resource locks", async () =>
+    it("prevents concurrent resource locks on shared objects", async () =>
     {
         tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mineagents-locks-"));
         const filePath = path.join(tempDir, "coord.json");

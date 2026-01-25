@@ -154,3 +154,60 @@ export function summarizeTeamPlan(plan, maxSteps = 4) {
     const more = steps.length > maxSteps ? ` (+${steps.length - maxSteps} more)` : "";
     return `Team plan ready: ${summary}${more}`;
 }
+export function updateStepStatus(plan, stepId, status, reason) {
+    if (!plan.teamPlan?.steps) {
+        return plan;
+    }
+    const updatedSteps = plan.teamPlan.steps.map(step => {
+        if (step.id === stepId) {
+            return {
+                ...step,
+                status,
+                completedAt: status === "success" || status === "failed" ? new Date().toISOString() : undefined,
+                failureReason: status === "failed" ? reason : undefined
+            };
+        }
+        return step;
+    });
+    return {
+        ...plan,
+        teamPlan: {
+            ...plan.teamPlan,
+            steps: updatedSteps
+        },
+        updatedAt: new Date().toISOString()
+    };
+}
+export function markStepsComplete(plan, stepIds, status, reason) {
+    let updated = plan;
+    for (const stepId of stepIds) {
+        updated = updateStepStatus(updated, stepId, status, reason);
+    }
+    return updated;
+}
+export function getTeamPlanProgress(plan) {
+    const steps = plan.teamPlan?.steps ?? [];
+    const total = steps.length;
+    const pending = steps.filter(s => !s.status || s.status === "pending").length;
+    const inProgress = steps.filter(s => s.status === "in_progress").length;
+    const success = steps.filter(s => s.status === "success").length;
+    const failed = steps.filter(s => s.status === "failed").length;
+    const isComplete = total > 0 && pending === 0 && inProgress === 0;
+    return { total, pending, inProgress, success, failed, isComplete };
+}
+export function isTeamPlanComplete(plan) {
+    if (!plan || !plan.teamPlan?.steps) {
+        return false;
+    }
+    const steps = plan.teamPlan.steps;
+    if (steps.length === 0) {
+        return false;
+    }
+    return steps.every(s => s.status === "success");
+}
+export function hasTeamPlanFailures(plan) {
+    if (!plan || !plan.teamPlan?.steps) {
+        return false;
+    }
+    return plan.teamPlan.steps.some(s => s.status === "failed");
+}
