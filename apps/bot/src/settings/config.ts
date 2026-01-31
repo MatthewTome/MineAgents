@@ -67,76 +67,97 @@ export class ConfigError extends Error
     }
 }
 
+const DEFAULTS = {
+    connection: {
+        host: "127.0.0.1",
+        port: 25565,
+        username: "MineAgent",
+        version: "1.21"
+    },
+    perception: {
+        hz: 8,
+        nearbyRange: 24,
+        blockSampleRadiusXY: 4,
+        blockSampleHalfHeight: 2,
+        maxNearbyEntities: 48,
+        chatBuffer: 20
+    },
+    safety: {
+        allowedActions: [
+            "chat", "perceive", "analyzeInventory", "move", "mine", "gather", 
+            "craft", "smelt", "build", "loot", "eat", "smith", "hunt", "fight", "fish"
+        ],
+        blockedMaterials: [
+            "tnt", "lava", "flint_and_steel", "fire_charge", "fire"
+        ],
+        customProfanityList: [
+            "kys", "kill yourself"
+        ],
+        rateLimits: {
+            global: { max: 24, windowMs: 10000 },
+            perAction: {
+                chat: { max: 10, windowMs: 2000 },
+                build: { max: 50, windowMs: 5000 },
+                mine: { max: 50, windowMs: 5000 }
+            }
+        }
+    },
+    agent: {
+        role: "generalist" as const,
+        mentor: {
+            mode: "none" as const,
+            adviceCooldownMs: 15000,
+            requestCooldownMs: 30000
+        }
+    },
+    features: {
+        ragEnabled: true,
+        narrationEnabled: true,
+        safetyEnabled: true
+    }
+};
+
 const configSchema = z.object(
 {
     connection: z.object(
     {
-        host: z.string().default("127.0.0.1"),
-        port: z.number().int().positive().default(25565),
-        username: z.string().min(1).default("MineAgent"),
-        version: z.string().min(1).default("1.21")
-    }).default({}),
+        host: z.string().default(DEFAULTS.connection.host),
+        port: z.number().int().positive().default(DEFAULTS.connection.port),
+        username: z.string().min(1).default(DEFAULTS.connection.username),
+        version: z.string().min(1).default(DEFAULTS.connection.version)
+    }).default(DEFAULTS.connection),
     perception: z.object(
     {
-        hz: z.number().positive().max(120).default(8),
-        nearbyRange: z.number().positive().default(24),
-        blockSampleRadiusXY: z.number().int().nonnegative().default(4),
-        blockSampleHalfHeight: z.number().int().nonnegative().default(2),
-        maxNearbyEntities: z.number().int().positive().default(48),
-        chatBuffer: z.number().int().positive().default(20)
-        }).default({}),
+        hz: z.number().positive().max(120).default(DEFAULTS.perception.hz),
+        nearbyRange: z.number().positive().default(DEFAULTS.perception.nearbyRange),
+        blockSampleRadiusXY: z.number().int().nonnegative().default(DEFAULTS.perception.blockSampleRadiusXY),
+        blockSampleHalfHeight: z.number().int().nonnegative().default(DEFAULTS.perception.blockSampleHalfHeight),
+        maxNearbyEntities: z.number().int().positive().default(DEFAULTS.perception.maxNearbyEntities),
+        chatBuffer: z.number().int().positive().default(DEFAULTS.perception.chatBuffer)
+    }).default(DEFAULTS.perception),
     safety: z.object(
     {
-        allowedActions: z.array(z.string()).default([
-            "chat",
-            "perceive",
-            "analyzeInventory",
-            "move",
-            "mine",
-            "gather",
-            "craft",
-            "smelt",
-            "build",
-            "loot",
-            "eat",
-            "smith",
-            "hunt",
-            "fight",
-            "fish"
-        ]),
-        blockedMaterials: z.array(z.string()).default([
-            "tnt",
-            "lava",
-            "flint_and_steel",
-            "fire_charge",
-            "fire"
-        ]),
-        customProfanityList: z.array(z.string()).default([
-            "kys",
-            "kill yourself"
-        ]),
+        allowedActions: z.array(z.string()).default(DEFAULTS.safety.allowedActions),
+        blockedMaterials: z.array(z.string()).default(DEFAULTS.safety.blockedMaterials),
+        customProfanityList: z.array(z.string()).default(DEFAULTS.safety.customProfanityList),
         rateLimits: z.object(
         {
             global: z.object(
             {
-                max: z.number().int().positive().default(24),
-                windowMs: z.number().int().positive().default(10000)
-            }).default({}),
-            perAction: z.record(z.object(
+                max: z.number().int().positive().default(DEFAULTS.safety.rateLimits.global.max),
+                windowMs: z.number().int().positive().default(DEFAULTS.safety.rateLimits.global.windowMs)
+            }).default(DEFAULTS.safety.rateLimits.global),
+            perAction: z.record(z.string(), z.object(
             {
                 max: z.number().int().positive(),
                 windowMs: z.number().int().positive()
-            })).default({
-                chat: { max: 10, windowMs: 2000 },
-                build: { max: 50, windowMs: 5000 },
-                mine: { max: 50, windowMs: 5000 }
-            })
-        }).default({})
-    }).default({}),
+            })).default(DEFAULTS.safety.rateLimits.perAction)
+        }).default(DEFAULTS.safety.rateLimits)
+    }).default(DEFAULTS.safety),
     agent: z.object(
     {
         role: z.enum(["gatherer", "builder", "supervisor", "guard", "generalist", "miner", "guide"])
-            .default("generalist")
+            .default(DEFAULTS.agent.role)
             .transform((val): AgentRole => {
                 const resolved = resolveRole(val);
                 if (!resolved) {
@@ -146,18 +167,18 @@ const configSchema = z.object(
             }),
         mentor: z.object(
         {
-            mode: z.enum(["none", "teacher", "learner"]).default("none"),
+            mode: z.enum(["none", "teacher", "learner"]).default(DEFAULTS.agent.mentor.mode),
             target: z.string().optional(),
-            adviceCooldownMs: z.number().int().nonnegative().default(15000),
-            requestCooldownMs: z.number().int().nonnegative().default(30000)
-        }).default({})
-    }).default({}),
+            adviceCooldownMs: z.number().int().nonnegative().default(DEFAULTS.agent.mentor.adviceCooldownMs),
+            requestCooldownMs: z.number().int().nonnegative().default(DEFAULTS.agent.mentor.requestCooldownMs)
+        }).default(DEFAULTS.agent.mentor)
+    }).default(DEFAULTS.agent),
     features: z.object(
     {
-        ragEnabled: z.boolean().default(true),
-        narrationEnabled: z.boolean().default(true),
-        safetyEnabled: z.boolean().default(true)
-    }).default({})
+        ragEnabled: z.boolean().default(DEFAULTS.features.ragEnabled),
+        narrationEnabled: z.boolean().default(DEFAULTS.features.narrationEnabled),
+        safetyEnabled: z.boolean().default(DEFAULTS.features.safetyEnabled)
+    }).default(DEFAULTS.features)
 });
 
 type ConfigShape = z.infer<typeof configSchema>;
@@ -224,7 +245,7 @@ export function loadBotConfig(configPath: string): BotConfig
     {
         const issue = result.error.issues[0];
         const field = issue.path.join(".") || "root";
-        const line = lineForKey(raw, issue.path);
+        const line = lineForKey(raw, issue.path as (string | number)[]);
         throw new ConfigError(issue.message, field, line);
     }
 

@@ -1,0 +1,21 @@
+{
+  "name": "Craft wooden door",
+  "goal": "Craft a wooden door from planks using a crafting table",
+  "tags": ["craft", "door", "wooden", "wood", "oak", "spruce", "birch", "jungle", "acacia", "dark_oak", "mangrove", "cherry", "pale_oak", "bamboo", "crimson", "warped", "shelter", "building"],
+  "required_items": ["planks x6 (must be same wood type)"],
+  "notes": "Wooden doors block mobs from entering shelters (most mobs cannot open doors, except Vindicators on Hard difficulty and some older behavior). Doors are 2 blocks tall. The recipe yields 3 doors per craft. Unlike many recipes, ALL 6 planks MUST be the same wood type — you cannot mix oak and spruce planks. Each wood type produces its own visually distinct door: oak_door, spruce_door, birch_door, jungle_door, acacia_door, dark_oak_door, mangrove_door, cherry_door, pale_oak_door, bamboo_door, crimson_door, warped_door. Requires a crafting table.",
+  "steps": [
+    {
+      "title": "Obtain planks",
+      "action": "craft",
+      "details": "You need 6 planks of the SAME wood type. Craft from logs (2 logs = 8 planks, you need 6). Do NOT mix wood types — all 6 must match (e.g., all oak_planks or all spruce_planks).",
+      "checks": ["Have at least 6 planks of the same type in inventory"]
+    },
+    {
+      "title": "Craft the wooden door",
+      "action": "craft",
+      "details": "Use a crafting table. Place 6 planks in two columns: left column (top-left, middle-left, bottom-left) and center column (top-center, middle-center, bottom-center). Yields 3 doors. Recipe: { \"recipe\": \"oak_door\", \"count\": 3 } (substitute the wood type as needed, e.g., spruce_door, birch_door, etc.).",
+      "checks": ["Door appears in inventory (3 per craft)"]
+    }
+  ]
+}

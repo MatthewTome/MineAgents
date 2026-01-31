@@ -4,13 +4,13 @@ import { Item } from "prismarine-item";
 
 export function requireInventoryItem(bot: Bot, name: string): Item 
 {
-    const aliases = expandMaterialAliases(name);
+    const aliases = expandMaterialAliases(bot, name);
     const item = bot.inventory.items().find(i => aliases.some(a => i.name.includes(a)));
     if (!item) throw new Error(`Missing item: ${name} (checked aliases: ${aliases.join(', ')})`);
     return item;
 }
 
-export function expandMaterialAliases(name: string): string[] 
+export function expandMaterialAliases(bot: Bot, name: string): string[]
 {
     const lower = name.toLowerCase();
     
@@ -24,23 +24,22 @@ export function expandMaterialAliases(name: string): string[]
         ];
     }
 
-    if (lower === "wood" || lower === "log" || lower.includes("log")) {
-        return [
-            "oak_log", "spruce_log", "birch_log", "jungle_log", "acacia_log", "dark_oak_log",
-            "mangrove_log", "cherry_log", "pale_oak_log", "crimson_stem", "warped_stem"
-        ];
+    if (lower === "log" || lower === "wood" || lower.includes("log")) {
+        return Object.keys(bot.registry.itemsByName).filter(n => 
+            n.endsWith("_log") || n.endsWith("_stem") || n.endsWith("_hyphae")
+        );
     }
 
     if (lower === "planks" || lower.includes("plank")) {
-        return [
-            "oak_planks", "spruce_planks", "birch_planks", "jungle_planks", "acacia_planks", "dark_oak_planks",
-            "mangrove_planks", "cherry_planks", "pale_oak_planks", "bamboo_planks", "crimson_planks", "warped_planks"
-        ];
+        return Object.keys(bot.registry.itemsByName).filter(n => 
+            n.endsWith("_planks")
+        );
     }
 
+    if (lower === "andesite" || lower === "diorite" || lower === "granite") return [lower];
+
     if (lower.includes("stone")) return [
-        lower, "cobblestone", "mossy_cobblestone", "stone", "smooth_stone", "stone_bricks", "diorite", "andesite",
-        "granite", "chiseled_stone_bricks", "cracked_stone_bricks", "mossy_stone_bricks", "stone_bricks"
+        "cobblestone", "cobbled_deepslate", "blackstone"
     ];
 
     if (lower.includes("dirt")) return [
@@ -54,6 +53,9 @@ export function expandMaterialAliases(name: string): string[]
     
     if (lower === "crafting_table") return ["crafting_table"];
     if (lower === "furnace") return ["furnace"];
+
+    const fuzzy = fuzzyFindItemName(bot, name);
+    if (fuzzy) return [fuzzy];
     
     return [lower];
 }
@@ -73,20 +75,24 @@ const GENERIC_ITEM_CATEGORIES: Record<string, string[]> = {
     "wood": ["oak_log", "spruce_log", "birch_log", "jungle_log", "acacia_log", "dark_oak_log", "mangrove_log", "cherry_log", "pale_oak_log"],
     "planks": ["oak_planks", "spruce_planks", "birch_planks", "jungle_planks", "acacia_planks", "dark_oak_planks", "mangrove_planks", "cherry_planks", "pale_oak_planks"],
     "stem": ["crimson_stem", "warped_stem"],
-    "stone": ["cobblestone", "stone", "andesite", "diorite", "granite", "deepslate"],
+    "stone": ["cobblestone", "cobbled_deepslate", "blackstone"],
     "coal": ["coal", "charcoal"],
     "food": ["bread", "cooked_beef", "cooked_porkchop", "cooked_chicken", "cooked_mutton", "apple", "golden_apple", "carrot", "baked_potato"],
     "wool": ["white_wool", "orange_wool", "magenta_wool", "light_blue_wool", "yellow_wool", "lime_wool", "pink_wool", "gray_wool", "light_gray_wool", "cyan_wool", "purple_wool", "blue_wool", "brown_wool", "green_wool", "red_wool", "black_wool"],
     "dye": ["white_dye", "orange_dye", "magenta_dye", "light_blue_dye", "yellow_dye", "lime_dye", "pink_dye", "gray_dye", "light_gray_dye", "cyan_dye", "purple_dye", "blue_dye", "brown_dye", "green_dye", "red_dye", "black_dye"]
 };
 
-export function resolveItemName(name: string): string
+export function resolveItemName(bot: Bot, name: string): string
 {
-    const lower = name.toLowerCase();
-    if (lower === "wood") return "log";
-    if (lower === "stone") return "cobblestone";
-    if (lower === "planks") return "planks";
-    if (lower === "log") return "log";
+    const lower = name.toLowerCase().replace(/\s+/g, '_');
+    
+    if (isGenericCategory(lower)) return lower;
+
+    const found = fuzzyFindItemName(bot, lower);
+    if (found) return found;
+
+    if (lower.endsWith("logs")) return lower.replace(/logs$/, "log");
+    
     return lower;
 }
 
@@ -151,4 +157,28 @@ export function resolveWoodType(bot: Bot): string
     if (logs) return logs.name.replace("_log", "");
     
     return "oak";
+}
+
+export function fuzzyFindItemName(bot: Bot, name: string): string | null {
+    const registry = bot.registry;
+    const itemsByName = registry.itemsByName;
+    
+    let clean = name.toLowerCase().replace(/\s+/g, '_');
+
+    if (itemsByName[clean]) return clean;
+
+    if (clean.endsWith('s') && !clean.endsWith('ss')) {
+        const singular = clean.slice(0, -1);
+        if (itemsByName[singular]) return singular;
+    }
+    
+    if (clean.endsWith('es')) {
+        const singular = clean.slice(0, -2);
+        if (itemsByName[singular]) return singular;
+    }
+
+    if (clean.endsWith("leaves")) return clean;
+    if (clean === "wood") return "log"; 
+
+    return null;
 }

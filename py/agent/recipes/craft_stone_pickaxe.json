@@ -1,0 +1,27 @@
+{
+  "name": "Craft stone pickaxe",
+  "goal": "Craft a stone pickaxe from cobblestone and sticks using a crafting table",
+  "tags": ["craft", "pickaxe", "stone", "cobblestone", "tools", "mining", "iron tools pipeline"],
+  "required_items": ["cobblestone x3", "sticks x2"],
+  "notes": "The stone pickaxe is essential for mining iron ore, lapis lazuli ore, and copper ore. You MUST have at least a stone pickaxe to mine iron ore — a wooden pickaxe will NOT work. Cobblestone is obtained by mining stone with any pickaxe. Cobbled deepslate can substitute for cobblestone. Blackstone can also substitute. Requires a crafting table.",
+  "steps": [
+    {
+      "title": "Obtain cobblestone",
+      "action": "mine",
+      "details": "Mine stone blocks with a wooden pickaxe or better to get cobblestone. You need 3 cobblestone. Stone is abundant underground and on hillsides. If you see 'stone' in perception, mine it. Cobbled deepslate (found below Y=0) or blackstone (found in the Nether) also work as substitutes.",
+      "checks": ["Have at least 3 cobblestone (or cobbled_deepslate or blackstone) in inventory", "Have a wooden pickaxe or better equipped"]
+    },
+    {
+      "title": "Craft sticks if needed",
+      "action": "craft",
+      "details": "You need 2 sticks. Craft from 2 planks vertically -> 4 sticks, or from 2 bamboo -> 1 stick. If you already have sticks, skip this step.",
+      "checks": ["Have at least 2 sticks in inventory"]
+    },
+    {
+      "title": "Craft the stone pickaxe",
+      "action": "craft",
+      "details": "Use a crafting table. Place 3 cobblestone across the top row, then 1 stick in center-middle and 1 stick in center-bottom. Recipe: { \"recipe\": \"stone_pickaxe\", \"count\": 1 }. The stone pickaxe has 131 durability and can mine iron ore, lapis, and copper ore.",
+      "checks": ["stone_pickaxe appears in inventory", "Crafting table is accessible"]
+    }
+  ]
+}

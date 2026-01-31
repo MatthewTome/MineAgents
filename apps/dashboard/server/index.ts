@@ -16,6 +16,7 @@ interface AgentStatus {
   location?: { x: number; y: number; z: number };
   health?: number;
   food?: number;
+  inventory?: { name: string; count: number }[];
   lastActionAt?: number;
   lastSuccessAt?: number;
   lastUpdated?: number;
@@ -147,7 +148,8 @@ function discoverSessions(): string[] {
 
 function updateAgentStatus(sessionId: string, name: string, patch: Partial<AgentStatus>) {
   const prev = agentStatuses.get(sessionId) ?? { sessionId, name };
-  const next = { ...prev, ...patch, sessionId, name, lastUpdated: Date.now() };
+  const lastUpdated = patch.lastUpdated ?? Date.now();
+  const next = { ...prev, ...patch, sessionId, name, lastUpdated };
   agentStatuses.set(sessionId, next);
   io.emit("agent.status", next);
 }
@@ -293,6 +295,8 @@ function attachTailers(sessionDir: string) {
 }
 
 function handleLogEntry(sessionId: string, name: string, file: string, entry: any) {
+  const entryTs = entry.ts ? Date.parse(entry.ts) : Date.now();
+
   if (file === "perception.log") {
     const data = entry.data ?? {};
     updateAgentStatus(sessionId, name, {
@@ -300,20 +304,23 @@ function handleLogEntry(sessionId: string, name: string, file: string, entry: an
       thoughtState: data.isPlanning ? "Planning" : "Executing",
       location: data.pos,
       health: data.health,
-      food: data.food
+      food: data.food,
+      inventory: data.inventory,
+      lastUpdated: entryTs
     });
   }
 
   if (file === "actions.log") {
     const data = entry.data ?? {};
-    const ts = data.ts ?? Date.parse(entry.ts ?? "");
+    const ts = data.ts ?? entryTs;
     const patch: Partial<AgentStatus> = {
       currentAction: data.description ?? data.action,
       activeTool: data.action,
-      lastActionAt: ts || Date.now()
+      lastActionAt: ts,
+      lastUpdated: ts
     };
     if (data.status === "success") {
-      patch.lastSuccessAt = ts || Date.now();
+      patch.lastSuccessAt = ts;
     }
     updateAgentStatus(sessionId, name, patch);
   }
@@ -322,13 +329,14 @@ function handleLogEntry(sessionId: string, name: string, file: string, entry: an
     if (entry.event === "planner.parsed") {
       updateAgentStatus(sessionId, name, {
         intent: entry.data?.intent,
-        thoughtState: "Planning"
+        thoughtState: "Planning",
+        lastUpdated: entryTs
       });
     }
   }
 
   if (file === "session.log" && entry.event === "planner.narration") {
-    pushNarration({ sessionId, name, message: entry.data?.message ?? entry.message ?? "", ts: Date.parse(entry.ts ?? "") || Date.now() });
+    pushNarration({ sessionId, name, message: entry.data?.message ?? entry.message ?? "", ts: entryTs });
   }
 }
 

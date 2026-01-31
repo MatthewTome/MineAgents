@@ -9,6 +9,7 @@ export interface AgentStatus {
   location?: { x: number; y: number; z: number };
   health?: number;
   food?: number;
+  inventory?: { name: string; count: number }[];
   lastActionAt?: number;
   lastSuccessAt?: number;
   lastUpdated?: number;

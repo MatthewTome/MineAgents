@@ -1,46 +1,96 @@
 {
   "name": "Iron tools pipeline",
-  "goal": "Smelt iron and craft iron tools/armor using available fuel and crafting options",
-  "tags": ["iron", "smelting", "tools", "armor"],
-  "required_items": ["logs_or_planks", "cobblestone", "iron_ore_or_raw_iron"],
-  "optional_items": ["coal_or_charcoal", "furnace", "crafting_table"],
-  "environment": [
-    "Track perceived fuel sources like logs, coal, or lava buckets",
-    "Note nearby furnaces or crafting tables; craft them if missing",
-    "Avoid mining directly above/below to stay safe"
+  "goal": "Efficiently craft one full set of iron tools (one Iron Pickaxe, one Iron Axe, one ron Shovel, and one Iron Sword)",
+  "tags": ["iron", "smelting", "tools", "iron tools pipeline", "craft", "pickaxe", "sword", "axe", "shovel"],
+  "required_items": [
+    "logs x3 minimum (any type: oak, spruce, birch, jungle, acacia, dark_oak, mangrove, cherry, pale_oak, bamboo, crimson, warped — produces 12 planks)",
+    "planks x12 total (5 for sticks, 4 for crafting table, 3 for wooden pickaxe)",
+    "sticks x5 total (for all tools and weapons)",
+    "cobblestone x11 minimum (8 for furnace, 3 for stone pickaxe)",
+    "iron_ore x9 (or raw_iron x9 — to smelt into 9 iron ingots)",
+    "iron_ingot x9 total (3 pickaxe + 2 sword + 1 shovel + 3 axe)",
+    "fuel for smelting 9 iron ore (2 coal/charcoal smelts 16 items)"
   ],
-  "hazards": ["lava", "hostile_mobs", "falls"],
+  "optional_items": ["coal_or_charcoal", "furnace", "crafting_table"],
+  "crafting_checklist": [
+    "craftWoodenPickaxe: 3 planks + 2 sticks -> wooden_pickaxe (to mine stone/obtain cobblestone)",
+    "craftStonePickaxe: 3 cobblestone + 2 sticks -> stone_pickaxe (to mine iron ore)",
+    "craftFurnace: 8 cobblestone -> furnace (to smelt iron ore)",
+    "-- Smelt 9 raw_iron/iron_ore -> 9 iron_ingot --",
+    "craftIronPickaxe: 3 iron_ingot + 2 sticks -> iron_pickaxe",
+    "craftIronSword: 2 iron_ingot + 1 stick -> iron_sword",
+    "craftIronShovel: 1 iron_ingot + 2 sticks -> iron_shovel",
+    "craftIronAxe: 3 iron_ingot + 2 sticks -> iron_axe"
+  ],
+  "environment": [
+    "Track perceived fuel sources like logs or coal",
+    "Note nearby furnaces or crafting tables; craft them if missing",
+    "Cobblestone can be obtained by mining stone blocks with any pickaxe",
+    "Avoid mining directly above/below to stay safe",
+    "A stone pickaxe is the MINIMUM tool needed to mine iron ore — wooden pickaxes CANNOT mine iron"
+  ],
+  "hazards": ["lava", "hostile_mobs", "falls", "mining_into_caves"],
   "steps": [
     {
-      "title": "Survey resources",
+      "title": "Survey resources and inventory",
       "action": "perceive",
-      "details": "From the latest observation, list nearby ore veins, stone, coal, crafting stations, and inventory fuel. Include entity proximity to avoid ambush while mining.",
-      "checks": ["Confirm at least wooden_pickaxe or better is available", "Plan a safe mine route"]
+      "details": "Check inventory for existing tools, planks, sticks, cobblestone, and iron. Check nearby blocks for logs, stone, iron ore, coal ore, furnaces, and crafting tables. Plan which steps can be skipped based on what you already have.",
+      "checks": ["Note what tools you already have", "Count existing planks/sticks/cobblestone/iron", "Locate logs, stone, and ore in perception"]
     },
     {
-      "title": "Gather wood and stone",
+      "title": "Gather wood (minimum 3 logs)",
       "action": "gather",
-      "details": "Chop any logs and craft planks/sticks. Mine cobblestone with the safest available pickaxe to build a furnace and stone tools if iron tools are not yet made.",
-      "checks": ["Have 8 cobblestone for furnace", "Crafting table placed or carried"]
+      "details": "Mine wood to get at least 3 logs. Any wood type works. 3 logs = 12 planks, which covers the 12 planks needed. If you already have planks/sticks, reduce this accordingly. See the 'Gather wood' recipe for all methods. Use an axe if available for faster chopping.",
+      "checks": ["Have at least 3 logs (or equivalent of 12 planks)"]
     },
     {
-      "title": "Acquire fuel",
-      "action": "collect",
-      "details": "Mine coal if present; otherwise smelt logs into charcoal or use leftover planks as fuel. Keep some wood reserved for sticks and building blocks.",
-      "checks": ["At least 8 fuel items ready", "Avoid smelting without spare wood for sticks"]
+      "title": "Craft basic wooden pickaxe and crafting table",
+      "action": "craft",
+      "details": "Craft 12 planks from logs, then 6 sticks from planks. Craft a crafting table (4 planks). Craft a wooden pickaxe (3 planks + 2 sticks). The wooden pickaxe lets you mine stone/cobblestone. See micro-recipes: craftPlanks, craftStick, craftCraftingTable, craftWoodenPickaxe.",
+      "checks": ["Have crafting_table placed or in inventory", "Have wooden_pickaxe equipped"]
     },
     {
-      "title": "Mine iron safely",
+      "title": "Mine cobblestone (minimum 11 blocks)",
       "action": "mine",
-      "details": "Locate iron ore using perception hints; mine while keeping a block underfoot and blocking off exposed lava or mobs. Collect at least 9 raw iron for tools and a shield.",
-      "checks": ["Carry blocks to bridge or block lava", "Keep exit lit to reduce mob spawns"]
+      "details": "Mine stone with your wooden pickaxe to get cobblestone. You need 11 minimum: 8 for furnace + 3 for stone pickaxe.",
+      "checks": ["Have at least 11 cobblestone"]
     },
     {
-      "title": "Smelt and craft",
-      "action": "smelt",
-      "details": "Place or use a furnace; smelt raw iron with chosen fuel. Craft iron pickaxe, sword/axe, bucket, and armor as resources allow. Prioritize shield first if hostile mobs nearby.",
-      "checks": ["Fuel inserted before iron", "Crafting queue respects available sticks"]
+      "title": "Craft stone pickaxe and furnace",
+      "action": "craft",
+      "details": "Craft a furnace (8 cobblestone). Craft stone pickaxe (3 cobblestone + 2 sticks) — REQUIRED to mine iron ore. Place the furnace. See micro-recipes for each.",
+      "checks": ["Have furnace placed", "Have stone_pickaxe equipped — this is CRITICAL for mining iron"]
+    },
+    {
+      "title": "Acquire fuel for smelting",
+      "action": "gather",
+      "details": "You need enough fuel to smelt 9 iron ore. Options: mine coal ore (each coal smelts 8 items, so 2 coal covers 9 smelts). Or smelt logs into charcoal (each charcoal smelts 8 items). Or use planks/logs directly as fuel (each smelts 1.5 items — very inefficient).",
+      "checks": ["Have at least 6 coal/charcoal for 9 smelts", "Keep spare wood for sticks — do not burn all your wood"]
+    },
+    {
+      "title": "Mine iron ore (9 blocks)",
+      "action": "mine",
+      "details": "Locate iron ore using perception. Mine with your STONE PICKAXE or better. You need 9 iron ore to produce all items. It drops raw_iron.",
+      "checks": ["Have 9 raw_iron or iron_ore in inventory", "Using stone_pickaxe or better"]
+    },
+    {
+      "title": "Smelt iron ingots",
+      "action": "craft",
+      "details": "Place raw_iron in the top slot of the furnace and fuel in the bottom slot. Smelt all 9 raw_iron into 9 iron_ingot.",
+      "checks": ["All 9 iron_ingot smelted", "Fuel sufficient for all smelting"]
+    },
+    {
+      "title": "Craft all iron tools",
+      "action": "craft",
+      "details": "Using the crafting table, craft in this priority order: 1) iron_pickaxe (3 ingots + 2 sticks), 2) iron_sword (2 ingots + 1 stick), 3) iron_axe (3 ingots + 2 sticks), 4) iron_shovel (1 ingot + 2 sticks). Total: 9 iron ingots + 7 sticks. See individual micro-recipes for each item's crafting layout.",
+      "checks": ["iron_pickaxe crafted", "iron_sword crafted", "iron_axe crafted", "iron_shovel crafted"]
+    },
+    {
+      "title": "Equip tools",
+      "action": "perceive",
+      "details": "Equip iron pickaxe. Verify all 4 items were crafted successfully by checking inventory. The Iron Tools Pipeline is complete when you have: iron_pickaxe, iron_sword, iron_shovel, iron_axe.",
+      "checks": ["All 4 iron tools in inventory", "Pipeline complete"]
     }
   ],
-  "notes": "If coal is missing, produce charcoal from logs. Keep spare blocks for emergency towers or walls."
+  "notes": "If coal is missing, produce charcoal by gathering extra logs to smelt in a furnace (use planks as initial fuel — 2 planks smelt 1 log into 1 charcoal, then that charcoal smelts 8 more items). Keep spare blocks for emergency towers or walls. If iron is scarce, prioritize: stone_pickaxe -> iron_pickaxe -> iron_sword. Multiple furnaces running in parallel dramatically reduce smelting time."
 }

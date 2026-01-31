@@ -76,8 +76,8 @@ async function handleSmelt(bot: Bot, step: { params?: Record<string, unknown> },
     const params = (step.params ?? {}) as unknown as SmeltParams;
     if (!params.item) throw new Error("Smelt requires item name");
 
-    const rawItem = resolveItemName(params.item);
-    const fuelItem = resolveItemName(params.fuel ?? "coal"); 
+    const rawItem = resolveItemName(bot, params.item);
+    const fuelItem = resolveItemName(bot, params.fuel ?? "coal"); 
     
     let furnaceBlock = params.furnace 
         ? bot.blockAt(new Vec3(params.furnace.x, params.furnace.y, params.furnace.z))
@@ -408,7 +408,7 @@ async function handleGather(bot: Bot, step: { params?: Record<string, unknown> }
 {
     const params = (step.params ?? {}) as unknown as GatherParams;
     const rawTarget = params.item?.toLowerCase();
-    const targetItem = resolveItemName(rawTarget ?? "");
+    const targetItem = resolveItemName(bot, rawTarget ?? "");
     const timeout = params.timeoutMs ?? 60000;
     const maxDistance = params.maxDistance ?? 16;
 
@@ -499,68 +499,72 @@ async function handleGather(bot: Bot, step: { params?: Record<string, unknown> }
         if (blockName) {
             const allAliases = new Set<string>();
             allAliases.add(blockName);
-            expandMaterialAliases(blockName).forEach(a => allAliases.add(a));
+            expandMaterialAliases(bot, blockName).forEach(a => allAliases.add(a));
 
             if (fallbackAttempted || useLooseMatching) {
                 for (const variant of acceptableVariants) {
                     const variantBlock = resolveItemToBlock(variant);
                     if (variantBlock) {
                         allAliases.add(variantBlock);
-                        expandMaterialAliases(variantBlock).forEach(a => allAliases.add(a));
+                        expandMaterialAliases(bot, variantBlock).forEach(a => allAliases.add(a));
                     }
                 }
             }
 
-            const aliasArray = Array.from(allAliases);
-            const block = bot.findBlock({
-                matching: (b) => {
-                    if (!b || !b.position) return false;
-                    const bName = b.name.toLowerCase();
-                    if (failedBlocks.has(b.position.toString())) return false;
-                    return aliasArray.some(alias => bName === alias || bName.includes(alias));
-                },
-                maxDistance: 32
-            });
-
-            if (block && block.position) {
-                console.log(`[gather] Mining ${block.name} at ${block.position}...`);
-                await ensureToolFor(bot, block);
-
-                if (!bot.canDigBlock(block)) {
-                    console.log(`[gather] Cannot dig ${block.name}. Blacklisting.`);
-                    failedBlocks.add(block.position.toString());
+                        const aliasArray = Array.from(allAliases);
+                        const aliasIds = aliasArray
+                            .map(name => bot.registry.blocksByName[name]?.id)
+                            .filter((id): id is number => id !== undefined);
+            
+                        const foundPositions = bot.findBlocks({
+                            matching: aliasIds,
+                            maxDistance: 64,
+                            count: 20
+                        });
+            
+                        let block: Block | null = null;
+                        // findBlocks returns closest first, but we double check filter
+                        for (const pos of foundPositions) {
+                            if (!failedBlocks.has(pos.toString())) {
+                                const candidate = bot.blockAt(pos);
+                                if (candidate && bot.canDigBlock(candidate)) {
+                                    block = candidate;
+                                    break;
+                                }
+                            }
+                        }
+            
+                                    if (block) {
+                                        console.log(`[gather] Mining ${block.name} at ${block.position}...`);
+                        
+                                        try {
+                                            await collectBlocks(bot, [block]);                                consecutiveFailures = 0;
+                                await waitForNextTick(bot);
+                                continue;
+                            } catch (err: any) {
+                                console.warn(`[gather] Mine failed: ${err.message}`);
+                                if (block.position) failedBlocks.add(block.position.toString());
+                                bot.pathfinder?.stop();
+                                consecutiveFailures++;
+                                continue;
+                            }
+                        }
+                    }
+            
+                    const raw = resolveProductToRaw(targetItem);
+                    if (raw) {
+                        console.log(`[gather] Producing ${targetItem} from ${raw}...`);
+                        await handleGather(bot, { params: { item: raw, timeoutMs: timeout/2 } }, resourceLocks);
+                        await handleCraft(bot, { params: { recipe: targetItem } }, resourceLocks);
+                        return;
+                    }
+            
+                    console.log(`[gather] Searching...`);
+                    const explore = bot.entity.position.offset((Math.random()-0.5)*20, 0, (Math.random()-0.5)*20);
+                    await moveToward(bot, explore, 2, 15000).catch(() => {});
                     consecutiveFailures++;
-                    continue;
-                }
-
-                try {
-                    await collectBlocks(bot, [block]);
-                    consecutiveFailures = 0;
                     await waitForNextTick(bot);
-                    continue;
-                } catch (err: any) {
-                    console.warn(`[gather] Mine failed: ${err.message}`);
-                    if (block.position) failedBlocks.add(block.position.toString());
-                    consecutiveFailures++;
-                    continue;
                 }
-            }
-        }
-
-        const raw = resolveProductToRaw(targetItem);
-        if (raw) {
-            console.log(`[gather] Producing ${targetItem} from ${raw}...`);
-            await handleGather(bot, { params: { item: raw, timeoutMs: timeout/2 } }, resourceLocks);
-            await handleCraft(bot, { params: { recipe: targetItem } }, resourceLocks);
-            return;
-        }
-
-        console.log(`[gather] Searching...`);
-        const explore = bot.entity.position.offset((Math.random()-0.5)*20, 0, (Math.random()-0.5)*20);
-        await moveToward(bot, explore, 2, 5000).catch(() => {});
-        consecutiveFailures++;
-        await waitForNextTick(bot);
-    }
     throw new Error(`Gather ${targetItem} failed. Tried variants: ${acceptableVariants.join(", ")}`);
 }
 
@@ -587,7 +591,6 @@ async function handleMine(bot: Bot, step: { params?: Record<string, unknown> }):
     const block = findBlockTarget(bot, params || {}, 32);
     if (!block) throw new Error(`No matching block found`);
 
-    await ensureToolFor(bot, block);
     await collectBlocks(bot, [block]);
 }
 
@@ -631,7 +634,7 @@ function findBlockTarget(bot: Bot, params: MineParams, maxDistance: number): Blo
     if (params.position) return bot.blockAt(new Vec3(params.position.x, params.position.y, params.position.z));
     const name = params.block?.toLowerCase();
     if (!name) return null;
-    const aliases = expandMaterialAliases(name);
+    const aliases = expandMaterialAliases(bot, name);
     return bot.findBlock({ matching: (b) => aliases.includes(b.name) || b.name.includes(name), maxDistance });
 }
 
@@ -651,8 +654,15 @@ async function collectBlocks(bot: Bot, blocks: Block[]): Promise<boolean>
     if (!bot.collectBlock?.collect) {
         throw new Error("Collect block plugin unavailable");
     }
-    await raceWithTimeout(collection.collect(blocks, { ignoreNoPath: true }), 15000);
-    return true;
+    
+    try {
+        await raceWithTimeout(collection.collect(blocks), 20000);
+        return true;
+    } catch (err) {
+        bot.pathfinder?.stop();
+        bot.stopDigging();
+        throw err;
+    }
 }
 
 function resolveItemToBlock(item: string): string | null

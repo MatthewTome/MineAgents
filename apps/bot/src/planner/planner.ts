@@ -77,7 +77,7 @@ export class HuggingFacePlanner
         {
             model: options?.model ?? "ServiceNow-AI/Apriel-1.6-15b-Thinker:together",
             temperature: options?.temperature ?? 0.2,
-            maxTokens: options?.maxTokens ?? 2000,
+            maxTokens: options?.maxTokens ?? 4096,
             cacheDir: options?.cacheDir,
             device: options?.device ?? "auto",
             token: options?.token,
@@ -234,9 +234,30 @@ export class HuggingFacePlanner
 
         const endpoint = "https://router.huggingface.co/v1/chat/completions";
 
+        const isTogetherModel = this.options.model.includes(":together");
+
         return {
             generate: async (prompt: string) =>
             {
+                const body: Record<string, unknown> = {
+                    model: this.options.model,
+                    messages: [
+                        {
+                            role: "system",
+                            content: "You are a JSON-only Minecraft planning API. You MUST respond with a single valid JSON object and absolutely nothing else. No reasoning, no explanations, no markdown. First character must be '{', last character must be '}'. If you are a thinker model, place all thinking inside <think></think> tags, then output only JSON."
+                        },
+                        { role: "user", content: prompt }
+                    ],
+                    temperature: this.options.temperature,
+                    max_tokens: this.options.maxTokens,
+                    stream: false
+                };
+
+                if (isTogetherModel)
+                {
+                    body.response_format = { type: "json_object" };
+                }
+
                 const response = await fetch(endpoint,
                 {
                     method: "POST",
@@ -245,16 +266,7 @@ export class HuggingFacePlanner
                         Authorization: `Bearer ${token}`,
                         "Content-Type": "application/json",
                     },
-                    body: JSON.stringify(
-                    {
-                        model: this.options.model,
-                        messages: [
-                            { role: "user", content: prompt }
-                        ],
-                        temperature: this.options.temperature,
-                        max_tokens: this.options.maxTokens,
-                        stream: false
-                    })
+                    body: JSON.stringify(body)
                 });
 
                 if (!response.ok)
@@ -328,6 +340,14 @@ export class HuggingFacePlanner
 
         return [
             "You are MineAgent, a Minecraft planning assistant.",
+            `YOUR RESPONSE LIMIT IS ${this.options.maxTokens} TOKENS. You MUST stay well within this limit.`,
+            "RESPONSE FORMAT RULES (CRITICAL):",
+            "- You MUST output ONLY a single valid JSON object. Nothing else.",
+            "- Do NOT output reasoning steps, explanations, chain-of-thought, or any text before or after the JSON.",
+            "- Do NOT wrap the JSON in markdown fences (no ```json or ```).",
+            "- Do NOT start with phrases like 'Here are my reasoning steps' or 'Let me think'.",
+            "- The very first character of your response MUST be '{' and the very last character MUST be '}'.",
+            "- If you are a 'thinker' model, put all thinking inside <think> tags and output ONLY JSON after closing </think>.",
             "Return JSON with fields intent (short string) and steps (array of {id, action, params?, description?}).",
             "Only use these actions (others will fail):",
             actionsList,
@@ -366,7 +386,7 @@ export class HuggingFacePlanner
         return asString;
     }
 
-private parsePlan(text: string): Omit<PlanResult, "backend">
+    private parsePlan(text: string): Omit<PlanResult, "backend">
     {
         const block = this.extractJsonBlock(text);
 
@@ -378,27 +398,28 @@ private parsePlan(text: string): Omit<PlanResult, "backend">
         catch (err)
         {
             console.warn("[planner] JSON parse failed, attempting to repair...", err);
-            
-            let fixed = block
-                .replace(/\/\/.*$/gm, "") 
-                .replace(/,\s*([}\]])/g, "$1")
-                .replace(/([{,]\s*)'([a-zA-Z0-9_]+)'(\s*:)/g, '$1"$2"$3');
-
-            try
-            {
-                parsed = JSON.parse(fixed);
-            }
-            catch (finalErr)
-            {
-                console.error("[planner] FATAL: Could not parse JSON. Raw output below:");
-                console.error(text);
-                throw new Error(`Planner response was not valid JSON: ${finalErr}`);
-            }
+            parsed = this.repairAndParseJson(block, text);
         }
 
         const teamPlan = parsed.team_plan ?? parsed.teamPlan;
         const individualPlan = parsed.individual_plan ?? parsed.individualPlan;
-        const planSource = individualPlan ?? parsed;
+        
+        let planSource = individualPlan ?? parsed;
+
+        if ((typeof planSource.intent !== "string" || !Array.isArray(planSource.steps)) && teamPlan)
+        {
+             console.warn("[planner] Response has team_plan but missing individual_plan. Generating default lead action.");
+             planSource = {
+                 intent: "Distribute team plan",
+                 steps: [
+                     {
+                         action: "chat",
+                         params: { message: "I have generated the team plan. Let's proceed." }
+                     }
+                 ]
+             };
+        }
+
         const rawClaimIds = planSource.claim_ids ?? planSource.claimed_step_ids ?? planSource.claimedSteps ?? planSource.claimIds;
         const claimedStepIds = Array.isArray(rawClaimIds) ? rawClaimIds.map((id: any) => String(id)) : [];
 
@@ -438,30 +459,182 @@ private parsePlan(text: string): Omit<PlanResult, "backend">
         };
     }
 
-    private extractJsonBlock(text: string): string
+    private repairAndParseJson(block: string, rawText: string): any
     {
-        const fenceMatch = /```json\s*([\s\S]*?)```/i.exec(text);
-        if (fenceMatch?.[1])
+        const strategies: Array<(s: string) => string> = [
+            s => s
+                .replace(/\/\/.*$/gm, "")
+                .replace(/\/\*[\s\S]*?\*\//g, "")
+                .replace(/,\s*([}\]])/g, "$1")
+                .replace(/([{,]\s*)'([a-zA-Z0-9_]+)'(\s*:)/g, '$1"$2"$3'),
+
+            s => s
+                .replace(/\/\/.*$/gm, "")
+                .replace(/\/\*[\s\S]*?\*\//g, "")
+                .replace(/,\s*([}\]])/g, "$1")
+                .replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:)/g, '$1"$2"$3'),
+
+            s =>
+            {
+                let fixed = s
+                    .replace(/\/\/.*$/gm, "")
+                    .replace(/,\s*([}\]])/g, "$1")
+                    .replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:)/g, '$1"$2"$3');
+
+                fixed = fixed.replace(/,\s*"[^"]*$/, "");
+                fixed = fixed.replace(/,\s*$/, "");
+
+                let braces = 0;
+                let brackets = 0;
+                let inStr = false;
+                let esc = false;
+                for (const ch of fixed)
+                {
+                    if (esc)           { esc = false; continue; }
+                    if (ch === "\\")   { esc = true;  continue; }
+                    if (ch === '"')    { inStr = !inStr; continue; }
+                    if (inStr)         continue;
+                    if (ch === "{")    braces++;
+                    if (ch === "}")    braces--;
+                    if (ch === "[")    brackets++;
+                    if (ch === "]")    brackets--;
+                }
+                while (brackets > 0) { fixed += "]"; brackets--; }
+                while (braces > 0)   { fixed += "}"; braces--;  }
+
+                return fixed;
+            },
+        ];
+
+        for (let i = 0; i < strategies.length; i++)
         {
-            return fenceMatch[1].trim();
+            try
+            {
+                const fixed = strategies[i](block);
+                return JSON.parse(fixed);
+            }
+            catch { }
         }
 
-        const genericFence = /```\s*([\s\S]*?)```/i.exec(text);
-        if (genericFence?.[1]) 
+        const reExtracted = this.extractBalancedJson(rawText);
+        if (reExtracted)
         {
-             if (genericFence[1].trim().startsWith("{")) {
-                 return genericFence[1].trim();
-             }
+            for (const strategy of strategies)
+            {
+                try { return JSON.parse(strategy(reExtracted)); }
+                catch { }
+            }
         }
+
+        console.error("[planner] FATAL: Could not parse JSON after all repair strategies. Raw output below:");
+        console.error(rawText);
+        throw new Error("Planner response was not valid JSON after exhaustive repair attempts.");
+    }
+
+    private stripThinkingPreamble(text: string): string
+    {
+        let cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, "");
+
+        cleaned = cleaned.trim();
+        if (cleaned.startsWith("{")) return cleaned;
+
+        const lastBrace = cleaned.lastIndexOf("{");
+        if (lastBrace !== -1)
+        {
+            const candidate = cleaned.slice(lastBrace);
+            if (/"intent"/.test(candidate) || /"team_plan"/.test(candidate) || /"steps"/.test(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        cleaned = cleaned
+            .replace(/^[\s\S]*?(?=\{)/m, "");
+
+        return cleaned.trim();
+    }
+
+    private extractJsonBlock(text: string): string
+    {
+        const stripped = this.stripThinkingPreamble(text);
+
+        const fenceMatch = /```(?:json)?\s*([\s\S]*?)```/i.exec(stripped);
+        if (fenceMatch?.[1])
+        {
+            const content = fenceMatch[1].trim();
+            if (content.startsWith("{")) return content;
+        }
+
+        const result = this.extractBalancedJson(stripped);
+        if (result) return result;
+
+        const fallback = this.extractBalancedJson(text);
+        if (fallback) return fallback;
 
         const firstBrace = text.indexOf("{");
         const lastBrace = text.lastIndexOf("}");
-
         if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace)
         {
             return text.slice(firstBrace, lastBrace + 1);
         }
 
         return text;
+    }
+
+    private extractBalancedJson(text: string): string | null
+    {
+        let start = -1;
+        let depth = 0;
+        let inString = false;
+        let escape = false;
+
+        const candidates: string[] = [];
+
+        for (let i = 0; i < text.length; i++)
+        {
+            const ch = text[i];
+
+            if (escape)            { escape = false; continue; }
+            if (ch === "\\")       { escape = true;  continue; }
+            if (ch === '"')        { inString = !inString; continue; }
+            if (inString)          continue;
+
+            if (ch === "{")
+            {
+                if (depth === 0) start = i;
+                depth++;
+            }
+            else if (ch === "}")
+            {
+                depth--;
+                if (depth === 0 && start !== -1)
+                {
+                    const candidate = text.slice(start, i + 1);
+                    if (/"intent"/.test(candidate) || /"steps"/.test(candidate)
+                        || /"team_plan"/.test(candidate) || /"individual_plan"/.test(candidate))
+                    {
+                        candidates.push(candidate);
+                    }
+                    start = -1;
+                }
+                if (depth < 0) depth = 0;
+            }
+        }
+
+        if (candidates.length > 0)
+        {
+            return candidates[candidates.length - 1];
+        }
+
+        if (start !== -1)
+        {
+            const lastBrace = text.lastIndexOf("}");
+            if (lastBrace > start)
+            {
+                return text.slice(start, lastBrace + 1);
+            }
+        }
+
+        return null;
     }
 }

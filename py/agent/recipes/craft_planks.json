@@ -1,0 +1,21 @@
+{
+  "name": "Craft planks",
+  "goal": "Craft wooden planks from logs, stems, wood blocks, or bamboo",
+  "tags": ["craft", "planks", "wood", "oak", "spruce", "birch", "jungle", "acacia", "dark_oak", "mangrove", "cherry", "pale_oak", "bamboo", "crimson", "warped", "building", "basic", "iron tools pipeline", "shelter"],
+  "required_items": ["1 log OR 1 stem OR 1 wood block OR 1 block_of_bamboo"],
+  "notes": "Planks are the most fundamental crafting material. Each log/stem/wood block yields 4 planks. Each Block of Bamboo only yields 2 planks (half the normal rate). Planks can be crafted in the 2x2 player crafting grid — no crafting table needed. ALL the following block types produce planks: oak_log, spruce_log, birch_log, jungle_log, acacia_log, dark_oak_log, mangrove_log, cherry_log, pale_oak_log (yields respective plank type), crimson_stem and warped_stem (yields crimson/warped planks — Nether wood types that don't burn), stripped versions of all logs/stems also work, wood blocks (oak_wood, spruce_wood, etc.) also work, and block_of_bamboo yields bamboo_planks.",
+  "steps": [
+    {
+      "title": "Obtain logs or stems",
+      "action": "gather",
+      "details": "Chop trees to get logs. Any tree type works: oak, spruce, birch, jungle, acacia, dark oak, mangrove, cherry, pale oak. In the Nether, break crimson or warped stems from huge fungi. Each log/stem/wood gives 4 planks. If using bamboo, craft 9 bamboo into 1 Block of Bamboo first (yields only 2 planks per block). See 'Gather wood' recipe for all ways to obtain logs.",
+      "checks": ["Have at least 1 log, stem, wood block, or block_of_bamboo in inventory"]
+    },
+    {
+      "title": "Craft planks",
+      "action": "craft",
+      "details": "Place 1 log (or stem, or wood block) anywhere in the crafting grid to get 4 planks. No crafting table required — works in the 2x2 player grid. Recipe: { \"recipe\": \"<type>_planks\", \"count\": 4 } where <type> matches your wood type. For bamboo: place 1 block_of_bamboo to get 2 bamboo_planks. You can mix wood types for sticks/fuel but NOT for recipes that require matching types (doors, signs, boats).",
+      "checks": ["Planks appear in inventory", "Note: different wood type planks do NOT stack together"]
+    }
+  ]
+}

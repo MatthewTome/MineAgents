@@ -401,11 +401,10 @@ FodyWeavers.xsd
 # JetBrains Rider
 *.sln.iml
 
-/dist
+# MineAgent specifics
+dist/
 logs
 .env
 /extras
 /apps/bot/config/
-
-# MineAgents coordination files (temporary runtime data)
 apps/bot/src/teamwork/.data/

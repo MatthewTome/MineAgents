@@ -107,7 +107,7 @@ export async function executeBuild(bot: Bot, params: BuildParams): Promise<void>
         return bot.entity.position.distanceTo(a) - bot.entity.position.distanceTo(b);
     });
 
-    const replaceableBlocks = expandMaterialAliases("replaceable");
+    const replaceableBlocks = expandMaterialAliases(bot, "replaceable");
     let failures = 0;
 
     const requestedMoves = new Map<string, number>();
@@ -390,7 +390,7 @@ function isValidRef(block: any): boolean {
 }
 
 function countInventoryItems(bot: Bot, name: string): number {
-    const aliases = expandMaterialAliases(name);
+    const aliases = expandMaterialAliases(bot, name);
     const normalizedName = name.toLowerCase().replace(/_/g, "");
 
     const allItems = bot.inventory.items();

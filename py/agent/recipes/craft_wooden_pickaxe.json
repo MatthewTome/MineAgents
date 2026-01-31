@@ -1,0 +1,27 @@
+{
+  "name": "Craft wooden pickaxe",
+  "goal": "Craft a wooden pickaxe from planks and sticks using a crafting table",
+  "tags": ["craft", "pickaxe", "wooden", "wood", "tools", "iron tools pipeline"],
+  "required_items": ["planks x3", "sticks x2"],
+  "notes": "The wooden pickaxe is the first mining tool. It can mine stone and coal ore but NOT iron ore. You need at least a stone pickaxe to mine iron. Any plank type works (oak, spruce, birch, jungle, acacia, dark_oak, mangrove, cherry, pale_oak, bamboo, crimson, warped). Requires a crafting table.",
+  "steps": [
+    {
+      "title": "Obtain planks",
+      "action": "craft",
+      "details": "You need 3 planks of any wood type. If you have logs, craft them into planks (1 log = 4 planks). If you have Blocks of Bamboo, craft those into bamboo planks (1 Block of Bamboo = 2 planks). See the 'Craft planks' recipe for all wood type details.",
+      "checks": ["Have at least 3 planks in inventory"]
+    },
+    {
+      "title": "Craft sticks",
+      "action": "craft",
+      "details": "You need 2 sticks. Craft sticks from planks: place 2 planks vertically in crafting grid to get 4 sticks. Alternatively, 2 bamboo items vertically also yields 1 stick. Recipe: 2 planks -> 4 sticks.",
+      "checks": ["Have at least 2 sticks in inventory"]
+    },
+    {
+      "title": "Craft the wooden pickaxe",
+      "action": "craft",
+      "details": "Use a crafting table. Place 3 planks across the top row, then 1 stick in center-middle and 1 stick in center-bottom. Recipe: { \"recipe\": \"wooden_pickaxe\", \"count\": 1 }. The wooden pickaxe has 59 durability and mines stone-tier blocks.",
+      "checks": ["wooden_pickaxe appears in inventory", "Crafting table is accessible or placed nearby"]
+    }
+  ]
+}

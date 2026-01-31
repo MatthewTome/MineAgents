@@ -1,0 +1,27 @@
+{
+  "name": "Craft torch",
+  "goal": "Craft torches from coal or charcoal and sticks",
+  "tags": ["craft", "torch", "light", "coal", "charcoal", "stick", "mining", "shelter", "building", "safety"],
+  "required_items": ["1 coal OR 1 charcoal", "stick x1"],
+  "notes": "Torches provide light level 14, preventing hostile mob spawning in a radius around them. Essential for mining and shelter safety. Each craft yields 4 torches. Coal is mined from coal ore with any pickaxe. Charcoal is made by smelting logs in a furnace. Can be crafted in the 2x2 player crafting grid — no crafting table needed. Torches can be placed on walls and floors. Soul torches (using soul sand/soul soil instead of coal) provide dimmer light (10) but repel piglins.",
+  "steps": [
+    {
+      "title": "Obtain coal or charcoal",
+      "action": "gather",
+      "details": "Mine coal ore with any pickaxe to get coal (coal ore appears as stone with black specks, found at Y=0 to Y=320 but most common at Y=96). Alternatively, smelt any log in a furnace to get charcoal (1 log = 1 charcoal). Coal and charcoal are interchangeable for torches.",
+      "checks": ["Have at least 1 coal or 1 charcoal in inventory"]
+    },
+    {
+      "title": "Obtain sticks",
+      "action": "craft",
+      "details": "You need 1 stick per 4 torches. Craft from 2 planks (yields 4 sticks). Skip if you already have sticks.",
+      "checks": ["Have at least 1 stick in inventory"]
+    },
+    {
+      "title": "Craft torches",
+      "action": "craft",
+      "details": "Place 1 coal or charcoal on top and 1 stick below it (vertically). No crafting table required — works in 2x2 grid. Yields 4 torches. Recipe: { \"recipe\": \"torch\", \"count\": 4 }.",
+      "checks": ["Torches appear in inventory (4 per craft)"]
+    }
+  ]
+}

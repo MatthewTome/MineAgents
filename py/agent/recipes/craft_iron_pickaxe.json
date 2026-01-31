@@ -1,0 +1,27 @@
+{
+  "name": "Craft iron pickaxe",
+  "goal": "Craft an iron pickaxe from iron ingots and sticks using a crafting table",
+  "tags": ["craft", "pickaxe", "iron", "tools", "mining", "iron tools pipeline"],
+  "required_items": ["iron_ingot x3", "sticks x2"],
+  "notes": "The iron pickaxe is required to mine gold ore, diamond ore, emerald ore, and redstone ore. It has 250 durability and mines faster than stone. Iron ingots come from smelting iron ore or raw iron in a furnace. See 'Gather iron ingot' recipe for all ways to obtain iron ingots. Requires a crafting table.",
+  "steps": [
+    {
+      "title": "Obtain iron ingots",
+      "action": "gather",
+      "details": "You need 3 iron ingots. Smelt raw iron or iron ore in a furnace (1 ore -> 1 ingot). You can also break down an iron block (1 block -> 9 ingots) or craft 9 iron nuggets into 1 ingot. See the 'Gather iron ingot' recipe for full details.",
+      "checks": ["Have at least 3 iron_ingot in inventory"]
+    },
+    {
+      "title": "Obtain sticks",
+      "action": "craft",
+      "details": "You need 2 sticks. Craft from 2 planks (yields 4 sticks). Skip if you already have sticks.",
+      "checks": ["Have at least 2 sticks in inventory"]
+    },
+    {
+      "title": "Craft the iron pickaxe",
+      "action": "craft",
+      "details": "Use a crafting table. Place 3 iron ingots across the top row, 1 stick in middle-center, 1 stick in bottom-center. Recipe: { \"recipe\": \"iron_pickaxe\", \"count\": 1 }. The iron pickaxe has 250 durability and can mine diamond and gold ore.",
+      "checks": ["iron_pickaxe appears in inventory"]
+    }
+  ]
+}

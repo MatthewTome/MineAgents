@@ -18,6 +18,7 @@ export async function moveToward(bot: Bot, target: Vec3, range: number, timeout:
             await raceWithTimeout(bot.pathfinder.goto(goal), timeout);
             return;
         } catch (err) {
+            bot.pathfinder.stop();
             pathfinderError = err instanceof Error ? err.message : String(err);
             console.warn(`[move] Pathfinder failed: ${pathfinderError}. Falling back to movement plugin.`);
         }

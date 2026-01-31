@@ -1,0 +1,45 @@
+{
+  "name": "Gather wood",
+  "goal": "Obtain logs, stems, or wood blocks through chopping trees, looting, or crafting",
+  "tags": ["gather", "wood", "log", "logs", "oak", "spruce", "birch", "jungle", "acacia", "dark_oak", "mangrove", "cherry", "pale_oak", "bamboo", "crimson", "warped", "stem", "tree", "chop", "iron tools pipeline", "shelter", "building"],
+  "required_items": [],
+  "notes": "Wood (logs) is the most fundamental resource in Minecraft. Everything starts with punching a tree. Logs are converted into planks (1 log = 4 planks), which are used for sticks, crafting tables, tools, building, and fuel. You do NOT need any tools to chop wood — punching trees works (just slower). An axe speeds up wood chopping significantly. All log types are functionally interchangeable for planks and fuel. The Iron Tools Pipeline needs at minimum 6 logs (24 planks). Building a shelter requires ~50 logs.",
+  "steps": [
+    {
+      "title": "Method 1: Chop trees (MOST COMMON)",
+      "action": "gather",
+      "details": "Look for tree trunks in your perception snapshot (oak_log, spruce_log, birch_log, jungle_log, acacia_log, dark_oak_log, mangrove_log, cherry_log, pale_oak_log). Walk to a tree and break the trunk blocks. No tools needed — you can punch wood. An axe (any tier) speeds this up dramatically. Each trunk block drops 1 log. Trees are typically 4-7 blocks tall (jungle trees can be 30+ blocks). After chopping the trunk, leaves decay naturally and may drop saplings and sticks. Common tree types by biome: oak (plains, forest), spruce (taiga, mountains), birch (birch forest), jungle (jungle), acacia (savanna), dark oak (dark forest).",
+      "checks": ["Look for any *_log blocks in perception nearby/blocks", "Move toward tree if needed", "Break trunk blocks from bottom up"]
+    },
+    {
+      "title": "Method 2: Mangrove roots and propagules",
+      "action": "gather",
+      "details": "Mangrove trees (mangrove swamp biome) have mangrove_log blocks. Mangrove propagules can be planted on dirt/mud to grow new mangrove trees. Mangrove roots are NOT logs — only the trunk blocks (mangrove_log) yield logs.",
+      "checks": ["In a mangrove swamp biome"]
+    },
+    {
+      "title": "Method 3: Nether stems (fireproof wood)",
+      "action": "gather",
+      "details": "In the Nether, crimson_stem (crimson forest biome) and warped_stem (warped forest biome) act as logs. They produce crimson_planks and warped_planks respectively. These are the ONLY wood types that do not burn, making them fireproof building material. Break stems the same way as logs. Huge fungi grow from crimson/warped fungus items planted on nylium with bone meal.",
+      "checks": ["In the Nether", "Look for crimson_stem or warped_stem in perception"]
+    },
+    {
+      "title": "Method 4: Grow trees from saplings",
+      "action": "craft",
+      "details": "If no trees are nearby but you have saplings (from leaf decay, chest loot, or wandering traders), plant them on dirt/grass/podzol with light level 8+ and at least 1 block of air above. Use bone meal to instantly grow them. Sapling types: oak, spruce, birch, jungle, acacia, dark_oak, cherry, pale_oak. Dark oak saplings must be planted in a 2x2 pattern. Jungle/spruce can also do 2x2 for giant trees.",
+      "checks": ["Have saplings in inventory", "Have dirt/grass block to plant on", "Bone meal speeds growth"]
+    },
+    {
+      "title": "Method 5: Loot from chests and structures",
+      "action": "loot",
+      "details": "Logs and planks can be found in: village houses (as structure blocks), bonus chests (logs), shipwrecks (as hull material), mineshaft supports (oak planks and fence), woodland mansions (dark oak), pillager outposts (dark oak), and witch huts (spruce). Breaking structure blocks yields the items.",
+      "checks": ["Look for chest blocks or wooden structures in perception"]
+    },
+    {
+      "title": "Method 6: Craft wood blocks from logs (decorative)",
+      "action": "craft",
+      "details": "4 logs of the same type in a 2x2 = 3 wood blocks (bark on all sides). Wood blocks also yield 4 planks each, same as logs. This is mainly decorative — it does NOT increase your plank yield. Stripped logs/wood (made by right-clicking a log with an axe) also craft into 4 planks each.",
+      "checks": ["Have 4 matching logs"]
+    }
+  ]
+}

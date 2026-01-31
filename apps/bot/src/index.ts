@@ -275,6 +275,7 @@ async function createBot()
         let isPlanning = false;
         let nextPlanningAttempt = 0;
         let currentGoal: string | null = null;
+        let teamPlanWaitCount = 0;
 
         const agentKey = envAgentId !== null ? `agent-${envAgentId}` : `agent-${bot.username}`;
         const resourceLocks = new ResourceLockManager({
@@ -507,6 +508,9 @@ async function createBot()
             {
                 console.error("[planner] Team plan generation failed:", error);
                 safeChat(bot, safety, "Team plan failed; falling back to individual planning.", "team.plan.error");
+                // Clean up stale draft so other agents don't spin waiting for it
+                try { fs.unlinkSync(teamPlanPath); } catch {}
+                try { fs.unlinkSync(teamPlanLockPath); } catch {}
                 return { plan: null, fallbackToIndividual: true };
             }
             finally
@@ -531,6 +535,7 @@ async function createBot()
                 console.log(`[bot] Goal received via chat: "${newGoal}"`);
 
                 standbyManager.resetAwaitingTeamPlan();
+                teamPlanWaitCount = 0;
 
                 const def: GoalDefinition = {
                     name: newGoal,
@@ -787,12 +792,23 @@ async function createBot()
 
                     if (!isTeamPlanReady(existingPlan, currentGoal) || hasAssignments === 0)
                     {
-                        if (Date.now() % 5000 < 100)
+                        teamPlanWaitCount++;
+                        if (teamPlanWaitCount > 60)
                         {
-                            console.log(`[planner] ${roleManager.getRole()} waiting for team plan assignments...`);
+                            console.warn(`[planner] Gave up waiting for team plan after ${teamPlanWaitCount} attempts, falling back to individual planning`);
+                            standbyManager.acknowledgeTeamPlan();
+                            standbyManager.exitStandby("Team plan wait timeout - falling back to individual planning");
+                            teamPlanWaitCount = 0;
                         }
-                        nextPlanningAttempt = Date.now() + 1000;
-                        return;
+                        else
+                        {
+                            if (Date.now() % 5000 < 100)
+                            {
+                                console.log(`[planner] ${roleManager.getRole()} waiting for team plan assignments... (attempt ${teamPlanWaitCount}/60)`);
+                            }
+                            nextPlanningAttempt = Date.now() + 1000;
+                            return;
+                        }
                     }
 
                     console.log(`[planner] Team plan ready with ${hasAssignments} assignments for ${roleManager.getRole()}`);
@@ -859,9 +875,18 @@ async function createBot()
 
                         if (!activeTeamPlan && !teamPlanResult.fallbackToIndividual)
                         {
-                            console.log("[planner] Waiting for team plan availability...");
-                            nextPlanningAttempt = Date.now() + 500;
-                            return;
+                            teamPlanWaitCount++;
+                            if (teamPlanWaitCount > 60)
+                            {
+                                console.warn(`[planner] Gave up waiting for team plan after ${teamPlanWaitCount} attempts, proceeding individually`);
+                                teamPlanWaitCount = 0;
+                            }
+                            else
+                            {
+                                console.log(`[planner] Waiting for team plan availability... (attempt ${teamPlanWaitCount}/60)`);
+                                nextPlanningAttempt = Date.now() + 500;
+                                return;
+                            }
                         }
 
                         if (activeTeamPlan)
@@ -1204,6 +1229,7 @@ async function createBot()
                     dim: snap.environment.dimension,
                     health: snap.pose.health,
                     food: snap.pose.food,
+                    inventory: bot.inventory.items().map(i => ({ name: i.name, count: i.count })),
                     nearby: snap.nearby.entities.slice(0, 3).map(e => ({ kind: e.kind, name: e.name, d: e.distance })),
                     hazards: snap.hazards
                 };

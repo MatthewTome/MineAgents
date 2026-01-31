@@ -24,6 +24,21 @@ export default function StatusCard({ agent, stuck }: StatusCardProps) {
         <span>Health: {agent.health ?? "--"}</span>
         <span>Food: {agent.food ?? "--"}</span>
       </div>
+
+      <div style={{ marginTop: "16px", paddingTop: "12px", borderTop: "1px solid #1c2433" }}>
+        <h3 style={{ fontSize: "14px", margin: "0 0 8px 0", color: "#aab5c5" }}>Inventory</h3>
+        {agent.inventory && agent.inventory.length > 0 ? (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+            {agent.inventory.map((item, idx) => (
+              <span key={idx} className="tag" style={{ fontSize: "11px", padding: "2px 8px" }}>
+                {item.count} {item.name}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <span style={{ fontSize: "13px", color: "#5c6b85" }}>Empty</span>
+        )}
+      </div>
     </div>
   );
 }

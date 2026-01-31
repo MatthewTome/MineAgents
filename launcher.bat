@@ -9,6 +9,13 @@ if not exist "node_modules" (
     call pnpm install
 )
 
+cd ..\dashboard
+if not exist "node_modules" (
+    echo Installing dashboard dependencies...
+    call pnpm install
+)
+cd ..\bot
+
 call npx tsx src/settings/launcher.ts
 
 pause

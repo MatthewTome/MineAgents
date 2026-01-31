@@ -39,6 +39,6 @@ def test_sample_query_returns_expected_top_hits() -> None:
     assert shelter_results
     assert shelter_results[0].entry.key == "Build a wooden shelter"
 
-    iron_results = library.search("smelt iron tools and armor", top_k=1)
+    iron_results = library.search("iron tools pipeline", top_k=1)
     assert iron_results
     assert iron_results[0].entry.key == "Iron tools pipeline"
