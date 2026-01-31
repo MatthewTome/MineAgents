@@ -3,6 +3,7 @@ import type { Block } from "prismarine-block";
 import type { Item } from "prismarine-item";
 import { Vec3 } from "vec3";
 import type { ActionHandler } from "./action-executor.js";
+import type { DebugTracer } from "../logger/debug-trace.js";
 import { recordChestContents, listChestMemory } from "../perception/chest-memory.js";
 import { ResourceLockManager } from "../teamwork/coordination.js";
 import { moveToward, resolveTargetPosition, findNearestEntity, waitForNextTick, raceWithTimeout, type Vec3Input, type MoveParams } from "./movement.js";
@@ -25,28 +26,46 @@ interface DropParams { item?: string; count?: number; }
 interface RequestResourceParams { item: string; count?: number; urgent?: boolean; }
 interface PickupParams { item?: string; }
 
-export function createDefaultActionHandlers(options?: { resourceLocks?: ResourceLockManager }): Record<string, ActionHandler>
+export function createDefaultActionHandlers(options?: { resourceLocks?: ResourceLockManager; tracer?: DebugTracer }): Record<string, ActionHandler>
 {
     const resourceLocks = options?.resourceLocks;
+    const tracer = options?.tracer;
+    const wrap = (name: string, handler: ActionHandler): ActionHandler =>
+    {
+        if (!tracer)
+        {
+            return handler;
+        }
+
+        return async (bot, step) =>
+        {
+            return tracer.traceAsync(`action.${name}`, {
+                stepId: step.id,
+                action: step.action,
+                description: step.description,
+                params: step.params ? Object.keys(step.params) : []
+            }, () => handler(bot, step));
+        };
+    };
     return {
-        move: handleMove,
-        mine: handleMine,
-        gather: (bot, step) => handleGather(bot, step, resourceLocks),
-        craft: (bot, step) => handleCraft(bot, step, resourceLocks),
-        smelt: (bot, step) => handleSmelt(bot, step, resourceLocks),
-        build: handleBuild,
-        loot: (bot, step) => handleLoot(bot, step, resourceLocks),
-        eat: handleEat,
-        smith: (bot, step) => handleSmith(bot, step, resourceLocks),
-        hunt: handleHunt,
-        fish: handleFish,
-        fight: handleFight,
-        perceive: handlePerceive,
-        analyzeInventory: handlePerceive,
-        give: handleGive,
-        drop: handleDrop,
-        requestResource: handleRequestResource,
-        pickup: handlePickup
+        move: wrap("move", handleMove),
+        mine: wrap("mine", handleMine),
+        gather: wrap("gather", (bot, step) => handleGather(bot, step, resourceLocks)),
+        craft: wrap("craft", (bot, step) => handleCraft(bot, step, resourceLocks)),
+        smelt: wrap("smelt", (bot, step) => handleSmelt(bot, step, resourceLocks)),
+        build: wrap("build", handleBuild),
+        loot: wrap("loot", (bot, step) => handleLoot(bot, step, resourceLocks)),
+        eat: wrap("eat", handleEat),
+        smith: wrap("smith", (bot, step) => handleSmith(bot, step, resourceLocks)),
+        hunt: wrap("hunt", handleHunt),
+        fish: wrap("fish", handleFish),
+        fight: wrap("fight", handleFight),
+        perceive: wrap("perceive", handlePerceive),
+        analyzeInventory: wrap("analyzeInventory", handlePerceive),
+        give: wrap("give", handleGive),
+        drop: wrap("drop", handleDrop),
+        requestResource: wrap("requestResource", handleRequestResource),
+        pickup: wrap("pickup", handlePickup)
     } satisfies Record<string, ActionHandler>;
 }
 

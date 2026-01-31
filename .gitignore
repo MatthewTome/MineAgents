@@ -401,10 +401,64 @@ FodyWeavers.xsd
 # JetBrains Rider
 *.sln.iml
 
-# MineAgent specifics
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
 dist/
-logs
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# pyenv
+.python-version
+
+# Environments
 .env
+.venv
+# env/
+venv/
+# ENV/
+env.bak/
+venv.bak/
+
+# Locally generated files
+dump.rdb
+*.local.ipynb
+runs/
+temp*
+debug_*
+*.swp
+logs
 /extras
 /apps/bot/config/
 apps/bot/src/teamwork/.data/

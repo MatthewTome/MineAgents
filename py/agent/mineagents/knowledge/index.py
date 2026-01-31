@@ -57,11 +57,13 @@ class HowToIndex:
         self._norms = []
 
         for entry in self.entries:
-            tf = Counter(_tokenize(entry.text))
+            tokens = _tokenize(entry.text)
+            tf = Counter(tokens)
+            doc_len = len(tokens)
             embedding: Dict[str, float] = {}
             for token, count in tf.items():
                 idf = math.log((1 + num_docs) / (1 + self._doc_freq[token]))
-                embedding[token] = (count / len(tf)) * idf
+                embedding[token] = (count / doc_len) * idf
             norm = math.sqrt(sum(weight * weight for weight in embedding.values()))
             self._embeddings.append(embedding)
             self._norms.append(norm if norm != 0 else 1.0)

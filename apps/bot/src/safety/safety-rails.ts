@@ -1,6 +1,7 @@
 import { Filter } from "bad-words";
 import type { ActionStep } from "../actions/action-executor.js";
 import type { SessionLogger } from "../logger/session-logger.js";
+import type { DebugTracer } from "../logger/debug-trace.js";
 
 export interface RateLimitConfig
 {
@@ -38,6 +39,7 @@ export interface SafetyRailsOptions
 {
     config: SafetyRailsConfig;
     logger?: SessionLogger;
+    tracer?: DebugTracer;
 }
 
 interface FilterResult
@@ -72,6 +74,7 @@ export class SafetyRails
 {
     private readonly config: SafetyRailsConfig;
     private readonly logger?: SessionLogger;
+    private readonly tracer?: DebugTracer;
     private readonly rateLimiter = new RateLimiter();
     private readonly filter: Filter;
 
@@ -79,6 +82,7 @@ export class SafetyRails
     {
         this.config = options.config;
         this.logger = options.logger;
+        this.tracer = options.tracer;
         this.filter = new Filter({ placeHolder: '*' });
         if (this.config.customProfanityList && this.config.customProfanityList.length > 0)
         {
@@ -87,6 +91,16 @@ export class SafetyRails
     }
 
     checkStep(step: ActionStep): SafetyCheckResult
+    {
+        if (this.tracer)
+        {
+            return this.tracer.trace("SafetyRails.checkStep", { action: step.action, stepId: step.id }, () => this.checkStepInternal(step));
+        }
+
+        return this.checkStepInternal(step);
+    }
+
+    private checkStepInternal(step: ActionStep): SafetyCheckResult
     {
         const action = step.action;
         const allowedActions = this.config.allowedActions.map((entry) => entry.toLowerCase());
@@ -119,6 +133,16 @@ export class SafetyRails
     }
 
     checkOutgoingChat(message: string, source: string = "system"): SafetyChatResult
+    {
+        if (this.tracer)
+        {
+            return this.tracer.trace("SafetyRails.checkOutgoingChat", { source, messageLength: message.length }, () => this.checkOutgoingChatInternal(message, source));
+        }
+
+        return this.checkOutgoingChatInternal(message, source);
+    }
+
+    private checkOutgoingChatInternal(message: string, source: string = "system"): SafetyChatResult
     {
         const { message: filteredMessage, matches } = this.filterText(message);
         let finalMessage = filteredMessage.trim();

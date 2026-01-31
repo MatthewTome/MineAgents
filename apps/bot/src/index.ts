@@ -19,6 +19,7 @@ import { wireChatBridge } from "./actions/chat/chat-commands.js";
 import { ReflectionLogger } from "./logger/reflection-log.js";
 import { PlannerWorkerClient } from "./planner/planner-worker-client.js";
 import { SessionLogger } from "./logger/session-logger.js";
+import { DebugTracer } from "./logger/debug-trace.js";
 import { goalNeedsBuildSite, scoutBuildSite } from "./actions/building/scouting.js";
 import { SafetyRails } from "./safety/safety-rails.js";
 import { RecipeLibrary } from "./planner/knowledge.js";
@@ -55,6 +56,7 @@ async function createBot()
 {
     const sessionLogger = new SessionLogger();
     sessionLogger.installGlobalHandlers();
+    const tracer = new DebugTracer(sessionLogger);
 
     const defaultPath = path.join(process.cwd(), "config", "bot.config.yaml");
     const configPath = process.env.BOT_CONFIG ?? defaultPath;
@@ -143,7 +145,7 @@ async function createBot()
         features
     });
 
-    let safety = features.safetyEnabled ? new SafetyRails({ config: cfg.safety, logger: sessionLogger }) : undefined;
+    let safety = features.safetyEnabled ? new SafetyRails({ config: cfg.safety, logger: sessionLogger, tracer }) : undefined;
     const roleManager = new RoleManager(role);
     const mentorProtocol = new MentorProtocol({
         mode: mentorMode,
@@ -283,7 +285,7 @@ async function createBot()
             lockPath: coordinationLockPath,
             owner: agentKey
         });
-        const handlers = createDefaultActionHandlers({ resourceLocks });
+        const handlers = createDefaultActionHandlers({ resourceLocks, tracer });
         const executor = new ActionExecutor(bot, handlers,
         {
             logger: (entry) =>
@@ -293,7 +295,8 @@ async function createBot()
                 sessionLogger.logAction(entry);
                 console.log(`[action] ${entry.action}#${entry.id} -> ${entry.status}${reason}`);
             },
-            safety
+            safety,
+            tracer
         });
         
         const perception = new PerceptionCollector(bot,
@@ -656,7 +659,7 @@ async function createBot()
                         break;
                     case "safety":
                         features.safetyEnabled = enabled;
-                        safety = enabled ? new SafetyRails({ config: cfg.safety, logger: sessionLogger }) : undefined;
+                        safety = enabled ? new SafetyRails({ config: cfg.safety, logger: sessionLogger, tracer }) : undefined;
                         executor.setSafety(safety);
                         sessionLogger.info("feature.update", "Safety toggled via chat", { enabled });
                         safeChat(bot, safety, `Safety rails ${enabled ? "enabled" : "disabled"}.`, "feature.update");

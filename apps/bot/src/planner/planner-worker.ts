@@ -1,6 +1,7 @@
 import { parentPort, workerData } from "node:worker_threads";
 import { HuggingFacePlanner, type PlanRequest, type PlanResult, type HuggingFacePlannerOptions } from "./planner.js";
 import { SessionLogger } from "../logger/session-logger.js";
+import { DebugTracer } from "../logger/debug-trace.js";
 
 interface WorkerInit
 {
@@ -11,8 +12,9 @@ interface WorkerInit
 const data = workerData as WorkerInit;
 const logger = new SessionLogger(data.logDir);
 logger.installGlobalHandlers();
+const tracer = new DebugTracer(logger);
 
-const planner = new HuggingFacePlanner({ ...data.options, logger });
+const planner = new HuggingFacePlanner({ ...data.options, logger, tracer });
 
 async function initialize()
 {

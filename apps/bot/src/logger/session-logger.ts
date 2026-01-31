@@ -7,7 +7,7 @@ import type { PlanRequest, PlanResult } from "../planner/planner.js";
 interface BaseEntry
 {
     ts: string;
-    level: "info" | "warn" | "error";
+    level: "info" | "warn" | "error" | "debug";
     event: string;
     message?: string;
     data?: object;
@@ -140,6 +140,11 @@ export class SessionLogger
     info(event: string, message?: string, data?: Record<string, unknown>): void
     {
         this.append("session.log", { level: "info", event, message, data });
+    }
+
+    debug(event: string, message?: string, data?: Record<string, unknown>): void
+    {
+        this.append("session.log", { level: "debug", event, message, data });
     }
 
     warn(event: string, message?: string, data?: Record<string, unknown>): void
