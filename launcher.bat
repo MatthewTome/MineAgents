@@ -16,6 +16,6 @@ if not exist "node_modules" (
 )
 cd ..\bot
 
-call npx tsx src/settings/launcher.ts
+call npx tsx src/startup/launcher.ts
 
 pause

@@ -1,6 +1,6 @@
 import "dotenv/config";
 import mineflayer from "mineflayer";
-import type { Bot } from "mineflayer";
+import { Vec3 } from "vec3";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -12,22 +12,21 @@ import { plugin as toolPlugin } from "mineflayer-tool";
 import { loadBotConfig, ConfigError } from "./settings/config.js";
 import { PerceptionCollector } from "./perception/perception.js";
 import { PerceptionSnapshot } from "./settings/types.js";
-import { runSetupWizard } from "./settings/setup.js";
+import { runSetupWizard } from "./startup/setup.js";
 import { ActionExecutor } from "./actions/action-executor.js";
 import { createDefaultActionHandlers, clearInventory } from "./actions/action-handlers.js";
-import { wireChatBridge } from "./actions/chat/chat-commands.js";
+import { wireChatBridge, PlanNarrator } from "./actions/handlers/chat.js";
 import { ReflectionLogger } from "./logger/reflection-log.js";
 import { PlannerWorkerClient } from "./planner/planner-worker-client.js";
 import { SessionLogger } from "./logger/session-logger.js";
 import { DebugTracer } from "./logger/debug-trace.js";
-import { goalNeedsBuildSite, scoutBuildSite } from "./actions/building/scouting.js";
+import { goalNeedsBuildSite, scoutBuildSite } from "./actions/handlers/building.js";
 import { SafetyRails } from "./safety/safety-rails.js";
 import { RecipeLibrary } from "./planner/knowledge.js";
-import { GoalTracker, GoalDefinition, type ResearchCondition } from "./research/goals.js";
-import { PlanNarrator } from "./actions/chat/narration.js";
+import { GoalTracker, GoalDefinition } from "./research/goals.js";
 import { MentorProtocol } from "./teamwork/mentor-protocol.js";
 import { RoleManager, resolveRole, listRoleNames, type AgentRole, type MentorMode } from "./teamwork/roles.js";
-import { StandbyManager, canRolePlanIndependently } from "./teamwork/standby-manager.js";
+import { StandbyManager } from "./teamwork/standby-manager.js";
 import { ResourceLockManager, resolveLeaderForGoal } from "./teamwork/coordination.js";
 import {
     advancePlanningTurn,
@@ -48,7 +47,8 @@ import {
 } from "./teamwork/team-plan.js";
 import { readRoster, validateRoster, writeRoster, updateAgentInventory, teamHasItem, getRawMaterialsFor, type InventoryItem } from "./teamwork/roster.js";
 import { assignStepsToAgents } from "./teamwork/step-assignment.js";
-import { Vec3 } from "vec3";
+import { attemptRecovery } from "./startup/recovery.js";
+import { buildGoalMetadata, parseEnvBoolean, resolveMentorMode, safeChat, toOptionalInt, type FeatureFlags } from "./startup/helpers.js";
 
 const { pathfinder, Movements } = pathfinderPkg;
 
@@ -1289,141 +1289,3 @@ async function createBot()
 }
 
 createBot().catch(console.error);
-
-type FeatureFlags =
-{
-    ragEnabled: boolean;
-    narrationEnabled: boolean;
-    safetyEnabled: boolean;
-};
-
-function parseEnvBoolean(value?: string): boolean | null
-{
-    if (value === undefined)  { return null; }
-
-    const normalized = value.trim().toLowerCase();
-    if (["1", "true", "yes", "on", "enable", "enabled"].includes(normalized))  { return true; }
-
-    if (["0", "false", "no", "off", "disable", "disabled"].includes(normalized)) { return false; }
-
-    return null;
-}
-
-function toOptionalInt(value?: string): number | null
-{
-    if (!value) { return null; }
-
-    const parsed = Number.parseInt(value, 10);
-    return Number.isFinite(parsed) ? parsed : null;
-}
-
-function resolveMentorMode(value?: string | null): MentorMode | null
-{
-    if (!value) { return null; }
-
-    const normalized = value.trim().toLowerCase();
-    if (["none", "off", "disabled"].includes(normalized)) { return "none"; }
-    if (["teacher", "mentor"].includes(normalized)) { return "teacher"; }
-    if (["learner", "student"].includes(normalized)) { return "learner"; }
-
-    return null;
-}
-
-function buildGoalMetadata(options:
-{
-    role: AgentRole;
-    mentorMode: MentorMode;
-    features: FeatureFlags;
-    agentId: number | null;
-    agentCount: number | null;
-    seed: string | undefined;
-    trialId: string | undefined;
-}): GoalDefinition["metadata"]
-{
-    const condition: ResearchCondition =
-    {
-        role: options.role,
-        mentorMode: options.mentorMode,
-        ragEnabled: options.features.ragEnabled,
-        narrationEnabled: options.features.narrationEnabled,
-        safetyEnabled: options.features.safetyEnabled
-    };
-
-    if (options.agentId !== null) { condition.agentId = options.agentId; }
-    if (options.agentCount !== null) { condition.agentCount = options.agentCount; }
-    if (options.seed) { condition.seed = options.seed; }
-    if (options.trialId)  { condition.trialId = options.trialId; }
-
-    return { condition };
-}
-
-function safeChat(bot: Bot, safety: SafetyRails | undefined, message: string, source: string): void
-{
-    if (!safety)
-    {
-        bot.chat(message);
-        return;
-    }
-
-    const result = safety.checkOutgoingChat(message, source);
-    if (!result.allowed) { return; }
-
-    bot.chat(result.message);
-}
-
-async function attemptRecovery(options:
-{
-    bot: Bot;
-    planner: PlannerWorkerClient;
-    executor: ActionExecutor;
-    recipeLibrary: RecipeLibrary | null;
-    ragEnabled: boolean;
-    narrationEnabled: boolean;
-    goal: string;
-    perception: PerceptionSnapshot;
-    baseContext: string;
-    failed: { id: string; reason?: string };
-    safety: SafetyRails | undefined;
-    narrator: PlanNarrator;
-    sessionLogger: SessionLogger;
-}): Promise<boolean>
-{
-    if (!options.recipeLibrary) { return false; }
-
-    const query = `${options.goal} ${options.failed.reason ?? ""}`.trim();
-    const recipes = options.recipeLibrary.search(query).slice(0, 3);
-    if (recipes.length === 0) { return false; }
-
-    for (const recipe of recipes)
-    {
-        const context = [
-            options.baseContext,
-            `Recovery attempt: previous plan failed at ${options.failed.id} (${options.failed.reason ?? "unknown reason"}).`,
-            options.recipeLibrary.formatRecipeFact(recipe, 8)
-        ].join(" ");
-
-        const plan = await options.planner.createPlan({
-            goal: options.goal,
-            perception: options.perception,
-            context,
-            ragEnabled: options.ragEnabled
-        });
-
-        if (plan.steps.length === 0) { continue; }
-
-        if (options.narrationEnabled)
-        {
-            const narrative = options.narrator.narrateRecovery({ intent: plan.intent, goal: options.goal, steps: plan.steps }, options.failed.id);
-            if (narrative) {
-                safeChat(options.bot, options.safety, narrative, "planner.narration.recovery");
-                options.sessionLogger.info("planner.narration", "Recovery plan narrated", { message: narrative });
-            }
-        }
-
-        options.executor.reset();
-        const results = await options.executor.executePlan(plan.steps);
-        const failed = results.find(r => r.status === "failed");
-        if (!failed) { return true; }
-    }
-    return false;
-}

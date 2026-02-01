@@ -1,4 +1,4 @@
-import { Bot } from "mineflayer";
+import type { Bot } from "mineflayer";
 import { Vec3 } from "vec3";
 import { Entity } from "prismarine-entity";
 import pathfinderPkg from "mineflayer-pathfinder";
@@ -114,4 +114,11 @@ export async function raceWithTimeout<T>(promise: Promise<T>, timeoutMs: number)
     } finally {
         if (timeoutId) clearTimeout(timeoutId);
     }
+}
+
+export async function handleMove(bot: Bot, step: { params?: Record<string, unknown> }): Promise<void>
+{
+    const params = (step.params ?? {}) as unknown as MoveParams;
+    const targetPos = resolveTargetPosition(bot, params || {});
+    await moveToward(bot, targetPos, params?.range ?? 1.5, params?.timeoutMs ?? 15000);
 }

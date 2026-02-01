@@ -1,5 +1,6 @@
 import { parentPort, workerData } from "node:worker_threads";
-import { HuggingFacePlanner, type PlanRequest, type PlanResult, type HuggingFacePlannerOptions } from "./planner.js";
+import { HuggingFacePlanner } from "./planner.js";
+import type { PlanRequest, PlanResult, HuggingFacePlannerOptions } from "./planner-types.js";
 import { SessionLogger } from "../logger/session-logger.js";
 import { DebugTracer } from "../logger/debug-trace.js";
 

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
 import { dump as dumpYaml } from "js-yaml";
-import { BotConfig } from "./config.js";
+import { BotConfig } from "../settings/config.js";
 
 export async function runSetupWizard(destinationPath: string): Promise<void>
 {

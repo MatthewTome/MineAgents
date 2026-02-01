@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
-import type { HuggingFacePlannerOptions, PlanRequest, PlanResult } from "./planner.js";
+import type { HuggingFacePlannerOptions, PlanRequest, PlanResult } from "./planner-types.js";
 
 interface WorkerReady
 {
