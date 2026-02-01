@@ -84,9 +84,25 @@ export async function runSetupWizard(destinationPath: string): Promise<void>
         },
         safety: {
             allowedActions: [
-                "chat", "perceive", "analyzeInventory", "move", "mine", 
-                "gather", "craft", "smelt", "build", "loot", 
-                "eat", "smith", "hunt", "fight", "fish"
+                "analyzeInventory",
+                "build",
+                "chat",
+                "craft",
+                "drop",
+                "eat",
+                "fight",
+                "fish",
+                "gather",
+                "give",
+                "hunt",
+                "loot",
+                "mine",
+                "move",
+                "perceive",
+                "pickup",
+                "requestResource",
+                "smelt",
+                "smith",
             ],
             blockedMaterials: [
                 "tnt", "lava", "flint_and_steel", "fire_charge", "fire"

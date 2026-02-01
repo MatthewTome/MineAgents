@@ -21,8 +21,12 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
 
     if (!targetItem) throw new Error("Gather requires item name");
 
+    console.log(`[gather] Requested "${rawTarget ?? "unknown"}" resolved to "${targetItem}" (timeout=${timeout}ms, maxDistance=${maxDistance})`);
+
     const acceptableVariants = getAcceptableVariants(targetItem);
     const useLooseMatching = isGenericCategory(targetItem) || acceptableVariants.length > 1;
+
+    console.log(`[gather] Acceptable variants: ${acceptableVariants.join(", ")}`);
 
     if (useLooseMatching)
     {
@@ -39,6 +43,7 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
     const chests = listChestMemory().filter((chest) =>
         chest.status === "known" && chest.items && chest.items.some((item) => isItemMatch(item.name, targetItem))
     );
+    console.log(`[gather] Chest memory search found ${chests.length} candidates.`);
     if (chests.length > 0)
     {
         const chestItem = chests[0].items?.find((item) => isItemMatch(item.name, targetItem));
@@ -50,6 +55,7 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
             console.log(`[gather] Retrieved ${nowHas.name} from chest (satisfies "${targetItem}").`);
             return;
         }
+        console.log("[gather] Chest retrieval did not yield the target item.");
     }
 
     try
@@ -62,7 +68,10 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
             return;
         }
     }
-    catch { }
+    catch (err: any)
+    {
+        console.warn(`[gather] Nearby chest loot attempt failed: ${err?.message ?? String(err)}`);
+    }
 
     console.log(`[gather] Starting cycle for: ${targetItem}`);
 
@@ -70,9 +79,14 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
     const failedBlocks = new Set<string>();
     let consecutiveFailures = 0;
     let fallbackAttempted = false;
+    let attempts = 0;
 
     while (Date.now() - start < timeout)
     {
+        attempts++;
+        const elapsed = Date.now() - start;
+        console.log(`[gather] Attempt ${attempts} (elapsed ${elapsed}ms, consecutiveFailures=${consecutiveFailures})`);
+
         const acquired = bot.inventory.items().find((item) => isItemMatch(item.name, targetItem));
         if (acquired)
         {
@@ -92,6 +106,7 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
             {
                 console.log("[gather] Relocating to new area...");
                 const escape = bot.entity.position.offset((Math.random() - 0.5) * 30, 0, (Math.random() - 0.5) * 30);
+                console.log(`[gather] Escape target: ${escape}`);
                 await moveToward(bot, escape, 2, 8000).catch(() => {});
                 consecutiveFailures = 0;
             }
@@ -113,6 +128,7 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
             await moveToward(bot, dropped.position, 1.0, 15000);
             return;
         }
+        console.log("[gather] No matching dropped items nearby.");
 
         const blockName = resolveItemToBlock(targetItem);
         if (blockName)
@@ -139,11 +155,14 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
                 .map((name) => bot.registry.blocksByName[name]?.id)
                 .filter((id): id is number => id !== undefined);
 
+            console.log(`[gather] Block search for "${targetItem}" resolved to ${aliasArray.length} aliases (${aliasIds.length} ids).`);
+
             const foundPositions = bot.findBlocks({
                 matching: aliasIds,
                 maxDistance: 64,
                 count: 20
             });
+            console.log(`[gather] Block search returned ${foundPositions.length} candidates.`);
 
             let block: Block | null = null;
             for (const pos of foundPositions)
@@ -179,6 +198,10 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
                     continue;
                 }
             }
+            else
+            {
+                console.log("[gather] No reachable blocks matched the target.");
+            }
         }
 
         const raw = resolveProductToRaw(targetItem);
@@ -192,10 +215,12 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
 
         console.log("[gather] Searching...");
         const explore = bot.entity.position.offset((Math.random() - 0.5) * 20, 0, (Math.random() - 0.5) * 20);
+        console.log(`[gather] Exploring position: ${explore}`);
         await moveToward(bot, explore, 2, 15000).catch(() => {});
         consecutiveFailures++;
         await waitForNextTick(bot);
     }
+    console.warn(`[gather] Timeout after ${Date.now() - start}ms trying to gather "${targetItem}".`);
     throw new Error(`Gather ${targetItem} failed. Tried variants: ${acceptableVariants.join(", ")}`);
 }
 
