@@ -202,6 +202,29 @@ describe("GoalTracker", () =>
         expect(dashboard.latestFor(lavaId)?.reason).toBe("Hit lava");
     });
 
+    it("captures metadata and duration for successful goals", () =>
+    {
+        const dashboard = new InMemoryGoalDashboard();
+        const tracker = new GoalTracker(dashboard);
+        const goalId = tracker.addGoal(
+        {
+            name: "Iron tools pipeline",
+            steps: ["Gather ore", "Smelt", "Craft"],
+            successSignal: { type: "chat", includes: "iron tools complete", description: "Tools crafted" },
+            metadata: { tags: ["research", "crafting"] }
+        }, 0);
+
+        const snapshot: PerceptionSnapshot = {
+            ...baseSnapshot,
+            chatWindow: { lastMessages: ["iron tools complete!"] }
+        };
+
+        const events = tracker.ingestSnapshot(snapshot, 30_000);
+        expect(events[0]?.id).toBe(goalId);
+        expect(events[0]?.durationMs).toBe(30_000);
+        expect(events[0]?.metadata?.tags).toContain("research");
+    });
+
     it("emits integration-style pass/fail events from snapshot and event streams", () =>
     {
         vi.useFakeTimers();

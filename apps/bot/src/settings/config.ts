@@ -35,7 +35,7 @@ export interface BotConfig
     };
     agent:
     {
-        role: "gatherer" | "builder" | "supervisor" | "guard" | "generalist";
+        role: "gatherer" | "builder" | "supervisor" | "generalist";
         mentor:
         {
             mode: "none" | "teacher" | "learner";
@@ -89,12 +89,8 @@ const DEFAULTS = {
             "chat",
             "craft",
             "drop",
-            "eat",
-            "fight",
-            "fish",
             "gather",
             "give",
-            "hunt",
             "loot",
             "mine",
             "move",
@@ -102,7 +98,6 @@ const DEFAULTS = {
             "pickup",
             "requestResource",
             "smelt",
-            "smith",
         ],
         blockedMaterials: [
             "tnt", "lava", "flint_and_steel", "fire_charge", "fire"
@@ -132,7 +127,30 @@ const DEFAULTS = {
         narrationEnabled: true,
         safetyEnabled: true
     }
+} as const;
+
+export const DEFAULT_BOT_CONFIG: BotConfig =
+{
+    connection: { ...DEFAULTS.connection },
+    perception: { ...DEFAULTS.perception },
+    safety: {
+        ...DEFAULTS.safety,
+        rateLimits: {
+            global: { ...DEFAULTS.safety.rateLimits.global },
+            perAction: { ...DEFAULTS.safety.rateLimits.perAction }
+        }
+    },
+    agent: {
+        role: DEFAULTS.agent.role,
+        mentor: { ...DEFAULTS.agent.mentor }
+    },
+    features: { ...DEFAULTS.features }
 };
+
+export function createDefaultBotConfig(): BotConfig
+{
+    return structuredClone(DEFAULT_BOT_CONFIG);
+}
 
 const configSchema = z.object(
 {
@@ -173,7 +191,7 @@ const configSchema = z.object(
     }).default(DEFAULTS.safety),
     agent: z.object(
     {
-        role: z.enum(["gatherer", "builder", "supervisor", "guard", "generalist", "miner", "guide"])
+        role: z.enum(["gatherer", "builder", "supervisor", "generalist", "miner", "guide"])
             .default(DEFAULTS.agent.role)
             .transform((val): AgentRole => {
                 const resolved = resolveRole(val);

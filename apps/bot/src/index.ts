@@ -12,7 +12,7 @@ import { plugin as toolPlugin } from "mineflayer-tool";
 import { loadBotConfig, ConfigError } from "./settings/config.js";
 import { PerceptionCollector } from "./perception/perception.js";
 import { PerceptionSnapshot } from "./settings/types.js";
-import { runSetupWizard } from "./startup/setup.js";
+import { runSetupWizard } from "./startup/helpers.js";
 import { ActionExecutor } from "./actions/action-executor.js";
 import { createDefaultActionHandlers, clearInventory } from "./actions/action-handlers.js";
 import { wireChatBridge, PlanNarrator } from "./actions/handlers/chat.js";
@@ -52,7 +52,7 @@ import { buildGoalMetadata, parseEnvBoolean, resolveMentorMode, safeChat, toOpti
 
 const { pathfinder, Movements } = pathfinderPkg;
 
-async function createBot()
+export async function createBot()
 {
     const sessionLogger = new SessionLogger();
     sessionLogger.installGlobalHandlers();
@@ -1288,4 +1288,7 @@ async function createBot()
     return bot;
 }
 
-createBot().catch(console.error);
+if (process.env.NODE_ENV !== "test")
+{
+    createBot().catch(console.error);
+}

@@ -34,7 +34,7 @@ const TOPIC_ADVICE: Array<{ keywords: string[]; advice: string }> =
         advice: "Keep food in hotbar; hunt passive mobs or collect crops before long tasks."
     },
     {
-        keywords: ["safety", "mobs", "guard"],
+        keywords: ["safety", "mobs"],
         advice: "Light the area and avoid caves at night; back away if health drops below half."
     }
 ];

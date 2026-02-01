@@ -8,10 +8,6 @@ import { handleCraft } from "./handlers/crafting.js";
 import { handleSmelt } from "./handlers/smelting.js";
 import { handleBuild } from "./handlers/building.js";
 import { handleLoot } from "./handlers/looting.js";
-import { handleEat } from "./handlers/combat.js";
-import { handleSmith } from "./handlers/smithing.js";
-import { handleHunt, handleFight } from "./handlers/combat.js";
-import { handleFish } from "./handlers/fishing.js";
 import { handlePerceive } from "./handlers/perceiving.js";
 import { handleDrop, handleGive } from "./handlers/inventory-management.js";
 import { handleRequestResource } from "./handlers/teamwork.js";
@@ -49,11 +45,6 @@ export function createDefaultActionHandlers(options?: { resourceLocks?: Resource
         smelt: wrap("smelt", (bot, step) => handleSmelt(bot, step, resourceLocks)),
         build: wrap("build", handleBuild),
         loot: wrap("loot", (bot, step) => handleLoot(bot, step, resourceLocks)),
-        eat: wrap("eat", handleEat),
-        smith: wrap("smith", (bot, step) => handleSmith(bot, step, resourceLocks)),
-        hunt: wrap("hunt", handleHunt),
-        fish: wrap("fish", handleFish),
-        fight: wrap("fight", handleFight),
         perceive: wrap("perceive", handlePerceive),
         analyzeInventory: wrap("analyzeInventory", handlePerceive),
         give: wrap("give", handleGive),

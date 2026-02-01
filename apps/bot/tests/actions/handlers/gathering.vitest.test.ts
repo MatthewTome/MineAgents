@@ -1,27 +1,27 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import type { Bot } from "mineflayer";
 
-vi.mock("../../src/actions/handlers/looting.js", () => ({
+vi.mock("../../../src/actions/handlers/looting.js", () => ({
     handleLoot: vi.fn()
 }));
 
-vi.mock("../../src/actions/handlers/crafting.js", () => ({
+vi.mock("../../../src/actions/handlers/crafting.js", () => ({
     craftFromInventory: vi.fn()
 }));
 
-vi.mock("../../src/actions/handlers/movement.js", () => ({
+vi.mock("../../../src/actions/handlers/movement.js", () => ({
     moveToward: vi.fn(),
     findNearestEntity: vi.fn(),
     waitForNextTick: vi.fn()
 }));
 
-vi.mock("../../src/actions/handlers/mining.js", () => ({
+vi.mock("../../../src/actions/handlers/mining.js", () => ({
     collectBlocks: vi.fn(),
     resolveItemToBlock: vi.fn(),
     resolveProductToRaw: vi.fn()
 }));
 
-vi.mock("../../src/perception/chest-memory.js", () => ({
+vi.mock("../../../src/perception/chest-memory.js", () => ({
     listChestMemory: vi.fn()
 }));
 
@@ -134,10 +134,16 @@ describe("handleGather", () =>
 
     it("mines blocks when a matching source block is found", async () =>
     {
-        const bot = makeBot();
+        const items: Array<{ name: string; count: number }> = [];
+        const bot = makeBot(items);
         const blockPosition = makeVec3(3, 64, -1);
 
         vi.mocked(resolveItemToBlock).mockReturnValue("log");
+        vi.mocked(collectBlocks).mockImplementation(async () =>
+        {
+            items.push({ name: "oak_log", count: 1 });
+            return true;
+        });
         (bot.findBlocks as any).mockReturnValue([blockPosition]);
         (bot.blockAt as any).mockReturnValue({ name: "oak_log", position: blockPosition });
 

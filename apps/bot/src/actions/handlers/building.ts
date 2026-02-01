@@ -425,7 +425,7 @@ function countInventoryItems(bot: Bot, name: string): number {
     return total;
 }
 
-function generatePlatform(origin: Vec3, w: number, l: number): Vec3[] {
+export function generatePlatform(origin: Vec3, w: number, l: number): Vec3[] {
     const blocks: Vec3[] = [];
     for (let x = 0; x < w; x++) {
         for (let z = 0; z < l; z++) {
@@ -435,7 +435,7 @@ function generatePlatform(origin: Vec3, w: number, l: number): Vec3[] {
     return blocks;
 }
 
-function generateWalls(origin: Vec3, w: number, l: number, h: number, doorPos: Vec3 | null): Vec3[] {
+export function generateWalls(origin: Vec3, w: number, l: number, h: number, doorPos: Vec3 | null): Vec3[] {
     const blocks: Vec3[] = [];
     for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
@@ -453,7 +453,7 @@ function generateWalls(origin: Vec3, w: number, l: number, h: number, doorPos: V
     return blocks;
 }
 
-function generateRoof(origin: Vec3, w: number, l: number): Vec3[] {
+export function generateRoof(origin: Vec3, w: number, l: number): Vec3[] {
     const blocks: Vec3[] = [];
     for (let x = 0; x < w; x++) {
         for (let z = 0; z < l; z++) {
@@ -463,7 +463,7 @@ function generateRoof(origin: Vec3, w: number, l: number): Vec3[] {
     return blocks;
 }
 
-function generateDoorFrame(origin: Vec3): Vec3[] {
+export function generateDoorFrame(origin: Vec3): Vec3[] {
     return [
         origin.offset(-1, 0, 0), origin.offset(1, 0, 0), 
         origin.offset(-1, 1, 0), origin.offset(1, 1, 0),

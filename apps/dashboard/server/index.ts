@@ -68,7 +68,7 @@ const sessionPaths = new Map<string, string>();
 
 const knownTailers = new Map<string, LogTailer>();
 
-function safeStat(filePath: string): fs.Stats | null {
+export function safeStat(filePath: string): fs.Stats | null {
   try {
     return fs.statSync(filePath);
   } catch {
@@ -76,7 +76,7 @@ function safeStat(filePath: string): fs.Stats | null {
   }
 }
 
-function readJsonLines(filePath: string): any[] {
+export function readJsonLines(filePath: string): any[] {
   if (!fs.existsSync(filePath)) {
     return [];
   }
@@ -95,7 +95,7 @@ function readJsonLines(filePath: string): any[] {
     .filter(Boolean);
 }
 
-function getSessionName(sessionDir: string): string {
+export function getSessionName(sessionDir: string): string {
   const base = path.basename(sessionDir);
   const index = base.lastIndexOf("_");
   if (index > 0) {
@@ -104,12 +104,12 @@ function getSessionName(sessionDir: string): string {
   return base;
 }
 
-function encodeSessionId(sessionDir: string): string {
+export function encodeSessionId(sessionDir: string): string {
   const relative = path.relative(sessionsRoot, sessionDir);
   return relative.split(path.sep).join("__");
 }
 
-function decodeSessionId(sessionId: string): string | null {
+export function decodeSessionId(sessionId: string): string | null {
   const relative = sessionId.split("__").join(path.sep);
   const candidate = path.join(sessionsRoot, relative);
   if (!candidate.startsWith(sessionsRoot)) {
@@ -118,13 +118,13 @@ function decodeSessionId(sessionId: string): string | null {
   return candidate;
 }
 
-function registerSessionPath(sessionDir: string): string {
+export function registerSessionPath(sessionDir: string): string {
   const sessionId = encodeSessionId(sessionDir);
   sessionPaths.set(sessionId, sessionDir);
   return sessionId;
 }
 
-function discoverSessions(): string[] {
+export function discoverSessions(): string[] {
   const directories: string[] = [];
   if (!fs.existsSync(sessionsRoot)) {
     return directories;
@@ -162,7 +162,7 @@ function pushNarration(event: NarrationEvent) {
   io.emit("narration", event);
 }
 
-function parsePacket(payload: any): { type: string; data: any } | null {
+export function parsePacket(payload: any): { type: string; data: any } | null {
   if (!payload) {
     return null;
   }
@@ -404,7 +404,7 @@ function loadTrials(): TrialSummary[] {
   return trials.sort((a, b) => (b.startedAt ?? "").localeCompare(a.startedAt ?? ""));
 }
 
-function computeBoxPlot(values: number[]): { min: number; q1: number; median: number; q3: number; max: number } {
+export function computeBoxPlot(values: number[]): { min: number; q1: number; median: number; q3: number; max: number } {
   if (values.length === 0) {
     return { min: 0, q1: 0, median: 0, q3: 0, max: 0 };
   }
@@ -425,7 +425,7 @@ function computeBoxPlot(values: number[]): { min: number; q1: number; median: nu
   };
 }
 
-function computeMetrics(trials: TrialSummary[]) {
+export function computeMetrics(trials: TrialSummary[]) {
   const byCondition = trials.reduce<Record<string, TrialSummary[]>>((acc, trial) => {
     acc[trial.condition] = acc[trial.condition] ?? [];
     acc[trial.condition].push(trial);
@@ -540,13 +540,16 @@ io.on("connection", socket => {
   });
 });
 
-setInterval(() => {
-  const sessions = discoverSessions();
-  sessions.forEach(attachTailers);
-}, 5000);
+if (process.env.NODE_ENV !== "test") {
+  setInterval(() => {
+    const sessions = discoverSessions();
+    sessions.forEach(attachTailers);
+  }, 5000);
 
 discoverSessions().forEach(attachTailers);
+  server.listen(port, () => {
+    console.log(`Dashboard server listening on ${port}`);
+  });
+}
 
-server.listen(port, () => {
-  console.log(`Dashboard server listening on ${port}`);
-});
+export { app, server, io };

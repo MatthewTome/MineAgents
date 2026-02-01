@@ -2,7 +2,6 @@ export type AgentRole =
     | "gatherer"
     | "builder"
     | "supervisor"
-    | "guard"
     | "generalist";
 
 export type MentorMode = "none" | "teacher" | "learner";
@@ -39,13 +38,6 @@ const ROLE_DEFINITIONS: Record<AgentRole, RoleDefinition> =
         planningFocus: "Monitor team chat for '[problem]' or '[URGENT]' messages. When team members announce issues, create new assignments or plans to resolve them. Stay in standby mode when not actively planning. Reassign tasks dynamically based on team needs.",
         mentoringFocus: "Provide strategic guidance, coordinate team efforts, delegate effectively."
     },
-    guard: {
-        id: "guard",
-        label: "Guard",
-        description: "Keep the team safe by watching for hazards and mobs.",
-        planningFocus: "Monitor threats, stock food, and secure the perimeter. Respond to danger alerts from teammates. When idle, patrol and watch for threats.",
-        mentoringFocus: "Warn about dangers and recommend defensive actions."
-    },
     generalist: {
         id: "generalist",
         label: "Generalist",
@@ -60,7 +52,6 @@ const ROLE_ALIASES: Record<string, AgentRole> =
     gatherer: "gatherer",
     supervisor: "supervisor",
     builder: "builder",
-    guard: "guard",
     generalist: "generalist",
 
     miner: "gatherer",

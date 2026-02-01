@@ -11,6 +11,5 @@
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,
 
-    "vitest.enable": true,
-    "vitest.commandLine": "pnpm -C apps/bot test"
+    "vitest.enable": true
 }

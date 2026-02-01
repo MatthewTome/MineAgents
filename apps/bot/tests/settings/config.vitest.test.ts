@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { ConfigError, loadBotConfig } from "../../src/settings/config.js";
+import { ConfigError, createDefaultBotConfig, loadBotConfig } from "../../src/settings/config.js";
 
 const writeTempConfig = (content: string, ext: string) =>
 {
@@ -95,5 +95,16 @@ describe("config loader", () =>
         expect(caught?.field).toBe("perception.hz");
         expect(caught?.line).toBe(2);
         expect(caught?.message).toContain("perception.hz");
+    });
+
+    it("creates a fresh default config snapshot", () =>
+    {
+        const config = createDefaultBotConfig();
+        config.connection.host = "mutated";
+
+        const next = createDefaultBotConfig();
+
+        expect(next.connection.host).toBe("127.0.0.1");
+        expect(next.features.ragEnabled).toBe(true);
     });
 });

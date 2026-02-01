@@ -5,26 +5,25 @@ import { exec, execSync, spawn } from "node:child_process";
 import { dump as dumpYaml } from "js-yaml";
 import { createRoster, writeRoster } from "../teamwork/roster.js";
 
-const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-});
-
-const ask = (query: string, def: string): Promise<string> => {
-    return new Promise(resolve => {
-        rl.question(`${query} [${def}]: `, (ans) => {
-            resolve(ans.trim() || def);
-        });
-    });
-};
-
 interface AgentLaunchConfig {
     name: string;
     role: string;
     configPath: string;
 }
 
-async function main() {
+export async function main() {
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+
+    const ask = (query: string, def: string): Promise<string> => {
+        return new Promise(resolve => {
+            rl.question(`${query} [${def}]: `, (ans) => {
+                resolve(ans.trim() || def);
+            });
+        });
+    };
     console.clear();
     console.log("\n" + "=".repeat(60));
     console.log("WELCOME TO MINEAGENTS!");
@@ -57,7 +56,7 @@ async function main() {
     let safetyEnabled = true;
     let nameStrategy = "1";
     let roleStrategy = "1";
-    let roles = ["gatherer", "builder", "supervisor", "guard"];
+    let roles = ["gatherer", "builder", "supervisor"];
 
     if (mode === "1") {
         console.log("\n[Setup] Configuring BASELINE Condition.");
@@ -103,7 +102,7 @@ async function main() {
                 name = await ask(`Name for Agent ${index}`, name);
             }
             if (roleStrategy === "2" && count > 1) {
-                role = await ask(`Role for ${name} (gatherer/builder/supervisor/guard/generalist)`, role);
+                role = await ask(`Role for ${name} (gatherer/builder/supervisor/generalist)`, role);
             }
         }
 
@@ -119,10 +118,20 @@ async function main() {
             {
                 allowedActions:
                 [
-                    "chat", "move", "mine", "craft", "build", "gather",
-                    "smelt", "eat", "perceive", "analyzeInventory",
-                    "loot", "smith", "hunt", "fight", "fish",
-                    "give", "requestResource", "pickup", "drop"
+                    "analyzeInventory",
+                    "build",
+                    "chat",
+                    "craft",
+                    "drop",
+                    "gather",
+                    "give",
+                    "loot",
+                    "mine",
+                    "move",
+                    "perceive",
+                    "pickup",
+                    "requestResource",
+                    "smelt",
                 ],
                 blockedMaterials: ["tnt", "lava"],
                 customProfanityList: [],
@@ -240,6 +249,9 @@ async function main() {
             if (error) console.error(`[Launcher] Error spawning ${agent.name}:`, error);
         });
     });
+rl.close();
 }
 
-main();
+if (process.env.NODE_ENV !== "test") {
+    main();
+}

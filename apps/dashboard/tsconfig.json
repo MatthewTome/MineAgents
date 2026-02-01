@@ -9,8 +9,8 @@
     "skipLibCheck": true,
     "noEmit": true,
     "resolveJsonModule": true,
-    "types": ["node"],
+    "types": ["node", "vite/client", "vitest/globals"],
     "isolatedModules": true
   },
-  "include": ["src", "server"]
+  "include": ["src", "server", "tests"]
 }

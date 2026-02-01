@@ -9,7 +9,7 @@ const BUILD_SITE_CLEARANCE = 5;
 
 const PLANNER_ROLES: AgentRole[] = ["supervisor", "generalist"];
 
-const SPECIALIST_ROLES: AgentRole[] = ["gatherer", "builder", "guard"];
+const SPECIALIST_ROLES: AgentRole[] = ["gatherer", "builder"];
 
 export interface StandbyBehavior
 {
@@ -34,7 +34,7 @@ const ROLE_STANDBY_BEHAVIORS: Record<AgentRole, StandbyBehavior> =
         ],
         proactiveChecks: ["team_status", "pending_assignments"],
         standbyMessage: "Supervisor on standby - monitoring team for issues.",
-        canRespondTo: ["builder", "gatherer", "guard", "generalist"]
+        canRespondTo: ["builder", "gatherer", "generalist"]
     },
     gatherer: {
         listenPatterns: [
@@ -47,7 +47,7 @@ const ROLE_STANDBY_BEHAVIORS: Record<AgentRole, StandbyBehavior> =
         ],
         proactiveChecks: ["inventory_capacity", "nearby_resources"],
         standbyMessage: "Gatherer on standby - ready to collect resources.",
-        canRespondTo: ["builder", "supervisor", "guard", "generalist"]
+        canRespondTo: ["builder", "supervisor", "generalist"]
     },
     builder: {
         listenPatterns: [
@@ -60,19 +60,6 @@ const ROLE_STANDBY_BEHAVIORS: Record<AgentRole, StandbyBehavior> =
         standbyMessage: "Builder on standby - ready to construct.",
         canRespondTo: ["supervisor", "generalist"]
     },
-    guard: {
-        listenPatterns: [
-            /danger/i,
-            /threat/i,
-            /mob.*nearby/i,
-            /attack/i,
-            /help.*fight/i,
-            MOVE_REQUEST_PATTERN
-        ],
-        proactiveChecks: ["nearby_threats", "team_safety"],
-        standbyMessage: "Guard on standby - watching for threats.",
-        canRespondTo: ["builder", "gatherer", "supervisor", "generalist"]
-    },
     generalist: {
         listenPatterns: [
             /\[team\].*needs/i,
@@ -84,7 +71,7 @@ const ROLE_STANDBY_BEHAVIORS: Record<AgentRole, StandbyBehavior> =
         ],
         proactiveChecks: ["team_status", "inventory_capacity"],
         standbyMessage: "Agent on standby - ready to assist.",
-        canRespondTo: ["builder", "gatherer", "supervisor", "guard", "generalist"]
+        canRespondTo: ["builder", "gatherer", "supervisor", "generalist"]
     }
 };
 
