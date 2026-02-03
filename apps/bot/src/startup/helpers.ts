@@ -5,7 +5,7 @@ import { dump as dumpYaml } from "js-yaml";
 import type { Bot } from "mineflayer";
 import type { SafetyRails } from "../safety/safety-rails.js";
 import type { GoalDefinition, ResearchCondition } from "../research/goals.js";
-import type { AgentRole, MentorMode } from "../teamwork/roles.js";
+import type { AgentRole } from "../teamwork/roles.js";
 import { type BotConfig, createDefaultBotConfig } from "../settings/config.js";
 
 export type FeatureFlags =
@@ -35,22 +35,9 @@ export function toOptionalInt(value?: string): number | null
     return Number.isFinite(parsed) ? parsed : null;
 }
 
-export function resolveMentorMode(value?: string | null): MentorMode | null
-{
-    if (!value) { return null; }
-
-    const normalized = value.trim().toLowerCase();
-    if (["none", "off", "disabled"].includes(normalized)) { return "none"; }
-    if (["teacher", "mentor"].includes(normalized)) { return "teacher"; }
-    if (["learner", "student"].includes(normalized)) { return "learner"; }
-
-    return null;
-}
-
 export function buildGoalMetadata(options:
 {
     role: AgentRole;
-    mentorMode: MentorMode;
     features: FeatureFlags;
     agentId: number | null;
     agentCount: number | null;
@@ -61,7 +48,6 @@ export function buildGoalMetadata(options:
     const condition: ResearchCondition =
     {
         role: options.role,
-        mentorMode: options.mentorMode,
         ragEnabled: options.features.ragEnabled,
         narrationEnabled: options.features.narrationEnabled,
         safetyEnabled: options.features.safetyEnabled

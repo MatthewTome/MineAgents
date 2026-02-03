@@ -63,7 +63,6 @@
     "ALL build steps must use the SAME X and Z origin coordinates",
     "Roof Y-coordinate = Foundation Y + 4 (on top of 4-high walls)",
     "Any wood type works (oak, spruce, birch, etc.) - use what's available",
-    "Door must be placed BEFORE walls to ensure proper gap",
-    "The bot will automatically handle material variants (oak_planks, spruce_planks, etc.)"
+    "Door must be placed BEFORE walls to ensure proper gap"
   ]
 }

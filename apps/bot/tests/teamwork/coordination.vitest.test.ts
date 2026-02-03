@@ -29,7 +29,7 @@ describe("coordination", () =>
             goal: "build shelter",
             candidate: {
                 name: "alpha",
-                role: "guide",
+                role: "supervisor",
                 agentId: 1
             }
         });

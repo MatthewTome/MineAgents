@@ -3,7 +3,7 @@ import { Vec3 } from "vec3";
 import type { Block } from "prismarine-block";
 import pathfinderPkg from "mineflayer-pathfinder";
 import { waitForNextTick, raceWithTimeout, moveToward, findNearestEntity } from "./movement.js";
-import { requireInventoryItem, expandMaterialAliases } from "../action-utils.js";
+import { requireInventoryItem, getReplaceableBlocks, resolveItemName, isItemMatch } from "../action-utils.js";
 
 const { goals } = pathfinderPkg;
 const MOVE_REQUEST_WAIT_MS = 3000;
@@ -20,7 +20,7 @@ export interface BuildParams {
 }
 
 export async function executeBuild(bot: Bot, params: BuildParams): Promise<void> {
-    const material = params.material ?? "dirt";
+    const material = resolveItemName(bot, params.material ?? "oak_planks");
     const width = params.width ?? 7;
     const length = params.length ?? 7;
     const height = params.height ?? 4;
@@ -108,7 +108,7 @@ export async function executeBuild(bot: Bot, params: BuildParams): Promise<void>
         return bot.entity.position.distanceTo(a) - bot.entity.position.distanceTo(b);
     });
 
-    const replaceableBlocks = expandMaterialAliases(bot, "replaceable");
+    const replaceableBlocks = getReplaceableBlocks();
     let failures = 0;
 
     const requestedMoves = new Map<string, number>();
@@ -391,37 +391,19 @@ function isValidRef(block: any): boolean {
 }
 
 function countInventoryItems(bot: Bot, name: string): number {
-    const aliases = expandMaterialAliases(bot, name);
-    const normalizedName = name.toLowerCase().replace(/_/g, "");
-
+    const target = resolveItemName(bot, name);
     const allItems = bot.inventory.items();
 
     let total = 0;
     for (const item of allItems)
     {
-        const itemName = item.name.toLowerCase();
-        const itemNameNormalized = itemName.replace(/_/g, "");
-
-        if (itemName === name.toLowerCase())
+        if (isItemMatch(item.name, target))
         {
             total += item.count;
-            continue;
-        }
-
-        if (aliases.some(a => itemName === a.toLowerCase() || itemName.includes(a.toLowerCase())))
-        {
-            total += item.count;
-            continue;
-        }
-
-        if (itemNameNormalized.includes(normalizedName) || normalizedName.includes(itemNameNormalized))
-        {
-            total += item.count;
-            continue;
         }
     }
 
-    console.log(`[building] Inventory check for '${name}': found ${total} items (aliases: ${aliases.join(", ")})`);
+    console.log(`[building] Inventory check for '${target}': found ${total} items.`);
     return total;
 }
 
@@ -497,7 +479,7 @@ type BuildSiteOptions = {
 const TILE_ENTITY_BLOCKS = [
     "chest", "trapped_chest", "ender_chest", "barrel",
     "furnace", "blast_furnace", "smoker",
-    "crafting_table", "smithing_table", "fletching_table", "cartography_table", "loom",
+    "crafting_table", "fletching_table", "cartography_table", "loom",
     "anvil", "chipped_anvil", "damaged_anvil",
     "enchanting_table", "brewing_stand", "cauldron",
     "hopper", "dropper", "dispenser",

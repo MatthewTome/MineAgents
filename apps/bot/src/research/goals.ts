@@ -5,7 +5,6 @@ export type GoalStatus = "pending" | "pass" | "fail";
 export interface ResearchCondition
 {
     role?: string;
-    mentorMode?: "none" | "teacher" | "learner";
     ragEnabled?: boolean;
     narrationEnabled?: boolean;
     safetyEnabled?: boolean;

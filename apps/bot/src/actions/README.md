@@ -97,36 +97,6 @@ Open a chest and take items.
 !act loot {"item":"apple","maxDistance":8}
 ```
 
-### eat
-Eat a food item from inventory.
-```
-!act eat {"item":"bread"}
-```
-
-### smith
-Use an anvil (combine items or rename).
-```
-!act smith {"item1":"iron_pickaxe","name":"Prospector"}
-```
-
-### hunt
-Hunt a mob (basic combat pursuit).
-```
-!act hunt {"target":"cow"}
-```
-
-### fight
-Fight a mob.
-```
-!act fight {"target":"zombie"}
-```
-
-### fish
-Fish in water with a fishing rod.
-```
-!act fish {}
-```
-
 ### give
 Give items to a teammate.
 ```

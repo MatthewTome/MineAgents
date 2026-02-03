@@ -45,6 +45,12 @@ function makeVec3(x: number, y: number, z: number)
         toString()
         {
             return `${x},${y},${z}`;
+        },
+        floored() {
+            return makeVec3(Math.floor(x), Math.floor(y), Math.floor(z));
+        },
+        clone() {
+            return makeVec3(x, y, z);
         }
     };
 }
@@ -56,13 +62,19 @@ function makeBot(items: Array<{ name: string; count: number }> = [])
         inventory: { items: () => items },
         entity: { position },
         registry: {
-            itemsByName: { oak_log: {}, oak_planks: {} },
+            itemsByName: { 
+                oak_log: { id: 1, name: "oak_log" }, 
+                oak_planks: { id: 2, name: "oak_planks" },
+                planks: { id: 2, name: "oak_planks" }
+            },
             blocksByName: { log: { id: 1 }, oak_log: { id: 2 } }
         },
         findBlocks: vi.fn().mockReturnValue([]),
+        findBlock: vi.fn().mockReturnValue(null),
         blockAt: vi.fn(),
         canDigBlock: vi.fn().mockReturnValue(true),
-        pathfinder: { stop: vi.fn() }
+        pathfinder: { stop: vi.fn() },
+        recipesFor: vi.fn().mockReturnValue([{ delta: [] }]),
     } as unknown as Bot;
 }
 
@@ -77,6 +89,11 @@ describe("handleGather", () =>
         vi.mocked(waitForNextTick).mockResolvedValue(undefined);
         vi.mocked(listChestMemory).mockReturnValue([]);
         vi.mocked(findNearestEntity).mockReturnValue(null);
+
+        vi.mocked(handleLoot).mockResolvedValue(undefined);
+        vi.mocked(craftFromInventory).mockResolvedValue(undefined);
+        vi.mocked(moveToward).mockResolvedValue(undefined);
+        vi.mocked(collectBlocks).mockResolvedValue(false);
     });
 
     afterEach(() =>
@@ -117,7 +134,8 @@ describe("handleGather", () =>
 
     it("moves to collect dropped items when they match the target", async () =>
     {
-        const bot = makeBot();
+        const items: Array<{ name: string; count: number }> = [];
+        const bot = makeBot(items);
         const dropPosition = makeVec3(5, 64, 5);
 
         vi.mocked(findNearestEntity).mockReturnValue({
@@ -125,6 +143,10 @@ describe("handleGather", () =>
             position: dropPosition,
             getDroppedItem: () => ({ name: "oak_log" })
         } as any);
+
+        vi.mocked(moveToward).mockImplementation(async () => {
+            items.push({ name: "oak_log", count: 1 });
+        });
 
         await handleGather(bot, { params: { item: "log" } });
 
@@ -137,6 +159,7 @@ describe("handleGather", () =>
         const items: Array<{ name: string; count: number }> = [];
         const bot = makeBot(items);
         const blockPosition = makeVec3(3, 64, -1);
+        const targetBlock = { name: "oak_log", position: blockPosition };
 
         vi.mocked(resolveItemToBlock).mockReturnValue("log");
         vi.mocked(collectBlocks).mockImplementation(async () =>
@@ -144,8 +167,10 @@ describe("handleGather", () =>
             items.push({ name: "oak_log", count: 1 });
             return true;
         });
+
+        (bot.findBlock as any).mockReturnValue(targetBlock);
         (bot.findBlocks as any).mockReturnValue([blockPosition]);
-        (bot.blockAt as any).mockReturnValue({ name: "oak_log", position: blockPosition });
+        (bot.blockAt as any).mockReturnValue(targetBlock);
 
         await handleGather(bot, { params: { item: "log" } });
 
@@ -154,14 +179,19 @@ describe("handleGather", () =>
 
     it("crafts the item from raw materials when applicable", async () =>
     {
-        const bot = makeBot([{ name: "oak_log", count: 2 }]);
+        const items = [{ name: "oak_log", count: 2 }];
+        const bot = makeBot(items);
 
         vi.mocked(resolveProductToRaw).mockImplementation((product) =>
-            product === "planks" ? "log" : null
+            product.includes("planks") ? "oak_log" : null
         );
+
+        vi.mocked(craftFromInventory).mockImplementation(async () => {
+            items.push({ name: "oak_planks", count: 4 });
+        });
 
         await handleGather(bot, { params: { item: "planks" } });
 
-        expect(craftFromInventory).toHaveBeenCalledWith(bot, { recipe: "planks" }, undefined);
+        expect(craftFromInventory).toHaveBeenCalledWith(bot, { recipe: "oak_planks" }, undefined);
     });
 });

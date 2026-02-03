@@ -27,7 +27,7 @@ export async function craftFromInventory(bot: Bot, params: CraftParams, resource
 
     if (itemName.endsWith("door") && !itemName.includes("_"))
     {
-        const availableWood = resolveWoodType(bot);
+        const availableWood = resolveWoodType();
         itemName = `${availableWood}_door`;
         console.log(`[craft] Resolved generic 'door' to '${itemName}' based on inventory.`);
     }

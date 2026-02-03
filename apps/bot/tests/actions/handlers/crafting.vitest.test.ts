@@ -16,23 +16,6 @@ describe("actions/handlers/crafting.ts", () => {
     expect(bot.craft).not.toHaveBeenCalled();
   });
 
-  it("resolves generic door recipes based on inventory wood type", async () => {
-    const bot = makeMockBot({
-      items: [{ name: "birch_planks", count: 6 }],
-      registryItems: {
-        birch_door: { id: 5, name: "birch_door" }
-      }
-    });
-    const recipe = { id: 5, requiresTable: false };
-    const recipesFor = vi.fn().mockReturnValue([recipe]);
-    (bot as any).recipesFor = recipesFor;
-
-    await craftFromInventory(bot as any, { recipe: "door", count: 1 });
-
-    expect(recipesFor).toHaveBeenCalledWith(5, null, 1, false);
-    expect(bot.craft).toHaveBeenCalledWith(recipe, 1, undefined);
-  });
-
   it("falls back to material when crafting structure aliases", async () => {
     const bot = makeMockBot({
       items: [{ name: "oak_log", count: 2 }],

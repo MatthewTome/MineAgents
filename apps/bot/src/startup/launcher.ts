@@ -72,7 +72,6 @@ export async function main() {
         console.log("\n[Setup] Configuring MINEAGENTS Condition.");
         console.log("   - RAG: Enabled");
         console.log("   - Narration: Enabled");
-        console.log("   - Mentoring: Enabled");
         const countStr = await ask("How many agents for this trial?", "3");
         count = parseInt(countStr) || 3;
     } else {
@@ -137,13 +136,8 @@ export async function main() {
                 customProfanityList: [],
                 rateLimits: { global: { max: 24, windowMs: 10000 } } 
             },
-            agent: { 
-                role, 
-                mentor: { 
-                    mode: mode === "2" ? "teacher" : "none",
-                    adviceCooldownMs: 15000, 
-                    requestCooldownMs: 30000 
-                } 
+            agent: {
+                role
             },
             features: { 
                 ragEnabled, 

@@ -9,7 +9,7 @@ import type { PickupParams } from "../action-types.js";
 import { collectBlocks, resolveItemToBlock, resolveProductToRaw } from "./mining.js";
 import { listChestMemory } from "../../perception/chest-memory.js";
 import { moveToward, findNearestEntity, waitForNextTick } from "./movement.js";
-import { expandMaterialAliases, resolveItemName, isItemMatch, getAcceptableVariants, isGenericCategory } from "../action-utils.js";
+import { resolveItemName, isItemMatch } from "../action-utils.js";
 
 export async function handleGather(bot: Bot, step: { params?: Record<string, unknown> }, resourceLocks?: ResourceLockManager): Promise<void>
 {
@@ -22,16 +22,6 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
     if (!targetItem) throw new Error("Gather requires item name");
 
     console.log(`[gather] Requested "${rawTarget ?? "unknown"}" resolved to "${targetItem}" (timeout=${timeout}ms, maxDistance=${maxDistance})`);
-
-    const acceptableVariants = getAcceptableVariants(targetItem);
-    const useLooseMatching = isGenericCategory(targetItem) || acceptableVariants.length > 1;
-
-    console.log(`[gather] Acceptable variants: ${acceptableVariants.join(", ")}`);
-
-    if (useLooseMatching)
-    {
-        console.log(`[gather] Using loose matching for "${targetItem}" - accepting: ${acceptableVariants.slice(0, 3).join(", ")}${acceptableVariants.length > 3 ? "..." : ""}`);
-    }
 
     const existing = bot.inventory.items().find((item) => isItemMatch(item.name, targetItem));
     if (existing)
@@ -78,7 +68,6 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
     const start = Date.now();
     const failedBlocks = new Set<string>();
     let consecutiveFailures = 0;
-    let fallbackAttempted = false;
     let attempts = 0;
 
     while (Date.now() - start < timeout)
@@ -96,20 +85,11 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
 
         if (consecutiveFailures >= 3)
         {
-            if (!fallbackAttempted && !useLooseMatching && acceptableVariants.length > 1)
-            {
-                console.log(`[gather] Specific "${targetItem}" not found after 3 attempts, trying any variant...`);
-                fallbackAttempted = true;
-                consecutiveFailures = 0;
-            }
-            else
-            {
-                console.log("[gather] Relocating to new area...");
-                const escape = bot.entity.position.offset((Math.random() - 0.5) * 30, 0, (Math.random() - 0.5) * 30);
-                console.log(`[gather] Escape target: ${escape}`);
-                await moveToward(bot, escape, 2, 8000).catch(() => {});
-                consecutiveFailures = 0;
-            }
+            console.log("[gather] Relocating to new area...");
+            const escape = bot.entity.position.offset((Math.random() - 0.5) * 30, 0, (Math.random() - 0.5) * 30);
+            console.log(`[gather] Escape target: ${escape}`);
+            await moveToward(bot, escape, 2, 8000).catch(() => {});
+            consecutiveFailures = 0;
             continue;
         }
 
@@ -133,32 +113,18 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
         const blockName = resolveItemToBlock(targetItem);
         if (blockName)
         {
-            const allAliases = new Set<string>();
-            allAliases.add(blockName);
-            expandMaterialAliases(bot, blockName).forEach((alias) => allAliases.add(alias));
-
-            if (fallbackAttempted || useLooseMatching)
+            const blockId = bot.registry.blocksByName[blockName]?.id;
+            if (!blockId)
             {
-                for (const variant of acceptableVariants)
-                {
-                    const variantBlock = resolveItemToBlock(variant);
-                    if (variantBlock)
-                    {
-                        allAliases.add(variantBlock);
-                        expandMaterialAliases(bot, variantBlock).forEach((alias) => allAliases.add(alias));
-                    }
-                }
+                console.warn(`[gather] No block id found for "${blockName}".`);
+                consecutiveFailures++;
+                continue;
             }
 
-            const aliasArray = Array.from(allAliases);
-            const aliasIds = aliasArray
-                .map((name) => bot.registry.blocksByName[name]?.id)
-                .filter((id): id is number => id !== undefined);
-
-            console.log(`[gather] Block search for "${targetItem}" resolved to ${aliasArray.length} aliases (${aliasIds.length} ids).`);
+            console.log(`[gather] Block search for "${targetItem}" resolved to "${blockName}".`);
 
             const foundPositions = bot.findBlocks({
-                matching: aliasIds,
+                matching: blockId,
                 maxDistance: 64,
                 count: 20
             });
@@ -221,7 +187,7 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
         await waitForNextTick(bot);
     }
     console.warn(`[gather] Timeout after ${Date.now() - start}ms trying to gather "${targetItem}".`);
-    throw new Error(`Gather ${targetItem} failed. Tried variants: ${acceptableVariants.join(", ")}`);
+    throw new Error(`Gather ${targetItem} failed.`);
 }
 
 export async function handlePickup(bot: Bot, step: { params?: Record<string, unknown> }): Promise<void>

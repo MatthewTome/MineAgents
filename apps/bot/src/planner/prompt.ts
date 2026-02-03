@@ -32,7 +32,7 @@ export function buildPlannerPrompt(options: HuggingFacePlannerOptions, request: 
         ? [
             "TEAM PLAN MODE:",
             "- You are the team lead. Output JSON with team_plan describing the full team plan.",
-            "- team_plan must include intent and steps. Each step must include a unique id and owner_role (gatherer|builder|supervisor|guard|generalist).",
+            "- team_plan must include intent and steps. Each step must include a unique id and owner_role (gatherer|builder|supervisor|generalist).",
             "- Also include individual_plan with a brief intent and a chat announcement summarizing the team plan.",
             "- Keep step descriptions concise and actionable."
         ].join("\n")

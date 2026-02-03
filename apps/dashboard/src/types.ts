@@ -33,11 +33,9 @@ export interface TrialSummary {
   ragEnabled?: boolean;
   multiAgent?: boolean;
   role?: string;
-  mentorMode?: string;
   llmCalls?: number;
   actionCount?: number;
   memoryRetrievals?: number;
-  teachingInteractions?: number;
 }
 
 export interface MetricsResponse {

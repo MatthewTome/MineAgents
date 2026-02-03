@@ -36,13 +36,6 @@ export interface BotConfig
     agent:
     {
         role: "gatherer" | "builder" | "supervisor" | "generalist";
-        mentor:
-        {
-            mode: "none" | "teacher" | "learner";
-            target?: string;
-            adviceCooldownMs: number;
-            requestCooldownMs: number;
-        };
     };
     features:
     {
@@ -115,19 +108,14 @@ const DEFAULTS = {
         }
     },
     agent: {
-        role: "generalist" as const,
-        mentor: {
-            mode: "none" as const,
-            adviceCooldownMs: 15000,
-            requestCooldownMs: 30000
-        }
+        role: "generalist" as const
     },
     features: {
         ragEnabled: true,
         narrationEnabled: true,
         safetyEnabled: true
     }
-} as const;
+};
 
 export const DEFAULT_BOT_CONFIG: BotConfig =
 {
@@ -142,7 +130,6 @@ export const DEFAULT_BOT_CONFIG: BotConfig =
     },
     agent: {
         role: DEFAULTS.agent.role,
-        mentor: { ...DEFAULTS.agent.mentor }
     },
     features: { ...DEFAULTS.features }
 };
@@ -191,7 +178,7 @@ const configSchema = z.object(
     }).default(DEFAULTS.safety),
     agent: z.object(
     {
-        role: z.enum(["gatherer", "builder", "supervisor", "generalist", "miner", "guide"])
+        role: z.enum(["gatherer", "builder", "supervisor", "generalist", "miner"])
             .default(DEFAULTS.agent.role)
             .transform((val): AgentRole => {
                 const resolved = resolveRole(val);
@@ -199,14 +186,7 @@ const configSchema = z.object(
                     throw new Error(`Invalid role: ${val}`);
                 }
                 return resolved;
-            }),
-        mentor: z.object(
-        {
-            mode: z.enum(["none", "teacher", "learner"]).default(DEFAULTS.agent.mentor.mode),
-            target: z.string().optional(),
-            adviceCooldownMs: z.number().int().nonnegative().default(DEFAULTS.agent.mentor.adviceCooldownMs),
-            requestCooldownMs: z.number().int().nonnegative().default(DEFAULTS.agent.mentor.requestCooldownMs)
-        }).default(DEFAULTS.agent.mentor)
+            })
     }).default(DEFAULTS.agent),
     features: z.object(
     {

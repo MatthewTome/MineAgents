@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildGoalMetadata, parseEnvBoolean, resolveMentorMode, runSetupWizard } from "../../src/startup/helpers.js";
+import { buildGoalMetadata, parseEnvBoolean, runSetupWizard } from "../../src/startup/helpers.js";
 
 describe("startup/helpers.ts", () => {
   it("parses environment booleans consistently", () => {
@@ -8,11 +8,9 @@ describe("startup/helpers.ts", () => {
     expect(parseEnvBoolean("maybe")).toBeNull();
   });
 
-  it("resolves mentor modes and builds goal metadata", () => {
-    expect(resolveMentorMode("teacher")).toBe("teacher");
+  it("builds goal metadata", () => {
     const metadata = buildGoalMetadata({
       role: "builder",
-      mentorMode: "teacher",
       features: { ragEnabled: true, narrationEnabled: false, safetyEnabled: true },
       agentId: 2,
       agentCount: 3,

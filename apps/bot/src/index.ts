@@ -24,8 +24,7 @@ import { goalNeedsBuildSite, scoutBuildSite } from "./actions/handlers/building.
 import { SafetyRails } from "./safety/safety-rails.js";
 import { RecipeLibrary } from "./planner/knowledge.js";
 import { GoalTracker, GoalDefinition } from "./research/goals.js";
-import { MentorProtocol } from "./teamwork/mentor-protocol.js";
-import { RoleManager, resolveRole, listRoleNames, type AgentRole, type MentorMode } from "./teamwork/roles.js";
+import { RoleManager, resolveRole, listRoleNames, type AgentRole } from "./teamwork/roles.js";
 import { StandbyManager } from "./teamwork/standby-manager.js";
 import { ResourceLockManager, resolveLeaderForGoal } from "./teamwork/coordination.js";
 import {
@@ -48,7 +47,7 @@ import {
 import { readRoster, validateRoster, writeRoster, updateAgentInventory, teamHasItem, getRawMaterialsFor, type InventoryItem } from "./teamwork/roster.js";
 import { assignStepsToAgents } from "./teamwork/step-assignment.js";
 import { attemptRecovery } from "./startup/recovery.js";
-import { buildGoalMetadata, parseEnvBoolean, resolveMentorMode, safeChat, toOptionalInt, type FeatureFlags } from "./startup/helpers.js";
+import { buildGoalMetadata, parseEnvBoolean, safeChat, toOptionalInt, type FeatureFlags } from "./startup/helpers.js";
 
 const { pathfinder, Movements } = pathfinderPkg;
 
@@ -66,8 +65,6 @@ export async function createBot()
     const hfCache = process.env.HF_CACHE_DIR;
     const hfBackend = (process.env.LLM_MODE as "local" | "remote" | "auto") ?? "auto";
     const envRole = resolveRole(process.env.BOT_ROLE);
-    const envMentorMode = resolveMentorMode(process.env.BOT_MENTOR_MODE);
-    const envMentorTarget = process.env.BOT_MENTOR_TARGET;
     const envAgentId = toOptionalInt(process.env.BOT_AGENT_ID);
     const envAgentCount = toOptionalInt(process.env.BOT_AGENT_COUNT);
     const envTrialId = process.env.BOT_TRIAL_ID;
@@ -133,26 +130,16 @@ export async function createBot()
         role = "generalist";
     }
 
-    const mentorMode: MentorMode = envMentorMode ?? cfg.agent.mentor.mode ?? "none";
-    const mentorTarget = envMentorTarget ?? cfg.agent.mentor.target;
-
     sessionLogger.info("startup", "MineAgent starting", {
         configPath,
         model: hfModel,
         backend: hfBackend,
         role,
-        mentorMode,
         features
     });
 
     let safety = features.safetyEnabled ? new SafetyRails({ config: cfg.safety, logger: sessionLogger, tracer }) : undefined;
     const roleManager = new RoleManager(role);
-    const mentorProtocol = new MentorProtocol({
-        mode: mentorMode,
-        targetName: mentorTarget,
-        adviceCooldownMs: cfg.agent.mentor.adviceCooldownMs,
-        requestCooldownMs: cfg.agent.mentor.requestCooldownMs
-    });
 
     const defaultRecipePath = path.resolve(process.cwd(), "..", "..", "py", "agent", "recipes");
     const RECIPES_PATH = process.env.RECIPES_DIR ?? defaultRecipePath;
@@ -257,7 +244,6 @@ export async function createBot()
                 timeoutMs: 600000,
                 metadata: buildGoalMetadata({
                     role: roleManager.getRole(),
-                    mentorMode: mentorProtocol.getConfig().mode,
                     features,
                     agentId: envAgentId,
                     agentCount: envAgentCount,
@@ -267,11 +253,6 @@ export async function createBot()
             };
             const id = goalTracker.addGoal(def);
             sessionLogger.info("goal.default", "Default goal configured", { goal: initialGoal, id });
-            const adviceRequest = mentorProtocol.maybeRequestAdvice(initialGoal);
-            if (adviceRequest)
-            {
-                safeChat(bot, safety, adviceRequest, "mentor.request");
-            }
         }
 
         let isPlanning = false;
@@ -511,7 +492,6 @@ export async function createBot()
             {
                 console.error("[planner] Team plan generation failed:", error);
                 safeChat(bot, safety, "Team plan failed; falling back to individual planning.", "team.plan.error");
-                // Clean up stale draft so other agents don't spin waiting for it
                 try { fs.unlinkSync(teamPlanPath); } catch {}
                 try { fs.unlinkSync(teamPlanLockPath); } catch {}
                 return { plan: null, fallbackToIndividual: true };
@@ -548,7 +528,6 @@ export async function createBot()
                     timeoutMs: 600000,
                     metadata: buildGoalMetadata({
                         role: roleManager.getRole(),
-                        mentorMode: mentorProtocol.getConfig().mode,
                         features,
                         agentId: envAgentId,
                         agentCount: envAgentCount,
@@ -573,12 +552,6 @@ export async function createBot()
                 {
                     safeChat(bot, safety, `Goal accepted: ${newGoal}`, "goal.accept");
                     standbyManager.exitStandby("Goal received - ready to plan");
-
-                    const adviceRequest = mentorProtocol.maybeRequestAdvice(newGoal);
-                    if (adviceRequest)
-                    {
-                        safeChat(bot, safety, adviceRequest, "mentor.request");
-                    }
                 }
                 return;
             }
@@ -598,23 +571,6 @@ export async function createBot()
                 standbyManager.resetAnnouncementFlag();
                 sessionLogger.info("role.update", "Role updated via chat", { from: username, role: nextRole });
                 safeChat(bot, safety, `Role updated to ${nextRole}.`, "role.update");
-                return;
-            }
-
-            if (cleanMessage.startsWith("!mentor "))
-            {
-                const args = cleanMessage.replace("!mentor ", "").trim().split(/\s+/);
-                const mode = resolveMentorMode(args[0]);
-                if (!mode)
-                {
-                    safeChat(bot, safety, "Usage: !mentor <none|teacher|learner> [targetName]", "mentor.usage");
-                    return;
-                }
-
-                const targetName = args[1];
-                mentorProtocol.updateConfig({ mode, targetName });
-                sessionLogger.info("mentor.update", "Mentor mode updated via chat", { from: username, mode, targetName });
-                safeChat(bot, safety, `Mentor mode updated to ${mode}${targetName ? ` (target ${targetName})` : ""}.`, "mentor.update");
                 return;
             }
 
@@ -707,7 +663,6 @@ export async function createBot()
                         timeoutMs: 300000,
                         metadata: buildGoalMetadata({
                             role: roleManager.getRole(),
-                            mentorMode: mentorProtocol.getConfig().mode,
                             features,
                             agentId: envAgentId,
                             agentCount: envAgentCount,
@@ -720,17 +675,6 @@ export async function createBot()
                     safeChat(bot, safety, `Responding to ${resourceRequest.requester}'s request for ${resourceRequest.item}`, "standby.respond");
                     return;
                 }
-            }
-
-            const mentorReply = mentorProtocol.handleChat(cleanMessage,
-            {
-                role: roleManager.getDefinition(),
-                goal: currentGoal,
-                sender: username
-            });
-            if (mentorReply)
-            {
-                safeChat(bot, safety, mentorReply, "mentor.reply");
             }
         });
 
@@ -833,9 +777,6 @@ export async function createBot()
                     if (roleContext) { context += ` ${roleContext}`; }
                     const standbyContext = standbyManager.buildStandbyContext();
                     if (standbyContext) { context += ` ${standbyContext}`; }
-
-                    const mentorContext = roleManager.buildMentorContext(mentorProtocol.getConfig().mode);
-                    if (mentorContext) { context += ` ${mentorContext}`; }
 
                     let site = null;
                     if (goalNeedsBuildSite(currentGoal)) {

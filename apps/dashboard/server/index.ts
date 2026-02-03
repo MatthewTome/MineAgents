@@ -40,11 +40,9 @@ interface TrialSummary {
   ragEnabled?: boolean;
   multiAgent?: boolean;
   role?: string;
-  mentorMode?: string;
   llmCalls?: number;
   actionCount?: number;
   memoryRetrievals?: number;
-  teachingInteractions?: number;
 }
 
 const app = express();
@@ -380,8 +378,6 @@ function loadTrials(): TrialSummary[] {
         ? false
         : undefined;
 
-    const teachingInteractions = sessionLog.filter(entry => entry.event?.startsWith("mentor") || entry.event?.startsWith("team.")).length;
-
     trials.push({
       sessionId,
       name,
@@ -393,11 +389,9 @@ function loadTrials(): TrialSummary[] {
       ragEnabled,
       multiAgent,
       role: startup?.data?.role,
-      mentorMode: startup?.data?.mentorMode,
       llmCalls,
       actionCount,
-      memoryRetrievals,
-      teachingInteractions
+      memoryRetrievals
     });
   }
 

@@ -4,15 +4,12 @@ export type AgentRole =
     | "supervisor"
     | "generalist";
 
-export type MentorMode = "none" | "teacher" | "learner";
-
 export interface RoleDefinition
 {
     id: AgentRole;
     label: string;
     description: string;
     planningFocus: string;
-    mentoringFocus: string;
 }
 
 const ROLE_DEFINITIONS: Record<AgentRole, RoleDefinition> =
@@ -21,29 +18,25 @@ const ROLE_DEFINITIONS: Record<AgentRole, RoleDefinition> =
         id: "gatherer",
         label: "Gatherer",
         description: "Always ready to gather supplies and provide them to the team.",
-        planningFocus: "Listen for '[team] X needs Y' resource requests in chat. When a teammate announces they need materials, use the 'give' action to deliver items. Gather resources proactively and maintain inventory buffer. When idle with no goal, enter standby and wait for team requests.",
-        mentoringFocus: "Share efficient gathering routes, resource locations, and inventory management."
+        planningFocus: "Listen for '[team] X needs Y' resource requests in chat. When a teammate announces they need materials, use the 'give' action to deliver items. Gather resources proactively and maintain inventory buffer. When idle with no goal, enter standby and wait for team requests."
     },
     builder: {
         id: "builder",
         label: "Builder",
         description: "Always working on construction when tasks are available.",
-        planningFocus: "BEFORE starting any build, check if you have enough materials. If short on materials, use 'requestResource' action to announce your needs (e.g., '[team] Builder needs 20 oak_planks'). Continue with available work while waiting. Use 'give' to share excess materials with teammates.",
-        mentoringFocus: "Offer building sequences, material lists, and layout tips."
+        planningFocus: "BEFORE starting any build, check if you have enough materials. If short on materials, use 'requestResource' action to announce your needs (e.g., '[team] Builder needs 20 oak_planks'). Continue with available work while waiting. Use 'give' to share excess materials with teammates."
     },
     supervisor: {
         id: "supervisor",
         label: "Supervisor",
         description: "Coordinates team, assigns work, stays out of the way to avoid interfering with labor.",
-        planningFocus: "Monitor team chat for '[problem]' or '[URGENT]' messages. When team members announce issues, create new assignments or plans to resolve them. Stay in standby mode when not actively planning. Reassign tasks dynamically based on team needs.",
-        mentoringFocus: "Provide strategic guidance, coordinate team efforts, delegate effectively."
+        planningFocus: "Monitor team chat for '[problem]' or '[URGENT]' messages. When team members announce issues, create new assignments or plans to resolve them. Stay in standby mode when not actively planning. Reassign tasks dynamically based on team needs."
     },
     generalist: {
         id: "generalist",
         label: "Generalist",
         description: "Flexible helper with balanced priorities.",
-        planningFocus: "Balance gathering, crafting, building, and safety depending on the goal. Can respond to any team request. Use 'requestResource' when short on materials and 'give' to share with teammates.",
-        mentoringFocus: "Provide balanced advice across gathering, building, and safety."
+        planningFocus: "Balance gathering, crafting, building, and safety depending on the goal. Can respond to any team request. Use 'requestResource' when short on materials and 'give' to share with teammates."
     }
 };
 
@@ -55,7 +48,6 @@ const ROLE_ALIASES: Record<string, AgentRole> =
     generalist: "generalist",
 
     miner: "gatherer",
-    guide: "supervisor",
 
     default: "generalist",
     general: "generalist",
@@ -110,22 +102,6 @@ export class RoleManager
             def.description,
             `Planning focus: ${def.planningFocus}`,
             "Stay within your role unless the team plan explicitly assigns you otherwise."
-        ].join(" ");
-    }
-
-    buildMentorContext(mode: MentorMode): string
-    {
-        const def = this.getDefinition();
-        if (mode === "none")
-        {
-            return "";
-        }
-
-        const prefix = mode === "teacher" ? "Mentor mode: teacher." : "Mentor mode: learner.";
-        return [
-            prefix,
-            `Mentoring focus: ${def.mentoringFocus}`,
-            "Advice must be short and tagged with [advice]."
         ].join(" ");
     }
 }

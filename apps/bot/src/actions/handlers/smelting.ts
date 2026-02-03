@@ -27,10 +27,8 @@ export async function handleSmelt(bot: Bot, step: { params?: Record<string, unkn
 
         const furnace = await bot.openFurnace(furnaceBlock);
 
-        const fuel = bot.inventory.items().find((item) =>
-            item.name.includes(fuelItem) || item.name.includes("wood") || item.name.includes("plank") || item.name.includes("coal")
-        );
-        if (!fuel) throw new Error(`No fuel found for smelting (looked for ${fuelItem} or wood)`);
+        const fuel = bot.inventory.items().find((item) => item.name === fuelItem);
+        if (!fuel) throw new Error(`No fuel found for smelting (looked for ${fuelItem})`);
         await furnace.putFuel(fuel.type, null, fuel.count);
 
         const input = bot.inventory.items().find((item) => item.name.includes(rawItem));
