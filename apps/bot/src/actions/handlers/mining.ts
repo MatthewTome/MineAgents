@@ -8,14 +8,27 @@ import { raceWithTimeout } from "./movement.js";
 export async function collectBlocks(bot: Bot, blocks: Block[]): Promise<boolean>
 {
     const collection = (bot as any).collectBlock;
-    if (!bot.collectBlock?.collect)
+    if (!collection || !collection.collect)
     {
         throw new Error("Collect block plugin unavailable");
     }
 
+    if (blocks.length === 0) return false;
+
+    const targetBlock = blocks[0];
+    const targetPos = targetBlock.position.clone();
+    const targetType = targetBlock.type;
+
     try
     {
         await raceWithTimeout(collection.collect(blocks), 20000);
+
+        const blockAfter = bot.blockAt(targetPos);
+        if (blockAfter && blockAfter.type === targetType)
+        {
+            throw new Error(`Mining verification failed: Block at ${targetPos} was not removed.`);
+        }
+
         return true;
     }
     catch (err)
@@ -28,13 +41,22 @@ export async function collectBlocks(bot: Bot, blocks: Block[]): Promise<boolean>
 
 export function findBlockTarget(bot: Bot, params: MineParams, maxDistance: number): Block | null
 {
-    if (params.position)
-    {
-        return bot.blockAt(new Vec3(params.position.x, params.position.y, params.position.z));
-    }
     const name = params.block?.toLowerCase();
     if (!name) return null;
+    
     const blockName = resolveItemToBlock(name) ?? resolveItemName(bot, name);
+
+    if (params.position)
+    {
+        const pos = new Vec3(params.position.x, params.position.y, params.position.z);
+        const blockAtPos = bot.blockAt(pos);
+        
+        if (blockAtPos && blockAtPos.name === blockName)
+        {
+            return blockAtPos;
+        }
+    }
+
     return bot.findBlock({ matching: (block) => block.name === blockName, maxDistance });
 }
 

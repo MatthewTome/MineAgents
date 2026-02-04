@@ -122,6 +122,7 @@ export async function main() {
                     "chat",
                     "craft",
                     "drop",
+                    "equip",
                     "gather",
                     "give",
                     "loot",

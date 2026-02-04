@@ -26,7 +26,8 @@ declare module "mineflayer" {
         registry: {
             itemsByName: Record<string, { id: number, name: string }>;
         };
-        recipesFor: (itemId: number, craftingTableId: number | null, craftingTableCount: number | null, skills: boolean) => any[];
+        recipesFor: (itemType: number, metadata: number | null, minResultCount: number, craftingTable: Block | null) => Recipe[];
+        recipesAll: (itemType: number, metadata: number | null, craftingTable: Block | null) => Recipe[];
         equip: (item: Item, destination: string) => Promise<void>;
         placeBlock: (referenceBlock: Block, faceVector: Vec3) => Promise<void>;
         openFurnace: (block: Block) => Promise<any>;
@@ -87,6 +88,12 @@ declare class Item {
     type: number;
     count?: number;
     getDroppedItem?: () => Item;
+}
+
+declare class Recipe {
+    requiresTable: boolean;
+    delta: Array<{ id: number; count: number }>;
+    result: { id: number; count: number };
 }
 
 declare module "mineflayer-pathfinder" {

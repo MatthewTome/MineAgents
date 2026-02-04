@@ -82,6 +82,7 @@ const DEFAULTS = {
             "chat",
             "craft",
             "drop",
+            "equip",
             "gather",
             "give",
             "loot",

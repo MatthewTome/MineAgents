@@ -1,6 +1,6 @@
 import { vi } from "vitest";
 
-type MockItem = { name: string; count: number; type?: number; metadata?: number };
+type MockItem = { name: string; count: number; type: number; metadata?: number };
 type MockPosition = { x: number; y: number; z: number; toString: () => string; offset: (dx: number, dy: number, dz: number) => MockPosition; floored: () => MockPosition };
 
 export function makePosition(x: number, y: number, z: number): MockPosition {
@@ -44,6 +44,14 @@ export function makeMockBot(options?: {
     lookAt: vi.fn(),
     chat: vi.fn(),
     findBlocks: vi.fn(),
-    pathfinder: { stop: vi.fn() }
+    pathfinder: {
+      stop: vi.fn(),
+      goto: vi.fn().mockResolvedValue(undefined),
+      setMovements: vi.fn()
+    },
+    movement: {
+      goto: vi.fn().mockResolvedValue(undefined),
+      moveTo: vi.fn().mockResolvedValue(undefined)
+    }
   };
 }

@@ -6,6 +6,13 @@ import { buildLockKey, withResourceLock } from "./teamwork.js";
 import { findReferenceBlock } from "./building.js";
 import type { CraftParams } from "../action-types.js";
 import type { ResourceLockManager } from "../../teamwork/coordination.js";
+import {
+    buildRecipeFromDefinition,
+    hasIngredientsForRecipe,
+    getMissingIngredients,
+    resolveRecipeForItem,
+    type BuiltRecipe
+} from "./recipe-definitions.js";
 
 export async function handleCraft(bot: Bot, step: { params?: Record<string, unknown> }, resourceLocks?: ResourceLockManager): Promise<void>
 {
@@ -16,7 +23,37 @@ export async function handleCraft(bot: Bot, step: { params?: Record<string, unkn
 export async function craftFromInventory(bot: Bot, params: CraftParams, resourceLocks?: ResourceLockManager): Promise<void>
 {
     let itemName = params.recipe.toLowerCase();
-    const count = params.count ?? 1;
+    let count = params.count ?? 1;
+    const trimmedRecipe = itemName.trim();
+    const leadingCountMatch = trimmedRecipe.match(/^(?:x)?(\d+)\s+(.+)$/);
+    const trailingCountMatch = trimmedRecipe.match(/^(.+)\s+x(\d+)$/);
+    if (params.count === undefined)
+    {
+        if (leadingCountMatch)
+        {
+            count = Number.parseInt(leadingCountMatch[1], 10);
+            itemName = leadingCountMatch[2];
+        }
+        else if (trailingCountMatch)
+        {
+            count = Number.parseInt(trailingCountMatch[2], 10);
+            itemName = trailingCountMatch[1];
+        }
+    }
+
+    itemName = itemName.trim().toLowerCase().replace(/\s+/g, "_");
+    if (itemName.endsWith("_plank"))
+    {
+        itemName = `${itemName}s`;
+    }
+    if (itemName.endsWith("sticks"))
+    {
+        itemName = itemName.replace(/sticks$/, "stick");
+    }
+    if (itemName.endsWith("plank"))
+    {
+        itemName = `${itemName}s`;
+    }
 
     const structureNames = ["platform", "walls", "roof", "door_frame"];
     if (structureNames.includes(itemName))
@@ -56,29 +93,51 @@ export async function craftFromInventory(bot: Bot, params: CraftParams, resource
         throw new Error(`Unknown item name: ${itemName}`);
     }
 
-    const noTableRecipes = bot.recipesFor(itemType.id, null, 1, false);
-    const tableRecipes = bot.recipesFor(itemType.id, null, 1, true);
-    const recipe = noTableRecipes[0] ?? tableRecipes[0];
+    console.log(`[craft] Looking up recipe for ${itemName} (id: ${itemType.id})`);
+
+    let tableBlock = params.craftingTable
+        ? bot.blockAt(new Vec3(params.craftingTable.x, params.craftingTable.y, params.craftingTable.z))
+        : bot.findBlock({ matching: (block) => block.name === "crafting_table", maxDistance: 32 });
+
+    const inventoryRecipes = bot.recipesFor(itemType.id, null, 1, null);
+    const tableRecipes = tableBlock ? bot.recipesFor(itemType.id, null, 1, tableBlock) : [];
+
+    console.log(`[craft] Inventory recipes found: ${inventoryRecipes.length}, Table recipes found: ${tableRecipes.length}`);
+
+    let recipe = inventoryRecipes[0] ?? tableRecipes[0];
+    let fallbackRecipe: BuiltRecipe | null = null;
 
     if (!recipe)
     {
-        throw new Error(`No crafting recipe found for ${itemName} in Minecraft data.`);
+        const fallbackDef = resolveRecipeForItem(itemName, bot);
+        if (fallbackDef)
+        {
+            console.log(`[craft] Using hardcoded fallback recipe for ${itemName}`);
+            fallbackRecipe = buildRecipeFromDefinition(bot, fallbackDef);
+            if (!fallbackRecipe)
+            {
+                throw new Error(`Failed to build fallback recipe for ${itemName}`);
+            }
+
+            if (!hasIngredientsForRecipe(bot, fallbackRecipe))
+            {
+                const missing = getMissingIngredients(bot, fallbackRecipe);
+                const missingStr = missing.map(m => `${m.needed - m.have} ${m.name}`).join(", ");
+                throw new Error(`Insufficient ingredients for ${itemName}. Missing: ${missingStr}`);
+            }
+        }
+        else
+        {
+            const allRecipes = bot.recipesAll ? bot.recipesAll(itemType.id, null, null) : [];
+            console.warn(`[craft] WARNING: No recipes found for ${itemName} (id: ${itemType.id}), recipesAll returned ${allRecipes.length}`);
+            throw new Error(`No crafting recipe found for ${itemName} in Minecraft data.`);
+        }
     }
 
-    const craftableRecipe = bot.recipesFor(itemType.id, null, 1, true)[0] ?? recipe;
-
-    if (!craftableRecipe)
-    {
-        const req = recipe.delta?.[0];
-        throw new Error(`Insufficient ingredients to craft ${itemName}. Needs ingredients (e.g., ${req ? req.id : "unknown"}). Missing materials.`);
-    }
+    const craftableRecipe = fallbackRecipe ?? recipe;
 
     if (craftableRecipe.requiresTable)
     {
-        let tableBlock = params.craftingTable
-            ? bot.blockAt(new Vec3(params.craftingTable.x, params.craftingTable.y, params.craftingTable.z))
-            : bot.findBlock({ matching: (block) => block.name === "crafting_table", maxDistance: 32 });
-
         if (!tableBlock)
         {
             const tableItem = bot.inventory.items().find((item) => item.name === "crafting_table");
@@ -97,15 +156,19 @@ export async function craftFromInventory(bot: Bot, params: CraftParams, resource
         }
 
         if (!tableBlock) throw new Error("Could not access crafting table.");
-        const lockKey = buildLockKey("crafting_table", tableBlock.position);
+
+        const confirmedTable = tableBlock;
+        const lockKey = buildLockKey("crafting_table", confirmedTable.position);
         await withResourceLock(resourceLocks, lockKey, async () =>
         {
-            await moveToward(bot, tableBlock.position, 3, 15000);
-            await bot.craft(craftableRecipe, count, tableBlock);
+            await moveToward(bot, confirmedTable.position, 3, 15000);
+            await bot.craft(craftableRecipe as any, count, confirmedTable);
         });
     }
     else
     {
-        await bot.craft(craftableRecipe, count, undefined);
+        await bot.craft(craftableRecipe as any, count, undefined);
     }
+
+    console.log(`[craft] Successfully crafted ${count} ${itemName}`);
 }
