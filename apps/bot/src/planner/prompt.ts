@@ -77,6 +77,7 @@ export function buildPlannerPrompt(options: HuggingFacePlannerOptions, request: 
         "3. Be complete (include roof, door).",
         "4. Coordinates must be grounded in the provided Perception snapshot. Only use positions from Perception.pose, Perception.nearby/entities, Perception.blocks, or scouted build site. Do not invent random coordinates.",
         "5. If multiple agents are present (per Context or Perception), return JSON with team_plan and individual_plan fields. team_plan should list shared steps with role assignments, and individual_plan should include intent and steps for this agent plus any chat announcements. If only one agent is present, return intent and steps as usual.",
+        "6. When a step requires multiple items or blocks, include params.count with the exact quantity (especially for mine, gather, loot, craft, smelt, drop, give).",
         planningModeRules,
         "Intent should be fewer than 140 characters.",
         `Goal: ${request.goal}`,

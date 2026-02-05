@@ -20,6 +20,14 @@ export interface BuildParams {
 }
 
 export async function executeBuild(bot: Bot, params: BuildParams): Promise<void> {
+    const isSingleBlockPlacement = 
+        (params.structure === 'platform' && params.width === 1 && params.length === 1) ||
+        (params.width === 1 && params.length === 1 && params.height === 1);
+
+    if (isSingleBlockPlacement) {
+        return handleSingleBlockPlacement(bot, params);
+    }
+
     const material = resolveItemName(bot, params.material ?? "oak_planks");
     const width = params.width ?? 7;
     const length = params.length ?? 7;
@@ -196,6 +204,46 @@ export async function executeBuild(bot: Bot, params: BuildParams): Promise<void>
     }
     
     console.log(`[building] Finished ${params.structure}`);
+}
+
+async function handleSingleBlockPlacement(bot: Bot, params: BuildParams): Promise<void> {
+    console.log("[building] Detected single-block placement (1x1 platform). Switching to smart place mode.");
+
+    let itemName = params.material;
+    
+    const hasPlanks = countInventoryItems(bot, params.material ?? "oak_planks") > 0;
+    
+    if (!hasPlanks) {
+        const utilityBlocks = ["crafting_table", "furnace", "chest"];
+        for (const util of utilityBlocks) {
+            if (countInventoryItems(bot, util) > 0) {
+                console.log(`[building] Implicit override: No planks found, but found ${util}. Using ${util} instead.`);
+                itemName = util;
+                break;
+            }
+        }
+    }
+
+    const material = resolveItemName(bot, itemName ?? "oak_planks");
+    const origin = new Vec3(params.origin.x, params.origin.y, params.origin.z);
+
+    console.log(`[building] Single block placement: ${material} at ${origin}`);
+    
+    await evacuateBuildArea(bot, [origin]);
+    
+    try {
+        const item = requireInventoryItem(bot, material);
+        await bot.equip(item, 'hand');
+    } catch (err) {
+        throw new Error(`Missing item for placement: ${material}`);
+    }
+
+    const success = await placeBlockAt(bot, origin);
+    if (!success) {
+        throw new Error(`Failed to place ${material} at ${origin}`);
+    }
+    
+    console.log(`[building] Successfully placed ${material}`);
 }
 
 async function evacuateBuildArea(bot: Bot, targets: Vec3[]): Promise<void> {

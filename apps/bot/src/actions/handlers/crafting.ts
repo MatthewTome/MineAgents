@@ -121,6 +121,12 @@ export async function craftFromInventory(bot: Bot, params: CraftParams, resource
 
             if (!hasIngredientsForRecipe(bot, fallbackRecipe))
             {
+                console.log("[craft] Missing ingredients. Waiting 2s for pickup...");
+                await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+
+            if (!hasIngredientsForRecipe(bot, fallbackRecipe))
+            {
                 const missing = getMissingIngredients(bot, fallbackRecipe);
                 const missingStr = missing.map(m => `${m.needed - m.have} ${m.name}`).join(", ");
                 throw new Error(`Insufficient ingredients for ${itemName}. Missing: ${missingStr}`);
@@ -135,6 +141,10 @@ export async function craftFromInventory(bot: Bot, params: CraftParams, resource
     }
 
     const craftableRecipe = fallbackRecipe ?? recipe;
+    const productCount = craftableRecipe.result.count;
+    const craftTimes = Math.ceil(count / productCount);
+    
+    console.log(`[craft] Recipe produces ${productCount} ${itemName}. Target ${count}. Crafting ${craftTimes} batches.`);
 
     if (craftableRecipe.requiresTable)
     {
@@ -162,13 +172,13 @@ export async function craftFromInventory(bot: Bot, params: CraftParams, resource
         await withResourceLock(resourceLocks, lockKey, async () =>
         {
             await moveToward(bot, confirmedTable.position, 3, 15000);
-            await bot.craft(craftableRecipe as any, count, confirmedTable);
+            await bot.craft(craftableRecipe as any, craftTimes, confirmedTable);
         });
     }
     else
     {
-        await bot.craft(craftableRecipe as any, count, undefined);
+        await bot.craft(craftableRecipe as any, craftTimes, undefined);
     }
 
-    console.log(`[craft] Successfully crafted ${count} ${itemName}`);
+    console.log(`[craft] Successfully crafted ${count} (approx) ${itemName}`);
 }
