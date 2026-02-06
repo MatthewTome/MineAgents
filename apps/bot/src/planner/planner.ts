@@ -62,7 +62,7 @@ export class HuggingFacePlanner
             if (this.library && request.ragEnabled !== false)
             {
                 const recipes = this.library.search(request.goal);
-                knowledgeSnippets = recipes.map(r => this.library!.formatRecipeFact(r, 12));
+                knowledgeSnippets = recipes.map(r => this.library!.formatRecipeFact(r, 200));
             }
 
             const prompt = this.tracer

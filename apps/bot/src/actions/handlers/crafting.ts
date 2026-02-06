@@ -1,7 +1,7 @@
 import type { Bot } from "mineflayer";
 import { Vec3 } from "vec3";
 import { moveToward, waitForNextTick } from "./movement.js";
-import { resolveWoodType } from "../action-utils.js";
+import { resolveWoodType, isItemMatch } from "../action-utils.js";
 import { buildLockKey, withResourceLock } from "./teamwork.js";
 import { findReferenceBlock } from "./building.js";
 import type { CraftParams } from "../action-types.js";
@@ -18,6 +18,12 @@ export async function handleCraft(bot: Bot, step: { params?: Record<string, unkn
 {
     const params = (step.params ?? {}) as unknown as CraftParams;
     await craftFromInventory(bot, params, resourceLocks);
+}
+
+function countItems(bot: Bot, name: string): number
+{
+    const items = bot.inventory.items().filter(i => isItemMatch(i.name, name));
+    return items.reduce((acc, i) => acc + i.count, 0);
 }
 
 export async function craftFromInventory(bot: Bot, params: CraftParams, resourceLocks?: ResourceLockManager): Promise<void>
@@ -146,6 +152,8 @@ export async function craftFromInventory(bot: Bot, params: CraftParams, resource
     
     console.log(`[craft] Recipe produces ${productCount} ${itemName}. Target ${count}. Crafting ${craftTimes} batches.`);
 
+    const startCount = countItems(bot, itemName);
+
     if (craftableRecipe.requiresTable)
     {
         if (!tableBlock)
@@ -180,5 +188,18 @@ export async function craftFromInventory(bot: Bot, params: CraftParams, resource
         await bot.craft(craftableRecipe as any, craftTimes, undefined);
     }
 
-    console.log(`[craft] Successfully crafted ${count} (approx) ${itemName}`);
+    await waitForNextTick(bot);
+    let endCount = countItems(bot, itemName);
+
+    if (endCount <= startCount)
+    {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        endCount = countItems(bot, itemName);
+        if (endCount <= startCount)
+        {
+             throw new Error(`Crafting verification failed: attempted to craft ${itemName}, but inventory count did not increase (held: ${startCount} -> ${endCount}).`);
+        }
+    }
+
+    console.log(`[craft] Successfully crafted ${count} (approx) ${itemName}. Inventory now has ${endCount}.`);
 }
