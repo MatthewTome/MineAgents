@@ -28,7 +28,7 @@ export async function attemptRecovery(options:
     if (!options.recipeLibrary) { return false; }
 
     const query = `${options.goal} ${options.failed.reason ?? ""}`.trim();
-    const recipes = options.recipeLibrary.search(query).slice(0, 3);
+    const recipes = options.recipeLibrary.search(query, options.perception).slice(0, 3);
     if (recipes.length === 0) { return false; }
 
     for (const recipe of recipes)

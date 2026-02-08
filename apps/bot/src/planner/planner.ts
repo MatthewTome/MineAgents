@@ -59,9 +59,10 @@ export class HuggingFacePlanner
         {
             const { generate, backend } = await this.generatorPromise;
             let knowledgeSnippets: string[] = [];
-            if (this.library && request.ragEnabled !== false)
+            
+            if (this.library && request.ragEnabled !== false && request.perception)
             {
-                const recipes = this.library.search(request.goal);
+                const recipes = this.library.search(request.goal, request.perception);
                 knowledgeSnippets = recipes.map(r => this.library!.formatRecipeFact(r, 200));
             }
 

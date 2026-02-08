@@ -1,5 +1,6 @@
 import type { Bot } from "mineflayer";
 import { Vec3 } from "vec3";
+import { Block } from "prismarine-block";
 import {
     PerceptionSnapshot,
     PlayerPose,
@@ -9,7 +10,8 @@ import {
     InventorySummary,
     NearbyEntity,
     EntityKind,
-    ChestMemoryEntry
+    ChestMemoryEntry,
+    Vec3Like
 } from "../settings/types.js";
 import { listChestMemory, markChestInvalid, rememberChest } from "./chest-memory.js";
 
@@ -32,6 +34,13 @@ const DEFAULTS: PerceptionConfig =
     maxNearbyEntities: 48,
     chatBuffer: 20
 };
+
+const INTERESTING_RESOURCES = [
+    "log", "wood",
+    "ore", "coal", "iron", "gold", "diamond",
+    "crafting_table", "furnace", "chest",
+    "water", "lava"
+];
 
 export class PerceptionCollector
 {
@@ -135,6 +144,7 @@ export class PerceptionCollector
         const nearbyChests = this.collectNearbyChests();
         const hazards = this.deriveHazards(pose, blocks);
         const chatWindow = { lastMessages: [...this.chatRing] };
+        const nearbyResources = this.collectNearbyResources();
 
         const snap: PerceptionSnapshot =
         {
@@ -147,6 +157,7 @@ export class PerceptionCollector
             hazards,
             nearby,
             blocks,
+            nearbyResources,
             nearbyChests,
             chatWindow
         };
@@ -292,6 +303,44 @@ export class PerceptionCollector
             maxRange: this.cfg.nearbyRange,
             entities: n
         };
+    }
+
+    private collectNearbyResources(): { name: string; position: Vec3Like; distance: number }[]
+    {
+        const resources: { name: string; position: Vec3Like; distance: number }[] = [];
+        const botPos = this.bot.entity.position;
+        const scanRadius = 32;
+
+        const matchingIds: number[] = [];
+        const registry = this.bot.registry.blocksByName;
+        
+        if (!registry) return [];
+
+        for (const name in registry) {
+            if (INTERESTING_RESOURCES.some(key => name.includes(key))) {
+                matchingIds.push(registry[name].id);
+            }
+        }
+
+        const found = this.bot.findBlocks({
+            matching: matchingIds,
+            maxDistance: scanRadius,
+            count: 50
+        });
+
+        for (const vec of found) {
+            const block = this.bot.blockAt(vec);
+            if (block) {
+                const dist = Math.floor(botPos.distanceTo(vec));
+                resources.push({
+                    name: block.name,
+                    position: { x: vec.x, y: vec.y, z: vec.z },
+                    distance: dist
+                });
+            }
+        }
+
+        return resources.sort((a, b) => a.distance - b.distance);
     }
 
     private collectLocalBlocks(): LocalBlocks

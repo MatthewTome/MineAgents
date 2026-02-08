@@ -13,6 +13,7 @@ export const SUPPORTED_ACTIONS: Record<string, string> =
     move: "Move. params: { position:{x,y,z} } or { entityName?: string, range?: number }",
     perceive: "Check inventory or surroundings. params: { check: string }",
     pickup: "Pick up nearby dropped items. params: { item?: string }",
+    place: "Place a specific block. params: { item: string, position: {x,y,z} }", 
     requestResource: "Request items from team via chat. params: { item: string, count?: number, urgent?: boolean }",
     smelt: "Smelt items in a furnace. params: { item: string, fuel?: string, count?: number, furnace?: {x,y,z} }"
 };

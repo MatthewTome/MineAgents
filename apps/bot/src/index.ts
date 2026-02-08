@@ -1110,13 +1110,22 @@ export async function createBot()
                             }
                             else
                             {
-                                safeChat(bot, safety, "I'm done!", "planner.complete");
-                                sessionLogger.info("planner.execution.complete", "Plan execution completed", { goal: currentGoal });
-
-                                if (!multiAgentSession)
+                                if (plan.goalAchieved)
                                 {
-                                    const events = goalTracker.notifyEvent("planner.success", {});
-                                    events.forEach(e => sessionLogger.info("goal.update", "Goal succeeded via execution", { ...e }));
+                                    safeChat(bot, safety, "I'm done! Goal achieved.", "planner.complete");
+                                    sessionLogger.info("planner.execution.complete", "Goal achieved", { goal: currentGoal });
+
+                                    if (!multiAgentSession)
+                                    {
+                                        const events = goalTracker.notifyEvent("planner.success", {});
+                                        events.forEach(e => sessionLogger.info("goal.update", "Goal succeeded via execution", { ...e }));
+                                    }
+                                }
+                                else
+                                {
+                                    console.log(`[planner] Plan finished, but goal "${currentGoal}" is not yet achieved. Looping...`);
+                                    safeChat(bot, safety, "Step complete. Continuing work...", "planner.partial");
+                                    sessionLogger.info("planner.execution.partial", "Partial plan finished", { goal: currentGoal });
                                 }
                             }
                         }

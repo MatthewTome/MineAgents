@@ -54,6 +54,7 @@ export function parsePlan(text: string, model: string): Omit<PlanResult, "backen
 
     const rawClaimIds = planSource.claim_ids ?? planSource.claimed_step_ids ?? planSource.claimedSteps ?? planSource.claimIds;
     const claimedStepIds = Array.isArray(rawClaimIds) ? rawClaimIds.map((id: any) => String(id)) : [];
+    const goalAchieved = parsed.goal_achieved === true || parsed.goalAchieved === true;
 
     if (typeof planSource.intent !== "string" || !Array.isArray(planSource.steps))
     {
@@ -87,7 +88,8 @@ export function parsePlan(text: string, model: string): Omit<PlanResult, "backen
         model,
         raw: text,
         teamPlan,
-        claimedStepIds
+        claimedStepIds,
+        goalAchieved
     };
 }
 

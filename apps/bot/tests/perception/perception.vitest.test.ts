@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { Vec3 } from "vec3";
 import type { Bot } from "mineflayer";
-import { PerceptionCollector } from "../../src/perception/perception";
+import { PerceptionCollector } from "../../src/perception/perception.js";
 import { describe, it, expect } from "vitest";
 
 interface MockBlock {

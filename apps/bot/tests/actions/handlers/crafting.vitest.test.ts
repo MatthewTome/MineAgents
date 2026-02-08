@@ -1,6 +1,20 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { craftFromInventory } from "../../../src/actions/handlers/crafting.js";
 import { makeMockBot } from "../../test-helpers.js";
+
+vi.mock("../../../src/actions/handlers/movement.js", () => ({
+    waitForNextTick: vi.fn().mockResolvedValue(undefined),
+    moveToward: vi.fn().mockResolvedValue(undefined)
+}));
+
+vi.mock("../../../src/actions/handlers/teamwork.js", () => ({
+    buildLockKey: vi.fn().mockReturnValue("lock-key"),
+    withResourceLock: vi.fn().mockImplementation((locks, key, action) => action())
+}));
+
+vi.mock("../../../src/actions/handlers/building.js", () => ({
+    findReferenceBlock: vi.fn().mockReturnValue({ position: { x: 0, y: 0, z: 0 } })
+}));
 
 const ESSENTIAL_ITEMS = [
     { name: "oak_planks", id: 1, requiresTable: false },
@@ -40,13 +54,37 @@ function createMockTable() {
     };
 }
 
+function setupMockCraft(bot: any) {
+    bot.craft = vi.fn().mockImplementation(async (recipe, count, table) => {
+        const resultId = recipe.result.id;
+        const amount = (recipe.result.count || 1) * (count || 1);
+        
+        const items = bot.inventory.items();
+        const existing = items.find((i: any) => i.type === resultId);
+        
+        if (existing) {
+            existing.count += amount;
+        } else {
+            const entry = Object.values(INGREDIENT_REGISTRY).find((v: any) => v.id === resultId);
+            const name = entry ? entry.name : `item_${resultId}`;
+            items.push({ name, count: amount, type: resultId });
+        }
+    });
+}
+
 describe("actions/handlers/crafting.ts", () => {
+    
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
     it("skips crafting when inventory already satisfies the request", async () => {
         const bot = makeMockBot({
             items: [{ name: "oak_planks", count: 4, type: 1 }],
             registryItems: INGREDIENT_REGISTRY
         });
-        const recipesFor = vi.fn().mockReturnValue([{ id: 1, requiresTable: false }]);
+        setupMockCraft(bot);
+        const recipesFor = vi.fn().mockReturnValue([{ id: 1, requiresTable: false, result: { id: 1, count: 4 } }]);
         (bot as any).recipesFor = recipesFor;
 
         await craftFromInventory(bot as any, { recipe: "oak_planks", count: 2 });
@@ -59,7 +97,13 @@ describe("actions/handlers/crafting.ts", () => {
             items: [{ name: "oak_log", count: 2, type: 100 }],
             registryItems: INGREDIENT_REGISTRY
         });
-        const recipe = { id: 1, requiresTable: false };
+        setupMockCraft(bot);
+        const recipe = { 
+            id: 1, 
+            requiresTable: false, 
+            result: { id: 1, count: 4, metadata: 0 },
+            delta: [] 
+        };
         const recipesFor = vi.fn().mockReturnValue([recipe]);
         (bot as any).recipesFor = recipesFor;
 
@@ -77,8 +121,14 @@ describe("actions/handlers/crafting.ts", () => {
                     items: [],
                     registryItems: INGREDIENT_REGISTRY
                 });
+                setupMockCraft(bot);
 
-                const recipe = { id, requiresTable, delta: [] };
+                const recipe = { 
+                    id, 
+                    requiresTable, 
+                    delta: [], 
+                    result: { id, count: 1, metadata: 0 } 
+                };
                 const recipesFor = vi.fn().mockImplementation((itemId, metadata, count, table) => {
                     if (requiresTable && table) return [recipe];
                     if (!requiresTable && table === null) return [recipe];
@@ -104,6 +154,7 @@ describe("actions/handlers/crafting.ts", () => {
                 items: [{ name: "oak_log", count: 1, type: 100 }],
                 registryItems: INGREDIENT_REGISTRY
             });
+            setupMockCraft(bot);
 
             const recipesFor = vi.fn().mockReturnValue([]);
             (bot as any).recipesFor = recipesFor;
@@ -124,6 +175,7 @@ describe("actions/handlers/crafting.ts", () => {
                 items: [{ name: "oak_planks", count: 2, type: 1 }],
                 registryItems: INGREDIENT_REGISTRY
             });
+            setupMockCraft(bot);
 
             const recipesFor = vi.fn().mockReturnValue([]);
             (bot as any).recipesFor = recipesFor;
@@ -142,6 +194,7 @@ describe("actions/handlers/crafting.ts", () => {
                 items: [{ name: "oak_planks", count: 4, type: 1 }],
                 registryItems: INGREDIENT_REGISTRY
             });
+            setupMockCraft(bot);
 
             const recipesFor = vi.fn().mockReturnValue([]);
             (bot as any).recipesFor = recipesFor;
@@ -164,6 +217,7 @@ describe("actions/handlers/crafting.ts", () => {
                 ],
                 registryItems: INGREDIENT_REGISTRY
             });
+            setupMockCraft(bot);
 
             const recipesFor = vi.fn().mockReturnValue([]);
             (bot as any).recipesFor = recipesFor;
@@ -187,6 +241,7 @@ describe("actions/handlers/crafting.ts", () => {
                 ],
                 registryItems: INGREDIENT_REGISTRY
             });
+            setupMockCraft(bot);
 
             const recipesFor = vi.fn().mockReturnValue([]);
             (bot as any).recipesFor = recipesFor;
@@ -210,6 +265,7 @@ describe("actions/handlers/crafting.ts", () => {
                 ],
                 registryItems: INGREDIENT_REGISTRY
             });
+            setupMockCraft(bot);
 
             const recipesFor = vi.fn().mockReturnValue([]);
             (bot as any).recipesFor = recipesFor;
@@ -230,6 +286,7 @@ describe("actions/handlers/crafting.ts", () => {
                 items: [{ name: "cobblestone", count: 8, type: 101 }],
                 registryItems: INGREDIENT_REGISTRY
             });
+            setupMockCraft(bot);
 
             const recipesFor = vi.fn().mockReturnValue([]);
             (bot as any).recipesFor = recipesFor;
@@ -250,6 +307,7 @@ describe("actions/handlers/crafting.ts", () => {
                 items: [{ name: "oak_planks", count: 8, type: 1 }],
                 registryItems: INGREDIENT_REGISTRY
             });
+            setupMockCraft(bot);
 
             const recipesFor = vi.fn().mockReturnValue([]);
             (bot as any).recipesFor = recipesFor;
@@ -271,6 +329,7 @@ describe("actions/handlers/crafting.ts", () => {
                 items: [],
                 registryItems: { ...INGREDIENT_REGISTRY, unknown_item: { id: 999, name: "unknown_item" } }
             });
+            setupMockCraft(bot);
 
             const recipesFor = vi.fn().mockReturnValue([]);
             (bot as any).recipesFor = recipesFor;
@@ -288,6 +347,7 @@ describe("actions/handlers/crafting.ts", () => {
                 ],
                 registryItems: INGREDIENT_REGISTRY
             });
+            setupMockCraft(bot);
 
             const recipesFor = vi.fn().mockReturnValue([]);
             (bot as any).recipesFor = recipesFor;
@@ -303,6 +363,7 @@ describe("actions/handlers/crafting.ts", () => {
                 items: [],
                 registryItems: INGREDIENT_REGISTRY
             });
+            setupMockCraft(bot);
 
             const recipesFor = vi.fn().mockReturnValue([]);
             (bot as any).recipesFor = recipesFor;
@@ -317,6 +378,7 @@ describe("actions/handlers/crafting.ts", () => {
                 items: [{ name: "oak_planks", count: 1, type: 1 }],
                 registryItems: INGREDIENT_REGISTRY
             });
+            setupMockCraft(bot);
 
             const recipesFor = vi.fn().mockReturnValue([]);
             (bot as any).recipesFor = recipesFor;
