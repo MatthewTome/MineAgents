@@ -1,0 +1,21 @@
+{
+  "name": "Craft Wooden Pickaxe",
+  "goal": "Craft a wooden pickaxe to mine stone.",
+  "tags": ["craft", "wood", "tools", "wooden tools", "wooden pickaxe", "wooden_pickaxe", "iron tools pipeline"],
+  "prerequisites": ["Have at least '3 oak_plank'", "Have at least '2 stick'", "'crafting_table' is nearby"],
+  "completion_checks": ["Have wooden_pickaxe equipped"],
+  "steps": [
+    {
+      "title": "Check Inventory for needed ingredients",
+      "action": "perceive",
+      "details": "Check inventory to confirm you have at least '3 oak_plank' and at least '2 stick'. Craft them if you don't (check other RAG recipes). (Recommended for pipeline: 1 wooden pickaxe).",
+      "checks": ["Inventory check passed"]
+    },
+    {
+      "title": "Craft Pickaxe",
+      "action": "craft",
+      "details": "Craft '1 wooden_pickaxe' and equip it.",
+      "checks": ["Have wooden_pickaxe equipped"]
+    }
+  ]
+}
