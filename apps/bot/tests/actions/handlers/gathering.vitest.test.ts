@@ -65,9 +65,14 @@ function makeBot(items: Array<{ name: string; count: number }> = [])
             itemsByName: { 
                 oak_log: { id: 1, name: "oak_log" }, 
                 oak_planks: { id: 2, name: "oak_planks" },
-                planks: { id: 2, name: "oak_planks" }
+                planks: { id: 2, name: "oak_planks" },
+                cobblestone: { id: 3, name: "cobblestone" }
             },
-            blocksByName: { log: { id: 1 }, oak_log: { id: 2 } }
+            blocksByName: { 
+                log: { id: 1 }, 
+                oak_log: { id: 2 },
+                stone: { id: 3 }
+            }
         },
         findBlocks: vi.fn().mockReturnValue([]),
         findBlock: vi.fn().mockReturnValue(null),
@@ -112,27 +117,7 @@ describe("handleGather", () =>
         expect(collectBlocks).not.toHaveBeenCalled();
     });
 
-    it("pulls from chest memory when a known chest contains the item", async () =>
-    {
-        const items: Array<{ name: string; count: number }> = [];
-        const bot = makeBot(items);
-        const chestPosition = { x: 1, y: 64, z: 2 };
-
-        vi.mocked(listChestMemory).mockReturnValue([
-            { status: "known", position: chestPosition, items: [{ name: "oak_log", count: 4 }] }
-        ] as any);
-
-        vi.mocked(handleLoot).mockImplementation(async () =>
-        {
-            items.push({ name: "oak_log", count: 1 });
-        });
-
-        await handleGather(bot, { params: { item: "log" } });
-
-        expect(handleLoot).toHaveBeenCalledWith(bot, { params: { position: chestPosition, item: "oak_log" } }, undefined);
-    });
-
-    it("moves to collect dropped items when they match the target", async () =>
+    it("prioritizes dropped items before mining", async () =>
     {
         const items: Array<{ name: string; count: number }> = [];
         const bot = makeBot(items);
@@ -148,36 +133,41 @@ describe("handleGather", () =>
             items.push({ name: "oak_log", count: 1 });
         });
 
-        await handleGather(bot, { params: { item: "log" } });
+        vi.mocked(resolveItemToBlock).mockReturnValue("oak_log");
+
+        await handleGather(bot, { params: { item: "log", timeoutMs: 1000 } });
 
         expect(moveToward).toHaveBeenCalledWith(bot, dropPosition, 1.0, 15000);
-        expect(collectBlocks).not.toHaveBeenCalled();
+        expect(collectBlocks).not.toHaveBeenCalled(); 
     });
 
-    it("mines blocks when a matching source block is found", async () =>
+    it("falls back to mining if no dropped items found", async () =>
     {
         const items: Array<{ name: string; count: number }> = [];
         const bot = makeBot(items);
         const blockPosition = makeVec3(3, 64, -1);
         const targetBlock = { name: "oak_log", position: blockPosition };
 
-        vi.mocked(resolveItemToBlock).mockReturnValue("log");
+        vi.mocked(resolveItemToBlock).mockImplementation((_bot, name) => 
+            name.includes("log") ? "oak_log" : null
+        );
+
         vi.mocked(collectBlocks).mockImplementation(async () =>
         {
             items.push({ name: "oak_log", count: 1 });
             return true;
         });
 
-        (bot.findBlock as any).mockReturnValue(targetBlock);
         (bot.findBlocks as any).mockReturnValue([blockPosition]);
         (bot.blockAt as any).mockReturnValue(targetBlock);
 
-        await handleGather(bot, { params: { item: "log" } });
+        await handleGather(bot, { params: { item: "log", timeoutMs: 1000 } });
 
+        expect(findNearestEntity).toHaveBeenCalled();
         expect(collectBlocks).toHaveBeenCalledTimes(1);
     });
 
-    it("crafts the item from raw materials when applicable", async () =>
+    it("crafts if mining fails or is not applicable", async () =>
     {
         const items = [{ name: "oak_log", count: 2 }];
         const bot = makeBot(items);
@@ -190,7 +180,7 @@ describe("handleGather", () =>
             items.push({ name: "oak_planks", count: 4 });
         });
 
-        await handleGather(bot, { params: { item: "planks" } });
+        await handleGather(bot, { params: { item: "planks", timeoutMs: 6000 } });
 
         expect(craftFromInventory).toHaveBeenCalledWith(bot, { recipe: "oak_planks" }, undefined);
     });

@@ -1,6 +1,6 @@
 import type { Bot } from "mineflayer";
 import { Vec3 } from "vec3";
-import type { DropParams } from "../action-types.js";
+import type { DropParams, EquipParams } from "../action-types.js";
 import { findNearestEntity, moveToward, waitForNextTick } from "./movement.js";
 import type { GiveParams } from "../action-types.js";
 
@@ -151,6 +151,21 @@ export async function handleDrop(bot: Bot, step: { params?: Record<string, unkno
     }
 
     console.log(`[drop] Dropped ${dropped} ${params.item}`);
+}
+
+export async function handleEquip(bot: Bot, step: { params?: Record<string, unknown> }): Promise<void>
+{
+    const params = (step.params ?? {}) as unknown as EquipParams;
+    if (!params.item) throw new Error("Equip requires item name");
+
+    const destination = params.destination ?? "hand";
+    const itemName = params.item.toLowerCase();
+    const item = bot.inventory.items().find((entry) => entry.name.toLowerCase().includes(itemName));
+
+    if (!item) throw new Error(`No ${params.item} in inventory`);
+
+    await bot.equip(item, destination);
+    await waitForNextTick(bot);
 }
 
 export async function clearInventory(bot: Bot): Promise<void>

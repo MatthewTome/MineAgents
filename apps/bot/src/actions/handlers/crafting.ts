@@ -1,7 +1,7 @@
 import type { Bot } from "mineflayer";
 import { Vec3 } from "vec3";
 import { moveToward, waitForNextTick } from "./movement.js";
-import { resolveWoodType } from "../action-utils.js";
+import { resolveWoodType, isItemMatch } from "../action-utils.js";
 import { buildLockKey, withResourceLock } from "./teamwork.js";
 import { findReferenceBlock } from "./building.js";
 import type { CraftParams } from "../action-types.js";
@@ -20,13 +20,26 @@ export async function handleCraft(bot: Bot, step: { params?: Record<string, unkn
     await craftFromInventory(bot, params, resourceLocks);
 }
 
+function countItems(bot: Bot, name: string): number
+{
+    const items = bot.inventory.items().filter(i => isItemMatch(i.name, name));
+    return items.reduce((acc, i) => acc + i.count, 0);
+}
+
 export async function craftFromInventory(bot: Bot, params: CraftParams, resourceLocks?: ResourceLockManager): Promise<void>
 {
     let itemName = params.recipe.toLowerCase();
+
+    if (itemName.startsWith("craft_"))
+    {
+        itemName = itemName.substring(6);
+    }
+
     let count = params.count ?? 1;
     const trimmedRecipe = itemName.trim();
     const leadingCountMatch = trimmedRecipe.match(/^(?:x)?(\d+)\s+(.+)$/);
     const trailingCountMatch = trimmedRecipe.match(/^(.+)\s+x(\d+)$/);
+
     if (params.count === undefined)
     {
         if (leadingCountMatch)
@@ -46,10 +59,12 @@ export async function craftFromInventory(bot: Bot, params: CraftParams, resource
     {
         itemName = `${itemName}s`;
     }
+
     if (itemName.endsWith("sticks"))
     {
         itemName = itemName.replace(/sticks$/, "stick");
     }
+
     if (itemName.endsWith("plank"))
     {
         itemName = `${itemName}s`;
@@ -121,6 +136,12 @@ export async function craftFromInventory(bot: Bot, params: CraftParams, resource
 
             if (!hasIngredientsForRecipe(bot, fallbackRecipe))
             {
+                console.log("[craft] Missing ingredients. Waiting 2s for pickup...");
+                await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+
+            if (!hasIngredientsForRecipe(bot, fallbackRecipe))
+            {
                 const missing = getMissingIngredients(bot, fallbackRecipe);
                 const missingStr = missing.map(m => `${m.needed - m.have} ${m.name}`).join(", ");
                 throw new Error(`Insufficient ingredients for ${itemName}. Missing: ${missingStr}`);
@@ -135,6 +156,12 @@ export async function craftFromInventory(bot: Bot, params: CraftParams, resource
     }
 
     const craftableRecipe = fallbackRecipe ?? recipe;
+    const productCount = craftableRecipe.result.count;
+    const craftTimes = Math.ceil(count / productCount);
+    
+    console.log(`[craft] Recipe produces ${productCount} ${itemName}. Target ${count}. Crafting ${craftTimes} batches.`);
+
+    const startCount = countItems(bot, itemName);
 
     if (craftableRecipe.requiresTable)
     {
@@ -162,13 +189,26 @@ export async function craftFromInventory(bot: Bot, params: CraftParams, resource
         await withResourceLock(resourceLocks, lockKey, async () =>
         {
             await moveToward(bot, confirmedTable.position, 3, 15000);
-            await bot.craft(craftableRecipe as any, count, confirmedTable);
+            await bot.craft(craftableRecipe as any, craftTimes, confirmedTable);
         });
     }
     else
     {
-        await bot.craft(craftableRecipe as any, count, undefined);
+        await bot.craft(craftableRecipe as any, craftTimes, undefined);
     }
 
-    console.log(`[craft] Successfully crafted ${count} ${itemName}`);
+    await waitForNextTick(bot);
+    let endCount = countItems(bot, itemName);
+
+    if (endCount <= startCount)
+    {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        endCount = countItems(bot, itemName);
+        if (endCount <= startCount)
+        {
+             throw new Error(`Crafting verification failed: attempted to craft ${itemName}, but inventory count did not increase (held: ${startCount} -> ${endCount}).`);
+        }
+    }
+
+    console.log(`[craft] Successfully crafted ${count} (approx) ${itemName}. Inventory now has ${endCount}.`);
 }

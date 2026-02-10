@@ -42,6 +42,8 @@ interface TrialSummary {
   role?: string;
   llmCalls?: number;
   actionCount?: number;
+  actionAttempts?: number;
+  planSteps?: number;
   memoryRetrievals?: number;
 }
 
@@ -59,12 +61,99 @@ const io = new Server(server, {
 const port = Number(process.env.DASHBOARD_PORT ?? 4000);
 const logDir = process.env.DASHBOARD_LOG_DIR ?? path.resolve(process.cwd(), "..", "bot", "logs");
 const sessionsRoot = path.join(logDir, "sessions");
-
+const exportsRoot = path.join(logDir, "exports");
 const agentStatuses = new Map<string, AgentStatus>();
 const narrations: NarrationEvent[] = [];
 const sessionPaths = new Map<string, string>();
-
 const knownTailers = new Map<string, LogTailer>();
+
+const TRIAL_EXPORT_COLUMNS: Array<{ key: keyof TrialSummary | "actionSteps"; header: string }> = [
+  { key: "sessionId", header: "session_id" },
+  { key: "name", header: "agent_name" },
+  { key: "startedAt", header: "started_at" },
+  { key: "endedAt", header: "ended_at" },
+  { key: "durationSec", header: "duration_sec" },
+  { key: "success", header: "success" },
+  { key: "condition", header: "condition" },
+  { key: "ragEnabled", header: "rag_enabled" },
+  { key: "multiAgent", header: "multi_agent" },
+  { key: "role", header: "role" },
+  { key: "llmCalls", header: "llm_calls" },
+  { key: "actionSteps", header: "action_steps" },
+  { key: "actionAttempts", header: "action_attempts" },
+  { key: "planSteps", header: "plan_steps" },
+  { key: "memoryRetrievals", header: "memory_retrievals" }
+];
+
+function ensureExportsDir(): void
+{
+  if (!fs.existsSync(exportsRoot))
+  {
+    fs.mkdirSync(exportsRoot, { recursive: true });
+  }
+}
+
+function formatTimestampForFile(date: Date): string
+{
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
+}
+
+function csvEscape(value: unknown): string
+{
+  if (value === null || value === undefined)
+  {
+    return "";
+  }
+  const text = String(value);
+  if (/[",\n]/.test(text))
+  {
+    return `"${text.replace(/"/g, "\"\"")}"`;
+  }
+  return text;
+}
+
+function buildTrialExportRows(trials: TrialSummary[]): Array<Record<string, unknown>>
+{
+  return trials.map(trial => ({
+    session_id: trial.sessionId,
+    agent_name: trial.name,
+    started_at: trial.startedAt ?? "",
+    ended_at: trial.endedAt ?? "",
+    duration_sec: trial.durationSec ?? "",
+    success: trial.success ?? "",
+    condition: trial.condition,
+    rag_enabled: trial.ragEnabled ?? "",
+    multi_agent: trial.multiAgent ?? "",
+    role: trial.role ?? "",
+    llm_calls: trial.llmCalls ?? "",
+    action_steps: trial.actionCount ?? "",
+    action_attempts: trial.actionAttempts ?? "",
+    plan_steps: trial.planSteps ?? "",
+    memory_retrievals: trial.memoryRetrievals ?? ""
+  }));
+}
+
+function exportTrials(format: "csv" | "json", trials: TrialSummary[]): { filePath: string; fileName: string }
+{
+  ensureExportsDir();
+  const timestamp = formatTimestampForFile(new Date());
+  const fileName = `mineagents_trials_${timestamp}.${format}`;
+  const filePath = path.join(exportsRoot, fileName);
+  const rows = buildTrialExportRows(trials);
+
+  if (format === "json")
+  {
+    fs.writeFileSync(filePath, JSON.stringify(rows, null, 2), "utf8");
+    return { filePath, fileName };
+  }
+
+  const headers = TRIAL_EXPORT_COLUMNS.map(column => column.header);
+  const csvRows = rows.map(row => headers.map(header => csvEscape((row as Record<string, unknown>)[header])));
+  const csvContent = [headers.join(","), ...csvRows.map(row => row.join(","))].join("\n");
+  fs.writeFileSync(filePath, csvContent, "utf8");
+  return { filePath, fileName };
+}
 
 export function safeStat(filePath: string): fs.Stats | null {
   try {
@@ -370,7 +459,35 @@ function loadTrials(): TrialSummary[] {
         return typeof prompt === "string" && prompt.includes("RELEVANT KNOW-HOW") ? count + 1 : count;
       }, 0);
 
-    const actionCount = actionsLog.filter(entry => entry.event === "action").length;
+    const actionAttemptsById = new Map<string, number>();
+    for (const entry of actionsLog)
+    {
+      if (entry.event !== "action")
+      {
+        continue;
+      }
+      const actionData = entry.data ?? {};
+      const actionId = actionData.id ? String(actionData.id) : null;
+      if (!actionId)
+      {
+        continue;
+      }
+      const attempts = typeof actionData.attempts === "number" ? actionData.attempts : 0;
+      const prevAttempts = actionAttemptsById.get(actionId) ?? 0;
+      if (attempts > prevAttempts)
+      {
+        actionAttemptsById.set(actionId, attempts);
+      }
+    }
+    const actionCount = actionAttemptsById.size;
+    const actionAttempts = Array.from(actionAttemptsById.values()).reduce((total, value) => total + value, 0);
+
+    const planSteps = plannerLog
+      .filter(entry => entry.event === "planner.parsed")
+      .reduce((max, entry) => {
+        const steps = Array.isArray(entry.data?.steps) ? entry.data.steps.length : 0;
+        return Math.max(max, steps);
+      }, 0);
 
     const success = sessionLog.some(entry => entry.event === "planner.execution.complete")
       ? true
@@ -391,6 +508,8 @@ function loadTrials(): TrialSummary[] {
       role: startup?.data?.role,
       llmCalls,
       actionCount,
+      actionAttempts,
+      planSteps,
       memoryRetrievals
     });
   }
@@ -431,11 +550,15 @@ export function computeMetrics(trials: TrialSummary[]) {
       const successes = items.filter(item => item.success).length;
       const durations = items.map(item => item.durationSec ?? 0).filter(Boolean);
       const actions = items.map(item => item.actionCount ?? 0).filter(Boolean);
+      const attempts = items.map(item => item.actionAttempts ?? 0).filter(Boolean);
+      const planSteps = items.map(item => item.planSteps ?? 0).filter(Boolean);
       const llmCalls = items.map(item => item.llmCalls ?? 0).filter(Boolean);
       return [condition, {
         successRate: items.length ? successes / items.length : 0,
         averageDurationSec: durations.length ? durations.reduce((a, b) => a + b, 0) / durations.length : 0,
         averageActions: actions.length ? actions.reduce((a, b) => a + b, 0) / actions.length : 0,
+        averageActionAttempts: attempts.length ? attempts.reduce((a, b) => a + b, 0) / attempts.length : 0,
+        averagePlanSteps: planSteps.length ? planSteps.reduce((a, b) => a + b, 0) / planSteps.length : 0,
         averageLlmCalls: llmCalls.length ? llmCalls.reduce((a, b) => a + b, 0) / llmCalls.length : 0
       }];
     })
@@ -448,10 +571,12 @@ export function computeMetrics(trials: TrialSummary[]) {
 
   const actionUsage = Object.entries(byCondition).map(([condition, items]) => {
     const actions = items.map(item => item.actionCount ?? 0).filter(Boolean);
+    const attempts = items.map(item => item.actionAttempts ?? 0).filter(Boolean);
     const llmCalls = items.map(item => item.llmCalls ?? 0).filter(Boolean);
     return {
       condition,
       actions: actions.length ? Math.round(actions.reduce((a, b) => a + b, 0) / actions.length) : 0,
+      attempts: attempts.length ? Math.round(attempts.reduce((a, b) => a + b, 0) / attempts.length) : 0,
       llmCalls: llmCalls.length ? Math.round(llmCalls.reduce((a, b) => a + b, 0) / llmCalls.length) : 0
     };
   });
@@ -496,6 +621,40 @@ app.get("/metrics", (_, res) => {
   }
   const metrics = computeMetrics(trials);
   res.json({ trials, ...metrics });
+});
+
+app.get("/exports/trials.csv", (_, res) =>
+{
+  if (!fs.existsSync(sessionsRoot))
+  {
+    res.status(404).json({ message: "Missing Trial Data: sessions directory not found." });
+    return;
+  }
+  const trials = loadTrials();
+  if (trials.length === 0)
+  {
+    res.status(404).json({ message: "Missing Trial Data: no sessions available." });
+    return;
+  }
+  const exportInfo = exportTrials("csv", trials);
+  res.download(exportInfo.filePath, exportInfo.fileName);
+});
+
+app.get("/exports/trials.json", (_, res) =>
+{
+  if (!fs.existsSync(sessionsRoot))
+  {
+    res.status(404).json({ message: "Missing Trial Data: sessions directory not found." });
+    return;
+  }
+  const trials = loadTrials();
+  if (trials.length === 0)
+  {
+    res.status(404).json({ message: "Missing Trial Data: no sessions available." });
+    return;
+  }
+  const exportInfo = exportTrials("json", trials);
+  res.download(exportInfo.filePath, exportInfo.fileName);
 });
 
 app.get("/logs/:sessionId", (req, res) => {

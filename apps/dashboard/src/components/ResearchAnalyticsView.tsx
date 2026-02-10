@@ -41,30 +41,29 @@ export default function ResearchAnalyticsView({ apiBase }: ResearchAnalyticsView
   const actionUsage = metrics?.actionUsage ?? [];
   const ragPoints = metrics?.ragEffectiveness.points ?? [];
 
-  const downloadData = (format: "json" | "csv") => {
+  const downloadData = async (format: "json" | "csv") => {
     if (!metrics) {
       return;
     }
-    if (format === "json") {
-      const blob = new Blob([JSON.stringify(metrics.trials, null, 2)], { type: "application/json" });
+    try {
+      const endpoint = `${apiBase}/exports/trials.${format}`;
+      const res = await fetch(endpoint);
+      if (!res.ok) {
+        throw new Error(`Failed to download ${format.toUpperCase()} export.`);
+      }
+      const blob = await res.blob();
+      const contentDisposition = res.headers.get("content-disposition") ?? "";
+      const match = contentDisposition.match(/filename="?([^"]+)"?/);
+      const fileName = match?.[1] ?? `mineagents_trials.${format}`;
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = "mineagents_trials.json";
+      link.download = fileName;
       link.click();
       URL.revokeObjectURL(url);
-      return;
+      } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to download export.");
     }
-    const headers = Object.keys(metrics.trials[0] ?? {});
-    const rows = metrics.trials.map(trial => headers.map(header => String((trial as any)[header] ?? "")));
-    const csv = [headers.join(","), ...rows.map(row => row.join(","))].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "mineagents_trials.csv";
-    link.click();
-    URL.revokeObjectURL(url);
   };
 
   return (
@@ -80,6 +79,35 @@ export default function ResearchAnalyticsView({ apiBase }: ResearchAnalyticsView
       {!metrics && !error && <div className="banner">Loading metrics...</div>}
       {metrics && (
         <div className="grid columns-2">
+        <div className="card chart-card">
+            <h3>Run Summary (per condition)</h3>
+            <table className="metrics-table">
+              <thead>
+                <tr>
+                  <th>Condition</th>
+                  <th>Success Rate</th>
+                  <th>Avg Duration (sec)</th>
+                  <th>Avg Action Steps</th>
+                  <th>Avg Plan Steps</th>
+                  <th>Avg Attempts</th>
+                  <th>Avg LLM Calls</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(metrics.conditions).map(([condition, values]) => (
+                  <tr key={condition}>
+                    <td>{condition}</td>
+                    <td>{(values.successRate * 100).toFixed(1)}%</td>
+                    <td>{values.averageDurationSec.toFixed(1)}</td>
+                    <td>{values.averageActions.toFixed(1)}</td>
+                    <td>{values.averagePlanSteps.toFixed(1)}</td>
+                    <td>{values.averageActionAttempts.toFixed(1)}</td>
+                    <td>{values.averageLlmCalls.toFixed(1)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <div className="card chart-card">
             <h3>Success Rate Comparison</h3>
             <ResponsiveContainer width="100%" height={260}>
@@ -98,15 +126,16 @@ export default function ResearchAnalyticsView({ apiBase }: ResearchAnalyticsView
             <BoxPlot data={metrics.boxPlot} />
           </div>
           <div className="card chart-card">
-            <h3>Token & Action Usage</h3>
+            <h3>Action & LLM Usage</h3>
             <ResponsiveContainer width="100%" height={260}>
               <BarChart data={actionUsage}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="condition" />
-                <YAxis />
+                <YAxis label={{ value: "Count", angle: -90, position: "insideLeft" }} />
                 <Tooltip />
                 <Legend />
-                <Bar dataKey="actions" fill="#10b981" name="Actions" />
+                <Bar dataKey="actions" fill="#10b981" name="Action Steps" />
+                <Bar dataKey="attempts" fill="#22d3ee" name="Attempts" />
                 <Bar dataKey="llmCalls" fill="#f59e0b" name="LLM Calls" />
               </BarChart>
             </ResponsiveContainer>

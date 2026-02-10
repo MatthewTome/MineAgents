@@ -8,7 +8,7 @@ const { goals } = pathfinderPkg;
 export interface Vec3Input { x: number; y: number; z: number; }
 export interface MoveParams { position?: Vec3Input; entityName?: string; range?: number; timeoutMs?: number; }
 
-export async function moveToward(bot: Bot, target: Vec3, range: number, timeout: number): Promise<void> 
+export async function moveToward(bot: Bot, target: Vec3, range: number, timeout: number): Promise<void>
 {
     let pathfinderError: string | null = null;
 
@@ -29,16 +29,16 @@ export async function moveToward(bot: Bot, target: Vec3, range: number, timeout:
         return;
     }
 
-    const failureReason = pathfinderError 
-        ? `Pathfinder error: ${pathfinderError}` 
+    const failureReason = pathfinderError
+        ? `Pathfinder error: ${pathfinderError}`
         : "Movement plugins unavailable for navigation";
 
     throw new Error(failureReason);
 }
 
-export async function moveWithMovementPlugin(bot: Bot, target: Vec3, range: number, timeout: number): Promise<boolean> 
+export async function moveWithMovementPlugin(bot: Bot, target: Vec3, range: number, timeout: number): Promise<boolean>
 {
-    const movement = (bot as any).movement; 
+    const movement = (bot as any).movement;
     if (!movement) return false;
 
     try {
@@ -57,7 +57,7 @@ export async function moveWithMovementPlugin(bot: Bot, target: Vec3, range: numb
     return false;
 }
 
-export function resolveTargetPosition(bot: Bot, params: MoveParams): Vec3 
+export function resolveTargetPosition(bot: Bot, params: MoveParams): Vec3
 {
     if (params.position) return new Vec3(params.position.x, params.position.y, params.position.z);
     if (params.entityName) {
@@ -71,7 +71,7 @@ export function resolveTargetPosition(bot: Bot, params: MoveParams): Vec3
     throw new Error("Unable to resolve target position");
 }
 
-export function findNearestEntity(bot: Bot, predicate: (entity: Entity) => boolean, maxDistance: number): Entity | null 
+export function findNearestEntity(bot: Bot, predicate: (entity: Entity) => boolean, maxDistance: number): Entity | null
 {
     let best: Entity | null = null;
     let bestDist = Infinity;
@@ -83,28 +83,28 @@ export function findNearestEntity(bot: Bot, predicate: (entity: Entity) => boole
     return best;
 }
 
-export function isSafeToStand(bot: Bot, pos: Vec3): boolean 
+export function isSafeToStand(bot: Bot, pos: Vec3): boolean
 {
     const block = bot.blockAt(pos);
     const below = bot.blockAt(pos.offset(0, -1, 0));
     const above = bot.blockAt(pos.offset(0, 1, 0));
 
     if (!block || !below || !above) return false;
-    
+
     if (below.boundingBox === "empty" || below.name === "lava") return false;
-    
+
     if (block.boundingBox !== "empty") return false;
     if (above.boundingBox !== "empty") return false;
-    
+
     return true;
 }
 
-export function waitForNextTick(bot: Bot): Promise<void> 
+export function waitForNextTick(bot: Bot): Promise<void>
 {
     return new Promise(r => bot.once("physicsTick", r));
 }
 
-export async function raceWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> 
+export async function raceWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T>
 {
     let timeoutId: NodeJS.Timeout | null = null;
     const timeoutPromise = new Promise<never>((_, reject) => {

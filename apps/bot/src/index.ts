@@ -23,7 +23,7 @@ import { DebugTracer } from "./logger/debug-trace.js";
 import { goalNeedsBuildSite, scoutBuildSite } from "./actions/handlers/building.js";
 import { SafetyRails } from "./safety/safety-rails.js";
 import { RecipeLibrary } from "./planner/knowledge.js";
-import { GoalTracker, GoalDefinition } from "./research/goals.js";
+import { GoalTracker, GoalDefinition, GoalFactory } from "./research/goal-index.js";
 import { RoleManager, resolveRole, listRoleNames, type AgentRole } from "./teamwork/roles.js";
 import { StandbyManager } from "./teamwork/standby-manager.js";
 import { ResourceLockManager, resolveLeaderForGoal } from "./teamwork/coordination.js";
@@ -520,22 +520,16 @@ export async function createBot()
                 standbyManager.resetAwaitingTeamPlan();
                 teamPlanWaitCount = 0;
 
-                const def: GoalDefinition = {
-                    name: newGoal,
-                    steps: [],
-                    successSignal: { type: "event", channel: "planner.success" },
-                    failureSignals: [{ type: "event", channel: "planner.fatal_error" }],
-                    timeoutMs: 600000,
-                    metadata: buildGoalMetadata({
-                        role: roleManager.getRole(),
-                        features,
-                        agentId: envAgentId,
-                        agentCount: envAgentCount,
-                        seed: envSeed,
-                        trialId: envTrialId
-                    })
-                };
+                const meta = buildGoalMetadata({
+                    role: roleManager.getRole(),
+                    features,
+                    agentId: envAgentId,
+                    agentCount: envAgentCount,
+                    seed: envSeed,
+                    trialId: envTrialId
+                });
 
+                const def = GoalFactory.createFromDescription(newGoal, meta);
                 const goalId = goalTracker.addGoal(def);
                 sessionLogger.info("goal.added", "Goal added via chat", { goal: newGoal, id: goalId });
 
@@ -685,15 +679,23 @@ export async function createBot()
                 console.log(`[goal] ${event.name} -> ${event.status} (${event.reason})`);
                 sessionLogger.info("goal.update", "Goal status changed", { id: event.id, name: event.name, status: event.status, reason: event.reason, durationMs: event.durationMs });
                 
-                if (event.status === "pass") {
+                if (event.status === "pass")
+                {
                     safeChat(bot, safety, `Goal complete: ${event.name} (${Math.round((event.durationMs ?? 0)/1000)}s)`, "goal.success");
-                } else if (event.status === "fail") {
+                    currentGoal = null;
+                    isPlanning = false;
+                    executor.reset();
+                    standbyManager.enterStandby(bot, "Goal completed successfully");
+                    return;
+                } 
+                else if (event.status === "fail") 
+                {
                     safeChat(bot, safety, `Goal failed: ${event.name} - ${event.reason}`, "goal.fail");
                 }
             }
 
-            const activeGoalObj = (goalTracker as any).goals.values().next().value;
-            currentGoal = (activeGoalObj && activeGoalObj.status === "pending") ? activeGoalObj.definition.name : null;
+            const activeGoalObj = goalTracker.getActiveGoal();
+            currentGoal = activeGoalObj ? activeGoalObj.definition.name : null;
 
             if (!currentGoal && !isPlanning && standbyManager.getState() !== "standby")
             {
@@ -1104,17 +1106,6 @@ export async function createBot()
                                 else
                                 {
                                     safeChat(bot, safety, "I'm done!", "planner.complete");
-                                    const events = goalTracker.notifyEvent("planner.success", {});
-                                    events.forEach(e => sessionLogger.info("goal.update", "Goal succeeded via execution", { ...e }));
-                                }
-                            }
-                            else
-                            {
-                                safeChat(bot, safety, "I'm done!", "planner.complete");
-                                sessionLogger.info("planner.execution.complete", "Plan execution completed", { goal: currentGoal });
-
-                                if (!multiAgentSession)
-                                {
                                     const events = goalTracker.notifyEvent("planner.success", {});
                                     events.forEach(e => sessionLogger.info("goal.update", "Goal succeeded via execution", { ...e }));
                                 }

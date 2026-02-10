@@ -24,6 +24,13 @@ export interface NearbyEntity
     healthApprox?: number;
 }
 
+export interface NearbyResource
+{
+    name: string;
+    position: Vec3Like;
+    distance: number;
+}
+
 export interface InventorySummary
 {
     totalSlots: number;
@@ -107,6 +114,7 @@ export interface PerceptionSnapshot
         entities: NearbyEntity[];
     };
     blocks: LocalBlocks;
+    nearbyResources: NearbyResource[];
     nearbyChests?: ChestMemoryEntry[];
     chatWindow:
     {

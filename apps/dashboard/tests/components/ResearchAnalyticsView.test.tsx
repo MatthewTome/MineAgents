@@ -28,7 +28,16 @@ describe("ResearchAnalyticsView", () => {
       ok: true,
       json: async () => ({
         trials: [],
-        conditions: { baseline: { successRate: 0.5, averageDurationSec: 10, averageActions: 4, averageLlmCalls: 2 } },
+        conditions: { 
+          baseline: { 
+            successRate: 0.5, 
+            averageDurationSec: 10, 
+            averageActions: 4, 
+            averagePlanSteps: 3, 
+            averageActionAttempts: 1, 
+            averageLlmCalls: 2 
+          } 
+        },
         boxPlot: [{ condition: "baseline", min: 1, q1: 2, median: 3, q3: 4, max: 5 }],
         actionUsage: [{ condition: "baseline", actions: 4, llmCalls: 2 }],
         ragEffectiveness: { points: [] }

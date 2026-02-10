@@ -17,7 +17,7 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
     const rawTarget = params.item?.toLowerCase();
     const targetItem = resolveItemName(bot, rawTarget ?? "");
     const timeout = params.timeoutMs ?? 60000;
-    const maxDistance = params.maxDistance ?? 16;
+    const maxDistance = params.maxDistance ?? 32;
 
     if (!targetItem) throw new Error("Gather requires item name");
 
@@ -33,19 +33,21 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
     const chests = listChestMemory().filter((chest) =>
         chest.status === "known" && chest.items && chest.items.some((item) => isItemMatch(item.name, targetItem))
     );
-    console.log(`[gather] Chest memory search found ${chests.length} candidates.`);
+    
     if (chests.length > 0)
     {
-        const chestItem = chests[0].items?.find((item) => isItemMatch(item.name, targetItem));
-        console.log(`[gather] Found ${chestItem?.name ?? targetItem} in known chest at ${chests[0].position.x},${chests[0].position.y},${chests[0].position.z}`);
-        await handleLoot(bot, { params: { position: chests[0].position, item: chestItem?.name ?? targetItem } }, resourceLocks);
+        const chest = chests[0];
+        const chestItem = chest.items?.find((item) => isItemMatch(item.name, targetItem));
+        console.log(`[gather] Found ${chestItem?.name ?? targetItem} in known chest at ${chest.position}`);
+        
+        await handleLoot(bot, { params: { position: chest.position, item: chestItem?.name ?? targetItem } }, resourceLocks);
+        
         const nowHas = bot.inventory.items().find((item) => isItemMatch(item.name, targetItem));
         if (nowHas)
         {
-            console.log(`[gather] Retrieved ${nowHas.name} from chest (satisfies "${targetItem}").`);
+            console.log(`[gather] Retrieved ${nowHas.name} from chest.`);
             return;
         }
-        console.log("[gather] Chest retrieval did not yield the target item.");
     }
 
     try
@@ -54,43 +56,26 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
         const looted = bot.inventory.items().find((item) => isItemMatch(item.name, targetItem));
         if (looted)
         {
-            console.log(`[gather] Looted ${looted.name} from a nearby chest (satisfies "${targetItem}").`);
+            console.log(`[gather] Looted ${looted.name} from a nearby chest.`);
             return;
         }
     }
-    catch (err: any)
-    {
-        console.warn(`[gather] Nearby chest loot attempt failed: ${err?.message ?? String(err)}`);
-    }
+    catch (err: any) { /* Ignore loot failure */ }
 
-    console.log(`[gather] Starting cycle for: ${targetItem}`);
+    console.log(`[gather] Starting active gather cycle for: ${targetItem}`);
 
     const start = Date.now();
-    const failedBlocks = new Set<string>();
-    let consecutiveFailures = 0;
     let attempts = 0;
 
     while (Date.now() - start < timeout)
     {
         attempts++;
-        const elapsed = Date.now() - start;
-        console.log(`[gather] Attempt ${attempts} (elapsed ${elapsed}ms, consecutiveFailures=${consecutiveFailures})`);
-
+        
         const acquired = bot.inventory.items().find((item) => isItemMatch(item.name, targetItem));
         if (acquired)
         {
-            console.log(`[gather] Successfully gathered ${acquired.name} (satisfies "${targetItem}").`);
+            console.log(`[gather] Successfully gathered ${acquired.name}.`);
             return;
-        }
-
-        if (consecutiveFailures >= 3)
-        {
-            console.log("[gather] Relocating to new area...");
-            const escape = bot.entity.position.offset((Math.random() - 0.5) * 30, 0, (Math.random() - 0.5) * 30);
-            console.log(`[gather] Escape target: ${escape}`);
-            await moveToward(bot, escape, 2, 8000).catch(() => {});
-            consecutiveFailures = 0;
-            continue;
         }
 
         const dropped = findNearestEntity(bot, (entity) =>
@@ -99,95 +84,90 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
             const droppedItem = (entity as any).getDroppedItem?.() as Item | undefined;
             if (!droppedItem?.name) return false;
             return isItemMatch(droppedItem.name, targetItem);
-        }, 32);
+        }, maxDistance);
 
         if (dropped)
         {
             const droppedItem = (dropped as any).getDroppedItem?.();
-            console.log(`[gather] Found dropped ${droppedItem?.name ?? "item"} (satisfies "${targetItem}").`);
+            console.log(`[gather] Found dropped ${droppedItem?.name ?? "item"} at ${dropped.position.floored()}. Collecting...`);
             await moveToward(bot, dropped.position, 1.0, 15000);
-            return;
+            continue; 
         }
-        console.log("[gather] No matching dropped items nearby.");
 
-        const blockName = resolveItemToBlock(targetItem);
+        const blockName = resolveItemToBlock(bot, targetItem);
+        
         if (blockName)
         {
             const blockId = bot.registry.blocksByName[blockName]?.id;
-            if (!blockId)
+            
+            if (blockId !== undefined)
             {
-                console.warn(`[gather] No block id found for "${blockName}".`);
-                consecutiveFailures++;
-                continue;
-            }
+                const foundPositions = bot.findBlocks({
+                    matching: blockId,
+                    maxDistance: maxDistance,
+                    count: 1
+                });
 
-            console.log(`[gather] Block search for "${targetItem}" resolved to "${blockName}".`);
-
-            const foundPositions = bot.findBlocks({
-                matching: blockId,
-                maxDistance: 64,
-                count: 20
-            });
-            console.log(`[gather] Block search returned ${foundPositions.length} candidates.`);
-
-            let block: Block | null = null;
-            for (const pos of foundPositions)
-            {
-                if (!failedBlocks.has(pos.toString()))
+                if (foundPositions.length > 0)
                 {
-                    const candidate = bot.blockAt(pos);
-                    if (candidate && bot.canDigBlock(candidate))
+                    const pos = foundPositions[0];
+                    const block = bot.blockAt(pos);
+                    
+                    if (block && bot.canDigBlock(block))
                     {
-                        block = candidate;
-                        break;
+                        console.log(`[gather] Mining ${block.name} at ${block.position}...`);
+                        try
+                        {
+                            await collectBlocks(bot, [block]);
+                            await waitForNextTick(bot);
+                            continue;
+                        }
+                        catch (err: any)
+                        {
+                            console.warn(`[gather] Mining failed: ${err.message}`);
+                        }
                     }
-                }
-            }
-
-            if (block)
-            {
-                console.log(`[gather] Mining ${block.name} at ${block.position}...`);
-
-                try
-                {
-                    await collectBlocks(bot, [block]);
-                    consecutiveFailures = 0;
-                    await waitForNextTick(bot);
-                    continue;
-                }
-                catch (err: any)
-                {
-                    console.warn(`[gather] Mine failed: ${err.message}`);
-                    if (block.position) failedBlocks.add(block.position.toString());
-                    bot.pathfinder?.stop();
-                    consecutiveFailures++;
-                    continue;
+                    else
+                    {
+                        if (attempts % 10 === 0) {
+                            console.log(`[gather] Found ${blockName} at ${pos} but cannot dig (canDigBlock=${block ? bot.canDigBlock(block) : "null"}).`);
+                        }
+                    }
                 }
             }
             else
             {
-                console.log("[gather] No reachable blocks matched the target.");
+                 if (attempts % 10 === 0) console.warn(`[gather] Block "${blockName}" resolved from "${targetItem}" not found in registry.`);
             }
         }
 
         const raw = resolveProductToRaw(targetItem);
         if (raw)
         {
-            console.log(`[gather] Producing ${targetItem} from ${raw}...`);
-            await handleGather(bot, { params: { item: raw, timeoutMs: timeout / 2 } }, resourceLocks);
-            await craftFromInventory(bot, { recipe: targetItem }, resourceLocks);
-            return;
+            try 
+            {
+                const remaining = timeout - (Date.now() - start);
+                if (remaining > 5000) 
+                {
+                    console.log(`[gather] Crafting ${targetItem} from ${raw}...`);
+                    await handleGather(bot, { params: { item: raw, timeoutMs: remaining / 2, maxDistance } }, resourceLocks);
+                    await craftFromInventory(bot, { recipe: targetItem }, resourceLocks);
+                    
+                    const crafted = bot.inventory.items().find((item) => isItemMatch(item.name, targetItem));
+                    if (crafted) return;
+                }
+            }
+            catch (err) { }
         }
 
-        console.log("[gather] Searching...");
-        const explore = bot.entity.position.offset((Math.random() - 0.5) * 20, 0, (Math.random() - 0.5) * 20);
-        console.log(`[gather] Exploring position: ${explore}`);
-        await moveToward(bot, explore, 2, 15000).catch(() => {});
-        consecutiveFailures++;
-        await waitForNextTick(bot);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        if (attempts % 5 === 0) {
+            console.log(`[gather] Scanning... (Attempt ${attempts})`);
+        }
     }
-    console.warn(`[gather] Timeout after ${Date.now() - start}ms trying to gather "${targetItem}".`);
-    throw new Error(`Gather ${targetItem} failed.`);
+
+    throw new Error(`Gather ${targetItem} failed: Timeout or not found.`);
 }
 
 export async function handlePickup(bot: Bot, step: { params?: Record<string, unknown> }): Promise<void>

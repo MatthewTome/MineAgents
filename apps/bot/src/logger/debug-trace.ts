@@ -19,7 +19,7 @@ function safeSummary(value: unknown): string
 
     if (typeof value === "string")
     {
-        return value.length > 200 ? `${value.slice(0, 200)}...` : value;
+        return value.length > 100 ? `${value.slice(0, 100)}...` : value;
     }
 
     if (typeof value === "number" || typeof value === "boolean")

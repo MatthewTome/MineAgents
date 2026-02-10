@@ -1,0 +1,21 @@
+{
+  "name": "Mine Iron",
+  "goal": "Obtain raw iron for for tools.",
+  "tags": ["mining", "iron", "ore", "smelting", "raw iron", "iron_ore", "raw_iron", "smelt", "iron tools pipeline"],
+  "prerequisites": ["Have stone_pickaxe or better equipped"],
+  "completion_checks": ["Have at least '9 raw_iron' in inventory"],
+  "steps": [
+    {
+      "title": "Mine Iron Ore",
+      "action": "mine",
+      "details": "Find and mine at least '9 iron_ore' blocks (they drop raw_iron). (Recommended for pipeline: 9 raw iron).",
+      "checks": ["Have at least '9 raw_iron' in inventory"]
+    },
+    {
+      "title": "Verify Coal",
+      "action": "perceive",
+      "details": "Check inventory to confirm you have at least '9 raw_iron'.",
+      "checks": ["Inventory check passed"]
+    }
+  ]
+}

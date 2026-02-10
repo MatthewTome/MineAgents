@@ -146,6 +146,28 @@ main {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
+.metrics-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.metrics-table th,
+.metrics-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid #1e2a42;
+}
+
+.metrics-table thead th {
+  color: #9fb0c7;
+  font-weight: 600;
+}
+
+.metrics-table tbody tr:nth-child(even) {
+  background: #111a2b;
+}
+
 .intent-feed {
   max-height: 300px;
   overflow: auto;

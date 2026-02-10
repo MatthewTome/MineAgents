@@ -15,18 +15,22 @@ export async function collectBlocks(bot: Bot, blocks: Block[]): Promise<boolean>
 
     if (blocks.length === 0) return false;
 
-    const targetBlock = blocks[0];
-    const targetPos = targetBlock.position.clone();
-    const targetType = targetBlock.type;
+    const targets = blocks.map((block) => ({
+        position: block.position.clone(),
+        type: block.type
+    }));
 
     try
     {
-        await raceWithTimeout(collection.collect(blocks), 20000);
+        await raceWithTimeout(collection.collect(blocks), 1000000);
 
-        const blockAfter = bot.blockAt(targetPos);
-        if (blockAfter && blockAfter.type === targetType)
+        for (const target of targets)
         {
-            throw new Error(`Mining verification failed: Block at ${targetPos} was not removed.`);
+            const blockAfter = bot.blockAt(target.position);
+            if (blockAfter && blockAfter.type === target.type)
+            {
+                throw new Error(`Mining verification failed: Block at ${target.position} was not removed.`);
+            }
         }
 
         return true;
@@ -39,12 +43,23 @@ export async function collectBlocks(bot: Bot, blocks: Block[]): Promise<boolean>
     }
 }
 
-export function findBlockTarget(bot: Bot, params: MineParams, maxDistance: number): Block | null
+export function findBlockTargets(bot: Bot, params: MineParams, maxDistance: number, count = 1): Block[]
 {
     const name = params.block?.toLowerCase();
-    if (!name) return null;
-    
-    const blockName = resolveItemToBlock(name) ?? resolveItemName(bot, name);
+    if (!name) return [];
+
+    const blockName = resolveItemToBlock(bot, name) ?? resolveItemName(bot, name);
+    if (!blockName) return [];
+
+    const targets: Block[] = [];
+    const seen = new Set<string>();
+    const addTarget = (block: Block) =>
+    {
+        const key = `${block.position.x},${block.position.y},${block.position.z}`;
+        if (seen.has(key)) return;
+        targets.push(block);
+        seen.add(key);
+    };
 
     if (params.position)
     {
@@ -53,39 +68,101 @@ export function findBlockTarget(bot: Bot, params: MineParams, maxDistance: numbe
         
         if (blockAtPos && blockAtPos.name === blockName)
         {
-            return blockAtPos;
+            addTarget(blockAtPos);
         }
     }
 
-    return bot.findBlock({ matching: (block) => block.name === blockName, maxDistance });
+    const desiredCount = Math.max(1, Math.floor(count));
+    if (targets.length < desiredCount)
+    {
+        const positions = bot.findBlocks({
+            matching: (block) => block.name === blockName,
+            maxDistance,
+            count: desiredCount
+        });
+
+        for (const pos of positions)
+        {
+            const block = bot.blockAt(pos);
+            if (block && block.name === blockName) addTarget(block);
+            if (targets.length >= desiredCount) break;
+        }
+    }
+
+    return targets;
 }
 
-export function resolveItemToBlock(item: string): string | null
+export function findBlockTarget(bot: Bot, params: MineParams, maxDistance: number): Block | null
+{
+    return findBlockTargets(bot, params, maxDistance, 1)[0] ?? null;
+}
+
+export function resolveItemToBlock(bot: Bot, item: string): string | null
 {
     const lower = item.toLowerCase();
+
+    if (bot.registry.blocksByName[lower])
+    {
+        return lower;
+    }
 
     if (lower.includes("cobblestone") || lower === "stone") return "stone";
     if (lower.includes("coal")) return "coal_ore";
     if (lower.includes("iron")) return "iron_ore";
-    if (lower === "log" || lower === "wood") return "oak_log";
-    if (lower.includes("_log")) return lower;
+    if (lower.includes("gold")) return "gold_ore";
+    if (lower.includes("copper")) return "copper_ore";
+    if (lower.includes("diamond")) return "diamond_ore";
+    if (lower.includes("lapis")) return "lapis_ore";
+    if (lower.includes("redstone")) return "redstone_ore";
+
+    if (lower.endsWith("_log"))
+    {
+        if (bot.registry.blocksByName[lower]) return lower;
+        if (bot.registry.blocksByName["log"]) return "log";
+        if (bot.registry.blocksByName["log2"]) return "log2";
+    }
+    
+    if (lower === "log" || lower === "wood")
+    {
+        if (bot.registry.blocksByName["oak_log"]) return "oak_log";
+        if (bot.registry.blocksByName["log"]) return "log";
+    }
 
     return null;
 }
 
 export function resolveProductToRaw(product: string): string | null
 {
-    if (product.includes("planks")) return "oak_log";
-    if (product.includes("stick")) return "oak_planks";
-    if (product.includes("pickaxe")) return "stick";
+    const normalized = product.toLowerCase().trim().replace(/\s+/g, "_");
+
+    if (normalized.includes("plank"))
+    {
+        const woodMatch = normalized.match(/^(.*)_planks?$/);
+        if (woodMatch?.[1])
+        {
+            const wood = woodMatch[1];
+            if (wood === "crimson" || wood === "warped") return `${wood}_stem`;
+            return `${wood}_log`;
+        }
+        return "oak_log";
+    }
+    if (normalized.includes("stick")) return "oak_planks";
+    if (normalized.includes("pickaxe")) return "stick"; 
+    
     return null;
 }
 
 export async function handleMine(bot: Bot, step: { params?: Record<string, unknown> }): Promise<void>
 {
     const params = (step.params ?? {}) as unknown as MineParams;
-    const block = findBlockTarget(bot, params || {}, 32);
-    if (!block) throw new Error("No matching block found");
+    const count = Math.max(1, Math.floor(Number(params.count ?? 1)));
+    const maxDistance = params.maxDistance ?? 32;
+    const blocks = findBlockTargets(bot, params || {}, maxDistance, count);
+    if (blocks.length === 0) throw new Error("No matching block found");
+    if (blocks.length < count)
+    {
+        throw new Error(`Only found ${blocks.length} block(s) to mine, but ${count} required.`);
+    }
 
-    await collectBlocks(bot, [block]);
+    await collectBlocks(bot, blocks);
 }

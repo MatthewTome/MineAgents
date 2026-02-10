@@ -1,0 +1,21 @@
+{
+  "name": "Mine Cobblestone",
+  "goal": "Acquire cobblestone.",
+  "tags": ["mine", "cobblestone", "stone", "crafting ingredient", "building block", "iron tools pipeline"],
+  "prerequisites": ["Have a pickaxe equipped"],
+  "notes": "Use (params.count) to determine what 'X' item count should be. A pickaxe of any kind is required to mine cobblestone.",
+  "steps": [
+    {
+      "title": "Mine Cobblestone",
+      "action": "mine",
+      "details": "Mine 'X' stone blocks using a pickaxe (cobblestone drops from 'stone' or 'cobblestone' blocks. (Recommended for pipeline: 11 cobblestone).",
+      "checks": ["Have 'X' cobblestone in inventory"]
+    },
+    {
+      "title": "Verify Cobblestone",
+      "action": "perceive",
+      "details": "Check inventory to confirm you have at least '11 cobblestone'.",
+      "checks": ["Inventory check passed"]
+    }
+  ]
+}

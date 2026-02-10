@@ -2,14 +2,15 @@ import type { Bot } from "mineflayer";
 import { Vec3 } from "vec3";
 import type { Block } from "prismarine-block";
 import pathfinderPkg from "mineflayer-pathfinder";
-import { waitForNextTick, raceWithTimeout, moveToward, findNearestEntity } from "./movement.js";
+import { waitForNextTick, raceWithTimeout, moveToward, findNearestEntity, MoveParams, handleMove } from "./movement.js";
 import { requireInventoryItem, getReplaceableBlocks, resolveItemName, isItemMatch } from "../action-utils.js";
 
 const { goals } = pathfinderPkg;
 const MOVE_REQUEST_WAIT_MS = 3000;
 const MAX_MOVE_REQUESTS = 2;
 
-export interface BuildParams {
+export interface BuildParams
+{
     structure: 'platform' | 'wall' | 'walls' | 'tower' | 'roof' | 'door_frame' | 'door';
     origin: { x: number, y: number, z: number };
     material?: string;
@@ -19,7 +20,21 @@ export interface BuildParams {
     door?: boolean; 
 }
 
+export interface PlaceParams
+{
+    item: string;
+    position: { x: number, y: number, z: number };
+}
+
 export async function executeBuild(bot: Bot, params: BuildParams): Promise<void> {
+    const isSingleBlockPlacement = 
+        (params.structure === 'platform' && params.width === 1 && params.length === 1) ||
+        (params.width === 1 && params.length === 1 && params.height === 1);
+
+    if (isSingleBlockPlacement) {
+        return handleSingleBlockPlacement(bot, params);
+    }
+
     const material = resolveItemName(bot, params.material ?? "oak_planks");
     const width = params.width ?? 7;
     const length = params.length ?? 7;
@@ -196,6 +211,46 @@ export async function executeBuild(bot: Bot, params: BuildParams): Promise<void>
     }
     
     console.log(`[building] Finished ${params.structure}`);
+}
+
+async function handleSingleBlockPlacement(bot: Bot, params: BuildParams): Promise<void> {
+    console.log("[building] Detected single-block placement (1x1 platform). Switching to smart place mode.");
+
+    let itemName = params.material;
+    
+    const hasPlanks = countInventoryItems(bot, params.material ?? "oak_planks") > 0;
+    
+    if (!hasPlanks) {
+        const utilityBlocks = ["crafting_table", "furnace", "chest"];
+        for (const util of utilityBlocks) {
+            if (countInventoryItems(bot, util) > 0) {
+                console.log(`[building] Implicit override: No planks found, but found ${util}. Using ${util} instead.`);
+                itemName = util;
+                break;
+            }
+        }
+    }
+
+    const material = resolveItemName(bot, itemName ?? "oak_planks");
+    const origin = new Vec3(params.origin.x, params.origin.y, params.origin.z);
+
+    console.log(`[building] Single block placement: ${material} at ${origin}`);
+    
+    await evacuateBuildArea(bot, [origin]);
+    
+    try {
+        const item = requireInventoryItem(bot, material);
+        await bot.equip(item, 'hand');
+    } catch (err) {
+        throw new Error(`Missing item for placement: ${material}`);
+    }
+
+    const success = await placeBlockAt(bot, origin);
+    if (!success) {
+        throw new Error(`Failed to place ${material} at ${origin}`);
+    }
+    
+    console.log(`[building] Successfully placed ${material}`);
 }
 
 async function evacuateBuildArea(bot: Bot, targets: Vec3[]): Promise<void> {
@@ -460,7 +515,8 @@ export async function handleBuild(bot: Bot, step: { params?: Record<string, unkn
     await raceWithTimeout(executeBuild(bot, params), timeout);
 }
 
-export type ScoutedBuildSite = {
+export type ScoutedBuildSite =
+{
     origin: Vec3;
     size: number;
     radius: number;
@@ -469,14 +525,16 @@ export type ScoutedBuildSite = {
     obstructions: number;
 };
 
-type BuildSiteOptions = {
+type BuildSiteOptions =
+{
     size: number;
     maxRadius: number;
     heightTolerance: number;
     minCoverage: number;
 };
 
-const TILE_ENTITY_BLOCKS = [
+const TILE_ENTITY_BLOCKS =
+[
     "chest", "trapped_chest", "ender_chest", "barrel",
     "furnace", "blast_furnace", "smoker",
     "crafting_table", "fletching_table", "cartography_table", "loom",
@@ -494,7 +552,8 @@ const TILE_ENTITY_BLOCKS = [
     "decorated_pot", "suspicious_sand", "suspicious_gravel"
 ];
 
-type SiteEvaluation = {
+type SiteEvaluation =
+{
     site: ScoutedBuildSite;
     score: number;
 } | null;
@@ -691,4 +750,46 @@ export function findReferenceBlock(bot: Bot, target: Vec3): Block | null
         }
     }
     return null;
+}
+
+export async function handlePlace(bot: Bot, step: { params?: Record<string, unknown> }): Promise<void>
+{
+    const params = (step.params ?? {}) as unknown as PlaceParams;
+    
+    if (!params.item || !params.position) {
+        throw new Error("Place action requires 'item' and 'position' parameters.");
+    }
+
+    const targetPos = new Vec3(params.position.x, params.position.y, params.position.z).floored();
+    const material = resolveItemName(bot, params.item);
+
+    console.log(`[place] Attempting to place ${material} at ${targetPos}`);
+
+    await evacuateBuildArea(bot, [targetPos]);
+
+    const count = countInventoryItems(bot, material);
+    if (count === 0) {
+        throw new Error(`Cannot place ${material} - none in inventory.`);
+    }
+
+    try {
+        const item = requireInventoryItem(bot, material);
+        await bot.equip(item, 'hand');
+    } catch (err) {
+        throw new Error(`Failed to equip ${material}: ${err}`);
+    }
+
+    const dist = bot.entity.position.distanceTo(targetPos);
+    if (dist > 4.5) {
+        console.log(`[place] Moving closer to target (current dist: ${dist.toFixed(1)})`);
+        await moveToward(bot, targetPos, 3.5, 10000); 
+    }
+
+    const success = await placeBlockAt(bot, targetPos);
+
+    if (!success) {
+        throw new Error(`Failed to place ${material} at ${targetPos} (check for obstructions or lack of support block).`);
+    }
+
+    console.log(`[place] Successfully placed ${material}.`);
 }
