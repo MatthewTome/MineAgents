@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { GoalTracker, InMemoryGoalDashboard, type GoalDefinition } from "../../src/research/goals.js";
+import { GoalTracker, InMemoryGoalDashboard, type GoalDefinition } from "../../src/research/goal-index.js";
 import type { PerceptionSnapshot } from "../../src/settings/types.js";
 
 const baseSnapshot: PerceptionSnapshot =
@@ -50,6 +50,8 @@ const baseSnapshot: PerceptionSnapshot =
         maxRange: 12,
         entities: []
     },
+    nearbyResources: [],
+    nearbyChests: [],
     blocks:
     {
         solidBelow: true,

@@ -48,7 +48,7 @@ export function findBlockTargets(bot: Bot, params: MineParams, maxDistance: numb
     const name = params.block?.toLowerCase();
     if (!name) return [];
 
-    const blockName = resolveItemToBlock(name) ?? resolveItemName(bot, name);
+    const blockName = resolveItemToBlock(bot, name) ?? resolveItemName(bot, name);
     if (!blockName) return [];
 
     const targets: Block[] = [];
@@ -89,7 +89,7 @@ export function findBlockTargets(bot: Bot, params: MineParams, maxDistance: numb
         }
     }
 
-return targets;
+    return targets;
 }
 
 export function findBlockTarget(bot: Bot, params: MineParams, maxDistance: number): Block | null
@@ -97,15 +97,36 @@ export function findBlockTarget(bot: Bot, params: MineParams, maxDistance: numbe
     return findBlockTargets(bot, params, maxDistance, 1)[0] ?? null;
 }
 
-export function resolveItemToBlock(item: string): string | null
+export function resolveItemToBlock(bot: Bot, item: string): string | null
 {
     const lower = item.toLowerCase();
+
+    if (bot.registry.blocksByName[lower])
+    {
+        return lower;
+    }
 
     if (lower.includes("cobblestone") || lower === "stone") return "stone";
     if (lower.includes("coal")) return "coal_ore";
     if (lower.includes("iron")) return "iron_ore";
-    if (lower === "log" || lower === "wood") return "oak_log";
-    if (lower.includes("_log")) return lower;
+    if (lower.includes("gold")) return "gold_ore";
+    if (lower.includes("copper")) return "copper_ore";
+    if (lower.includes("diamond")) return "diamond_ore";
+    if (lower.includes("lapis")) return "lapis_ore";
+    if (lower.includes("redstone")) return "redstone_ore";
+
+    if (lower.endsWith("_log"))
+    {
+        if (bot.registry.blocksByName[lower]) return lower;
+        if (bot.registry.blocksByName["log"]) return "log";
+        if (bot.registry.blocksByName["log2"]) return "log2";
+    }
+    
+    if (lower === "log" || lower === "wood")
+    {
+        if (bot.registry.blocksByName["oak_log"]) return "oak_log";
+        if (bot.registry.blocksByName["log"]) return "log";
+    }
 
     return null;
 }
@@ -126,7 +147,7 @@ export function resolveProductToRaw(product: string): string | null
         return "oak_log";
     }
     if (normalized.includes("stick")) return "oak_planks";
-    if (normalized.includes("pickaxe")) return "stick";
+    if (normalized.includes("pickaxe")) return "stick"; 
     
     return null;
 }

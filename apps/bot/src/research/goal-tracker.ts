@@ -1,78 +1,13 @@
 import type { PerceptionSnapshot } from "../settings/types.js";
+import { GoalDefinition, GoalStatus, GoalEvent, GoalSignal } from "./goal-types.js";
+import { InMemoryGoalDashboard } from "./goal-dashboard.js";
 
-export type GoalStatus = "pending" | "pass" | "fail";
-
-export interface ResearchCondition
-{
-    role?: string;
-    ragEnabled?: boolean;
-    narrationEnabled?: boolean;
-    safetyEnabled?: boolean;
-    agentId?: number;
-    agentCount?: number;
-    seed?: string;
-    trialId?: string;
-    notes?: string;
-}
-
-export interface GoalMetadata
-{
-    tags?: string[];
-    condition?: ResearchCondition;
-}
-
-export interface GoalDefinition
-{
-    name: string;
-    steps: string[];
-    successSignal: GoalSignal;
-    failureSignals?: GoalSignal[];
-    timeoutMs?: number;
-    metadata?: GoalMetadata;
-}
-
-export type GoalSignal =
-    | { type: "predicate"; test: (snapshot: PerceptionSnapshot) => boolean; description?: string }
-    | { type: "chat"; includes: string | RegExp; description?: string }
-    | { type: "event"; channel: string; match?: (payload: unknown) => boolean; description?: string };
-
-export interface GoalEvent
-{
-    id: string;
-    name: string;
-    status: GoalStatus;
-    ts: number;
-    reason: string;
-    durationMs?: number;
-    metadata?: GoalMetadata;
-}
-
-interface TrackedGoal
+export interface TrackedGoal
 {
     id: string;
     definition: GoalDefinition;
     status: GoalStatus;
     startedAt: number;
-}
-
-export class InMemoryGoalDashboard
-{
-    private readonly events: GoalEvent[] = [];
-
-    record(event: GoalEvent): void
-    {
-        this.events.push(event);
-    }
-
-    getEvents(): GoalEvent[]
-    {
-        return [...this.events];
-    }
-
-    latestFor(goalId: string): GoalEvent | undefined
-    {
-        return [...this.events].reverse().find(e => e.id === goalId);
-    }
 }
 
 export class GoalTracker
@@ -99,6 +34,22 @@ export class GoalTracker
 
         this.goals.set(id, tracked);
         return id;
+    }
+
+    /**
+     * Returns the first goal that is currently pending.
+     * This fixes the issue where completed goals at the start of the map blocked new goals.
+     */
+    getActiveGoal(): TrackedGoal | undefined
+    {
+        for (const goal of this.goals.values())
+        {
+            if (goal.status === "pending")
+            {
+                return goal;
+            }
+        }
+        return undefined;
     }
 
     getDashboard(): InMemoryGoalDashboard

@@ -760,10 +760,12 @@ export async function handlePlace(bot: Bot, step: { params?: Record<string, unkn
         throw new Error("Place action requires 'item' and 'position' parameters.");
     }
 
-    const targetPos = new Vec3(params.position.x, params.position.y, params.position.z);
+    const targetPos = new Vec3(params.position.x, params.position.y, params.position.z).floored();
     const material = resolveItemName(bot, params.item);
 
     console.log(`[place] Attempting to place ${material} at ${targetPos}`);
+
+    await evacuateBuildArea(bot, [targetPos]);
 
     const count = countInventoryItems(bot, material);
     if (count === 0) {

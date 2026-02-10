@@ -120,7 +120,7 @@ describe("actions/handlers/perceiving.ts", () => {
             const promise = handlePerceive(mockBot, { params: { check: "1 oak_log" } });
             const assertion = expect(promise).rejects.toThrow("Perception check failed: Found 0 oak_log, required 1.");
             
-            await vi.advanceTimersByTimeAsync(3500);
+            await vi.advanceTimersByTimeAsync(4500);
             await assertion;
         });
 
@@ -130,7 +130,7 @@ describe("actions/handlers/perceiving.ts", () => {
              const promise = handlePerceive(mockBot, { params: { check: "5 oak_log" } });
              const assertion = expect(promise).rejects.toThrow("Perception check failed: Found 2 oak_log, required 5.");
              
-             await vi.advanceTimersByTimeAsync(3500);
+             await vi.advanceTimersByTimeAsync(4500);
              await assertion;
         });
         

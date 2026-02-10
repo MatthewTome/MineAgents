@@ -90,6 +90,7 @@ const DEFAULTS = {
             "move",
             "perceive",
             "pickup",
+            "place",
             "requestResource",
             "smelt",
         ],

@@ -20,7 +20,27 @@ export async function moveToward(bot: Bot, target: Vec3, range: number, timeout:
         } catch (err) {
             bot.pathfinder.stop();
             pathfinderError = err instanceof Error ? err.message : String(err);
-            console.warn(`[move] Pathfinder failed: ${pathfinderError}. Falling back to movement plugin.`);
+            console.warn(`[move] Pathfinder failed: ${pathfinderError}.`);
+
+            // if (pathfinderError.includes("timeout") || pathfinderError.includes("stopped")) {
+            //     console.log("[move] Possible stuck state detected. Attempting unstuck routine...");
+            //     const recovered = await attemptUnstuck(bot);
+            //     if (recovered) {
+            //         console.log("[move] Unstuck successful. Retrying pathfinding...");
+            //         try {
+            //             const goal = new goals.GoalNear(target.x, target.y, target.z, range);
+            //             await raceWithTimeout(bot.pathfinder.goto(goal), timeout);
+            //             return;
+            //         } catch (retryErr) {
+            //              const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+            //              console.warn(`[move] Retry failed: ${retryMsg}. Falling back to movement plugin.`);
+            //         }
+            //     } else {
+            //         console.log("[move] Unstuck routine failed or no action taken. Falling back to movement plugin.");
+            //     }
+            // } else {
+                console.log("[move] Falling back to movement plugin.");
+            // }
         }
     }
 
@@ -55,6 +75,58 @@ export async function moveWithMovementPlugin(bot: Bot, target: Vec3, range: numb
 
     return false;
 }
+
+// async function attemptUnstuck(bot: Bot): Promise<boolean> {
+//     const pos = bot.entity.position.floored();
+//     const blockAbove = bot.blockAt(pos.offset(0, 2, 0));
+
+//     if (blockAbove && blockAbove.boundingBox !== "empty") {
+//         console.warn("[move] Cannot pillar up: Low ceiling.");
+//         bot.setControlState("jump", true);
+//         await new Promise(r => setTimeout(r, 500));
+//         bot.setControlState("jump", false);
+//         return false;
+//     }
+
+//     const scafoldingItems = ["dirt", "netherrack", "granite", "diorite", "andesite", "sand", "gravel"];
+//     const item = bot.inventory.items().find(i => scafoldingItems.includes(i.name));
+    
+//     if (!item) {
+//         console.warn("[move] Unstuck: No blocks to pillar with.");
+//         bot.setControlState("jump", true);
+//         bot.setControlState("forward", true);
+//         await new Promise(r => setTimeout(r, 500));
+//         bot.clearControlStates();
+//         return false;
+//     }
+
+//     console.log(`[move] Unstuck: Pillaring up with ${item.name}...`);
+    
+//     try {
+//         await bot.equip(item, "hand");
+        
+//         const referenceBlock = bot.blockAt(pos.offset(0, -1, 0));
+//         if (!referenceBlock || referenceBlock.boundingBox === "empty") {
+//             return false;
+//         }
+
+//         await bot.look(bot.entity.yaw, -Math.PI / 2, true);
+        
+//         bot.setControlState("jump", true);
+//         await new Promise(r => setTimeout(r, 200)); 
+        
+//         await bot.placeBlock(referenceBlock, new Vec3(0, 1, 0));
+        
+//         bot.setControlState("jump", false);
+//         await new Promise(r => setTimeout(r, 500));
+        
+//         return true;
+//     } catch (err) {
+//         console.warn(`[move] Unstuck execution failed: ${err instanceof Error ? err.message : String(err)}`);
+//         bot.setControlState("jump", false);
+//         return false;
+//     }
+// }
 
 export function resolveTargetPosition(bot: Bot, params: MoveParams): Vec3 
 {

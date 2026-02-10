@@ -25,7 +25,6 @@ export interface PlanResult
     knowledgeUsed?: string[];
     teamPlan?: unknown;
     claimedStepIds?: string[];
-    goalAchieved?: boolean;
 }
 
 export interface HuggingFacePlannerOptions

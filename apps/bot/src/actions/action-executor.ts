@@ -21,7 +21,7 @@ export interface ActionExecutorOptions
     tracer?: DebugTracer;
 }
 
-export type ActionStatus = "success" | "failed" | "skipped" | "retry" | "started";
+export type ActionStatus = "success" | "failed" | "skipped" | "retry" | "started" | "aborted";
 
 export interface ActionResult
 {
@@ -74,6 +74,7 @@ export class ActionExecutor
     private options: ActionExecutorOptions;
     private safety?: SafetyRails;
     private tracer?: DebugTracer;
+    private aborted = false;
 
     constructor(bot: Bot, handlers?: Record<string, ActionHandler>, options?: Partial<ActionExecutorOptions>)
     {
@@ -95,9 +96,18 @@ export class ActionExecutor
 
     reset(): void
     {
+        this.abort();
         this.executed.clear();
         this.executing.clear();
         this.log = [];
+    }
+
+    abort(): void
+    {
+        this.aborted = true;
+        try {
+            this.bot.pathfinder?.stop();
+        } catch {}
     }
 
     setSafety(safety?: SafetyRails): void
@@ -109,12 +119,22 @@ export class ActionExecutor
     {
         const run = async () =>
         {
+            this.aborted = false; 
             const results: ActionResult[] = [];
 
             for (const step of steps)
             {
+                if (this.aborted)
+                {
+                    const entry = this.logEntry(step, "aborted", 0, "Plan execution aborted externally");
+                    results.push(this.toResult(entry));
+                    break;
+                }
+
                 const result = await this.executeStep(step);
                 results.push(result);
+                
+                if (this.aborted) break;
             }
 
             return results;
@@ -142,6 +162,12 @@ export class ActionExecutor
     { 
         const run = async (): Promise<ActionResult> =>
         {
+            if (this.aborted)
+            {
+                const entry = this.logEntry(step, "aborted", 0, "Plan execution aborted");
+                return this.toResult(entry);
+            }
+
             if (this.executed.has(step.id))
             {
                 const entry = this.logEntry(step, "skipped", 0, "duplicate action id already succeeded");
@@ -184,11 +210,30 @@ export class ActionExecutor
 
             while (attempts < this.options.maxAttempts)
             {
+                if (this.aborted)
+                {
+                    this.executing.delete(guardedStep.id);
+                    return { id: guardedStep.id, action: guardedStep.action, status: "aborted", attempts, reason: "Aborted during retry loop" };
+                }
+
                 attempts++;
 
                 try
                 {
                     await handler(this.bot, guardedStep);
+                    
+                    if (this.aborted)
+                    {
+                        this.executing.delete(guardedStep.id);
+                        return { 
+                            id: guardedStep.id, 
+                            action: guardedStep.action, 
+                            status: "aborted", 
+                            attempts, 
+                            reason: "Aborted immediately after execution" 
+                        };
+                    }
+
                     this.executed.add(guardedStep.id);
                     const entry = this.logEntry(guardedStep, "success", attempts, undefined);
                     this.tracer?.highlight("action.completed", "Action completed", {
@@ -202,6 +247,12 @@ export class ActionExecutor
                 }
                 catch (err: any)
                 {
+                    if (this.aborted)
+                    {
+                         this.executing.delete(guardedStep.id);
+                         return { id: guardedStep.id, action: guardedStep.action, status: "aborted", attempts, reason: "Aborted during execution error" };
+                    }
+
                     lastReason = err?.message ?? String(err);
                     const hasMore = attempts < this.options.maxAttempts;
                     const status: ActionStatus = hasMore ? "retry" : "failed";
@@ -216,10 +267,6 @@ export class ActionExecutor
                             status: "failed",
                             reason: lastReason
                         });
-                    }
-
-                    if (!hasMore)
-                    {
                         this.executing.delete(guardedStep.id);
                         return { id: guardedStep.id, action: guardedStep.action, status: "failed", attempts, reason: lastReason };
                     }

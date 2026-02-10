@@ -29,10 +29,17 @@ function countItems(bot: Bot, name: string): number
 export async function craftFromInventory(bot: Bot, params: CraftParams, resourceLocks?: ResourceLockManager): Promise<void>
 {
     let itemName = params.recipe.toLowerCase();
+
+    if (itemName.startsWith("craft_"))
+    {
+        itemName = itemName.substring(6);
+    }
+
     let count = params.count ?? 1;
     const trimmedRecipe = itemName.trim();
     const leadingCountMatch = trimmedRecipe.match(/^(?:x)?(\d+)\s+(.+)$/);
     const trailingCountMatch = trimmedRecipe.match(/^(.+)\s+x(\d+)$/);
+
     if (params.count === undefined)
     {
         if (leadingCountMatch)
@@ -52,10 +59,12 @@ export async function craftFromInventory(bot: Bot, params: CraftParams, resource
     {
         itemName = `${itemName}s`;
     }
+
     if (itemName.endsWith("sticks"))
     {
         itemName = itemName.replace(/sticks$/, "stick");
     }
+
     if (itemName.endsWith("plank"))
     {
         itemName = `${itemName}s`;

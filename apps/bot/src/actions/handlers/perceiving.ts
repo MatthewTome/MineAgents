@@ -5,14 +5,28 @@ import { resolveItemName } from "../action-utils.js";
 
 export async function handlePerceive(bot: Bot, step: { params?: Record<string, unknown> }): Promise<void>
 {
-    const params = (step.params ?? {}) as unknown as PerceiveParams;
-    const checkQuery = params.check;
-
-    console.log(`[bot] Perceiving: ${checkQuery ?? "surroundings/inventory"}`);
-
-    if (!checkQuery)
+    let params: PerceiveParams;
+    if (Array.isArray(step.params))
     {
+        params = { check: step.params[0] } as unknown as PerceiveParams;
+    }
+    else
+    {
+        params = (step.params ?? {}) as unknown as PerceiveParams;
+    }
+
+    const checkQuery = params.check;
+    const isGeneric = !checkQuery || ["check", "inventory", "items", "surroundings"].includes(checkQuery.toLowerCase());
+
+    console.log(`[perceive] Request: "${checkQuery ?? "generic/inventory"}"`);
+
+    if (isGeneric)
+    {
+        console.log("[perceive] Generic check detected. Waiting for next tick to sync inventory...");
         await waitForNextTick(bot);
+        
+        const totalItems = bot.inventory.items().reduce((acc, i) => acc + i.count, 0);
+        console.log(`[perceive] Sync complete. Total items in inventory: ${totalItems}`);
         return;
     }
 
@@ -20,11 +34,16 @@ export async function handlePerceive(bot: Bot, step: { params?: Record<string, u
 
     if (target)
     {
+        console.log(`[perceive] Verifying goal: Have >= ${target.count} ${target.item}`);
         await verifyInventory(bot, target.item, target.count);
     }
     else
     {
+        console.log(`[perceive] Could not parse specific target from "${checkQuery}". Waiting for next tick to sync.`);
         await waitForNextTick(bot);
+        
+        const totalItems = bot.inventory.items().reduce((acc, i) => acc + i.count, 0);
+        console.log(`[perceive] Sync complete. Total items in inventory: ${totalItems}`);
     }
 }
 
@@ -77,7 +96,7 @@ function isValidItem(bot: Bot, name: string): boolean
 
 async function verifyInventory(bot: Bot, itemName: string, minCount: number): Promise<void>
 {
-    const timeoutMs = 3000; 
+    const timeoutMs = 4000; 
     const intervalMs = 250;
     const start = Date.now();
 
@@ -88,9 +107,15 @@ async function verifyInventory(bot: Bot, itemName: string, minCount: number): Pr
         currentCount = countItem(bot, itemName);
         if (currentCount >= minCount)
         {
+            console.log(`[perceive] Success: Found ${currentCount} ${itemName} (needed ${minCount}).`);
             return;
         }
         
+        if ((Date.now() - start) % 1000 < intervalMs) 
+        {
+            console.log(`[perceive] Waiting for ${itemName}... (Have: ${currentCount}, Need: ${minCount})`);
+        }
+
         await new Promise(resolve => setTimeout(resolve, intervalMs));
     }
 

@@ -130,6 +130,7 @@ export async function main() {
                     "move",
                     "perceive",
                     "pickup",
+                    "place",
                     "requestResource",
                     "smelt",
                 ],
