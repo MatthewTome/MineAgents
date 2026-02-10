@@ -30,10 +30,21 @@ describe("dashboard server helpers", () => {
     expect(readJsonLines(logFile)).toHaveLength(1);
 
     const metrics = computeMetrics([
-      { sessionId: "1", name: "Trial", condition: "baseline", durationSec: 10, success: true }
+      {
+        sessionId: "1",
+        name: "Trial",
+        condition: "baseline",
+        durationSec: 10,
+        success: true,
+        actionCount: 4,
+        actionAttempts: 6,
+        planSteps: 5
+      }
     ] as any);
 
     expect(metrics.conditions.baseline.successRate).toBe(1);
+    expect(metrics.conditions.baseline.averageActionAttempts).toBe(6);
+    expect(metrics.conditions.baseline.averagePlanSteps).toBe(5);
     expect(computeBoxPlot([1, 2, 3]).median).toBe(2);
   });
 });

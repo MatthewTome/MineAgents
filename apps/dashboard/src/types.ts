@@ -35,6 +35,8 @@ export interface TrialSummary {
   role?: string;
   llmCalls?: number;
   actionCount?: number;
+  actionAttempts?: number;
+  planSteps?: number;
   memoryRetrievals?: number;
 }
 
@@ -44,10 +46,12 @@ export interface MetricsResponse {
     successRate: number;
     averageDurationSec: number;
     averageActions: number;
+    averageActionAttempts: number;
+    averagePlanSteps: number;
     averageLlmCalls: number;
   }>;
   boxPlot: Array<{ condition: string; min: number; q1: number; median: number; q3: number; max: number }>;
-  actionUsage: Array<{ condition: string; actions: number; llmCalls: number }>;
+  actionUsage: Array<{ condition: string; actions: number; attempts: number; llmCalls: number }>;
   ragEffectiveness: {
     points: Array<{ retrievals: number; success: number; condition: string }>;
   };
