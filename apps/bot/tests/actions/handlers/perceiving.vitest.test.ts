@@ -1,17 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { handlePerceive } from "../../../src/actions/handlers/perceiving.js";
-import * as movement from "../../../src/actions/handlers/movement.js";
-import * as utils from "../../../src/actions/action-utils.js";
+import { handlePerceive } from "../../../src/actions/handlers/perceiving/perceive.js";
+import * as movement from "../../../src/actions/handlers/moving/move.js";
+import * as utils from "../../../src/actions/utils.js";
 
-vi.mock("../../../src/actions/handlers/movement.js", () => ({
+vi.mock("../../../src/actions/handlers/moving/move.js", () => ({
     waitForNextTick: vi.fn().mockResolvedValue(undefined)
 }));
 
-vi.mock("../../../src/actions/action-utils.js", () => ({
+vi.mock("../../../src/actions/utils.js", () => ({
     resolveItemName: vi.fn((_bot, name) => name)
 }));
 
-describe("actions/handlers/perceiving.ts", () => {
+describe("actions/handlers/perceiving/perceive.ts", () => {
     let mockBot: any;
 
     beforeEach(() => {

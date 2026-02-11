@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Vec3 } from "vec3";
-import { generateDoorFrame, generatePlatform, generateRoof, generateWalls } from "../../../src/actions/handlers/building.js";
+import { generateDoorFrame, generatePlatform, generateRoof, generateWalls } from "../../../src/actions/handlers/building/index.js";
 
 describe("actions/handlers/building.ts", () => {
   it("generates a platform footprint", () => {

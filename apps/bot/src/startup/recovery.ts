@@ -2,9 +2,9 @@ import type { Bot } from "mineflayer";
 import type { PerceptionSnapshot } from "../settings/types.js";
 import type { RecipeLibrary } from "../planner/knowledge.js";
 import type { PlannerWorkerClient } from "../planner/planner-worker-client.js";
-import type { ActionExecutor } from "../actions/action-executor.js";
+import type { ActionExecutor } from "../actions/executor.js";
 import type { SafetyRails } from "../safety/safety-rails.js";
-import type { PlanNarrator } from "../actions/handlers/chat.js";
+import type { PlanNarrator } from "../actions/handlers/chatting/chat.js";
 import type { SessionLogger } from "../logger/session-logger.js";
 import { safeChat } from "./helpers.js";
 

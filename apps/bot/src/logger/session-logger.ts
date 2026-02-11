@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import util from "node:util";
-import type { ActionLogEntry } from "../actions/action-executor.js";
-import type { PlanRequest, PlanResult } from "../planner/planner-types.js";
+import type { ActionLogEntry } from "../actions/executor.js";
+import type { PlanRequest, PlanResult } from "../planner/types.js";
 
 interface BaseEntry
 {

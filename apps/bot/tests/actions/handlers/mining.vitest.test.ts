@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import * as mining from "../../../src/actions/handlers/mining.js";
+import * as mining from "../../../src/actions/handlers/mining/mine.js";
 import { Vec3 } from "vec3";
 
-vi.mock("../../../src/actions/handlers/movement.js", () => ({
-    raceWithTimeout: (promise: Promise<any>) => promise
+vi.mock("../../../src/actions/handlers/moving/move.js", () => ({
+    raceWithTimeout: (promise: Promise<any>) => promise,
+    waitForNextTick: () => Promise.resolve()
 }));
 
 describe("actions/handlers/mining.ts", () => {
@@ -127,7 +128,7 @@ describe("actions/handlers/mining.ts", () => {
         });
     });
     
-describe("findBlockTargets", () => {
+    describe("findBlockTargets", () => {
         it("should return multiple targets when count is requested", () => {
             const secondLog = {
                 position: new Vec3(11, 64, 10),
@@ -150,7 +151,7 @@ describe("findBlockTargets", () => {
         });
     });
 
- describe("resolveProductToRaw", () => {
+    describe("resolveProductToRaw", () => {
         it("should map planks to the appropriate logs", () => {
             expect(mining.resolveProductToRaw("oak_planks")).toBe("oak_log");
             expect(mining.resolveProductToRaw("oak_plank")).toBe("oak_log");

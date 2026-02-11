@@ -1,4 +1,4 @@
-import { GoalEvent } from "./goal-types.js";
+import { GoalEvent } from "./types.js";
 
 export class InMemoryGoalDashboard
 {

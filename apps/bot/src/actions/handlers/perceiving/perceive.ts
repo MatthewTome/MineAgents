@@ -1,7 +1,7 @@
 import type { Bot } from "mineflayer";
-import { waitForNextTick } from "./movement.js";
-import type { PerceiveParams } from "../action-types.js";
-import { resolveItemName } from "../action-utils.js";
+import { waitForNextTick } from "../moving/move.js";
+import type { PerceiveParams } from "../../types.js";
+import { resolveItemName } from "../../utils.js";
 
 export async function handlePerceive(bot: Bot, step: { params?: Record<string, unknown> }): Promise<void>
 {

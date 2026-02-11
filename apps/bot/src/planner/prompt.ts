@@ -1,5 +1,5 @@
-import type { PlanRequest } from "./planner-types.js";
-import type { HuggingFacePlannerOptions } from "./planner-types.js";
+import type { PlanRequest } from "./types.js";
+import type { HuggingFacePlannerOptions } from "./types.js";
 import { SUPPORTED_ACTIONS } from "./supported-actions.js";
 
 export function buildPlannerPrompt(options: HuggingFacePlannerOptions, request: PlanRequest, knowledge: string[] = []): string

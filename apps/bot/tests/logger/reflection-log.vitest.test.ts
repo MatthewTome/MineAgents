@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it, afterEach } from "vitest";
 import { ReflectionLogger } from "../../src/logger/reflection-log.js";
-import type { ActionLogEntry } from "../../src/actions/action-executor.js";
+import type { ActionLogEntry } from "../../src/actions/executor.js";
 
 const TMP_DIR = path.join(process.cwd(), "logs-test");
 

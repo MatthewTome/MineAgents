@@ -1,11 +1,11 @@
 import type { Bot } from "mineflayer";
 import { Vec3 } from "vec3";
-import { moveToward, waitForNextTick } from "./movement.js";
-import { resolveWoodType, isItemMatch } from "../action-utils.js";
-import { buildLockKey, withResourceLock } from "./teamwork.js";
-import { findReferenceBlock } from "./building.js";
-import type { CraftParams } from "../action-types.js";
-import type { ResourceLockManager } from "../../teamwork/coordination.js";
+import { moveToward, waitForNextTick } from "../moving/move.js";
+import { resolveWoodType, isItemMatch } from "../../utils.js";
+import { buildLockKey, withResourceLock } from "../teamwork/teamwork.js";
+import { findReferenceBlock } from "../building/index.js";
+import type { CraftParams } from "../../types.js";
+import type { ResourceLockManager } from "../../../teamwork/coordination.js";
 import {
     buildRecipeFromDefinition,
     hasIngredientsForRecipe,

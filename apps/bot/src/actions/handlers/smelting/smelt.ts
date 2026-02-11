@@ -1,13 +1,13 @@
 import type { Bot } from "mineflayer";
 import { Vec3 } from "vec3";
-import { moveToward, waitForNextTick } from "./movement.js";
-import { resolveItemName } from "../action-utils.js";
-import { buildLockKey, withResourceLock } from "./teamwork.js";
-import { findReferenceBlock } from "./building.js";
-import type { SmeltParams } from "../action-types.js";
-import type { ResourceLockManager } from "../../teamwork/coordination.js";
-import { craftFromInventory } from "./crafting.js";
-import { handleMine } from "./mining.js";
+import { moveToward, waitForNextTick } from "../moving/move.js";
+import { resolveItemName } from "../../utils.js";
+import { buildLockKey, withResourceLock } from "../teamwork/teamwork.js";
+import { findReferenceBlock } from "../building/index.js";
+import type { SmeltParams } from "../../types.js";
+import type { ResourceLockManager } from "../../../teamwork/coordination.js";
+import { craftFromInventory } from "../crafting/craft.js";
+import { handleMine } from "../mining/mine.js";
 
 export async function handleSmelt(bot: Bot, step: { params?: Record<string, unknown> }, resourceLocks?: ResourceLockManager): Promise<void>
 {

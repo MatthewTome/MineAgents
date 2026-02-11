@@ -1,21 +1,27 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import type { Bot } from "mineflayer";
+import { handleGather } from "../../../src/actions/handlers/gathering/gather.js";
+import { handleLoot } from "../../../src/actions/handlers/looting/loot.js";
+import { craftFromInventory } from "../../../src/actions/handlers/crafting/craft.js";
+import { collectBlocks, resolveItemToBlock, resolveProductToRaw } from "../../../src/actions/handlers/mining/mine.js";
+import { moveToward, findNearestEntity, waitForNextTick } from "../../../src/actions/handlers/moving/move.js";
+import { listChestMemory } from "../../../src/perception/chest-memory.js";
 
-vi.mock("../../../src/actions/handlers/looting.js", () => ({
+vi.mock("../../../src/actions/handlers/looting/loot.js", () => ({
     handleLoot: vi.fn()
 }));
 
-vi.mock("../../../src/actions/handlers/crafting.js", () => ({
+vi.mock("../../../src/actions/handlers/crafting/craft.js", () => ({
     craftFromInventory: vi.fn()
 }));
 
-vi.mock("../../../src/actions/handlers/movement.js", () => ({
+vi.mock("../../../src/actions/handlers/moving/move.js", () => ({
     moveToward: vi.fn(),
     findNearestEntity: vi.fn(),
     waitForNextTick: vi.fn()
 }));
 
-vi.mock("../../../src/actions/handlers/mining.js", () => ({
+vi.mock("../../../src/actions/handlers/mining/mine.js", () => ({
     collectBlocks: vi.fn(),
     resolveItemToBlock: vi.fn(),
     resolveProductToRaw: vi.fn()
@@ -24,13 +30,6 @@ vi.mock("../../../src/actions/handlers/mining.js", () => ({
 vi.mock("../../../src/perception/chest-memory.js", () => ({
     listChestMemory: vi.fn()
 }));
-
-import { handleGather } from "../../../src/actions/handlers/gathering.js";
-import { handleLoot } from "../../../src/actions/handlers/looting.js";
-import { craftFromInventory } from "../../../src/actions/handlers/crafting.js";
-import { collectBlocks, resolveItemToBlock, resolveProductToRaw } from "../../../src/actions/handlers/mining.js";
-import { moveToward, findNearestEntity, waitForNextTick } from "../../../src/actions/handlers/movement.js";
-import { listChestMemory } from "../../../src/perception/chest-memory.js";
 
 function makeVec3(x: number, y: number, z: number)
 {

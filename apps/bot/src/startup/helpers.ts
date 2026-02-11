@@ -4,7 +4,7 @@ import readline from "node:readline";
 import { dump as dumpYaml } from "js-yaml";
 import type { Bot } from "mineflayer";
 import type { SafetyRails } from "../safety/safety-rails.js";
-import type { GoalDefinition, ResearchCondition } from "../research/goal-index.js";
+import type { GoalDefinition, ResearchCondition } from "../research/goals/index.js";
 import type { AgentRole } from "../teamwork/roles.js";
 import { type BotConfig, createDefaultBotConfig } from "../settings/config.js";
 

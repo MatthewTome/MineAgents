@@ -1,5 +1,5 @@
-import type { ActionStep } from "../actions/action-executor.js";
-import type { PlanResult } from "./planner-types.js";
+import type { ActionStep } from "../actions/executor.js";
+import type { PlanResult } from "./types.js";
 import { SUPPORTED_ACTIONS } from "./supported-actions.js";
 
 export function extractText(json: unknown): string

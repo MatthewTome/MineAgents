@@ -1,14 +1,23 @@
-import { Bot } from "mineflayer";
-import { Block } from "prismarine-block";
-import { Item } from "prismarine-item";
+import type { Bot } from "mineflayer";
+import type { Block } from "prismarine-block";
+import type { Item } from "prismarine-item";
 
 const ITEM_ALIASES: Record<string, string> = {
     log: "oak_log",
     logs: "oak_log",
     wood: "oak_log",
+    wood_log: "oak_log",
+    wood_logs: "oak_log",
+    wooden_log: "oak_log",
+    wooden_logs: "oak_log",
     plank: "oak_planks",
     planks: "oak_planks",
+    wood_plank: "oak_plank",
+    wood_planks: "oak_plank",
+    wooden_plank: "oak_plank",
+    wooden_planks: "oak_plank",
     stick: "stick",
+    sticks: "stick",
     coal: "coal",
     coal_ore: "coal_ore",
     "coal ore": "coal_ore",
@@ -48,28 +57,44 @@ export function normalizeItemName(name: string): string
 
 export function resolveItemName(bot: Bot, name: string): string
 {
-    const normalized = normalizeItemName(name);
+    let normalized = normalizeItemName(name);
     const alias = ITEM_ALIASES[normalized];
-    const candidate = alias ?? normalized;
-    if (bot.registry.itemsByName[candidate])
-    {
-        return candidate;
+    if (alias) normalized = alias;
+
+    if (bot.registry.itemsByName[normalized]) return normalized;
+    if (bot.registry.blocksByName[normalized]) return normalized;
+
+    if (normalized.endsWith("s")) {
+        const singular = normalized.slice(0, -1);
+        if (bot.registry.itemsByName[singular]) return singular;
     }
-    return candidate;
+
+    if (!normalized.endsWith("s")) {
+        const plural = normalized + "s";
+        if (bot.registry.itemsByName[plural]) return plural;
+    }
+
+    return normalized;
 }
 
 export function isItemMatch(itemName: string, requestedItem: string): boolean
 {
     const item = normalizeItemName(itemName);
     const requested = normalizeItemName(requestedItem);
-    return item === requested;
+    
+    if (item === requested) return true;
+    
+    if (item + "s" === requested) return true;
+    if (requested + "s" === item) return true;
+
+    return false;
 }
 
 export function requireInventoryItem(bot: Bot, name: string): Item
 {
     const target = resolveItemName(bot, name);
     const item = bot.inventory.items().find(i => isItemMatch(i.name, target));
-    if (!item) throw new Error(`Missing item: ${target}`);
+    if (!item) throw new Error(`Missing item: ${target} (resolved from ${name})`);
     return item;
 }
 

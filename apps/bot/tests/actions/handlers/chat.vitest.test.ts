@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import type { Bot } from "mineflayer";
-import { handleChatCommand, PlanNarrator } from "../../../src/actions/handlers/chat.js";
-import type { ActionExecutor } from "../../../src/actions/action-executor.js";
+import { handleChatCommand, PlanNarrator } from "../../../src/actions/handlers/chatting/chat.js";
+import type { ActionExecutor } from "../../../src/actions/executor.js";
 
 function makeBot()
 {

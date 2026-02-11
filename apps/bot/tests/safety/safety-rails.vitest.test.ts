@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import type { ActionStep } from "../../src/actions/action-executor.js";
+import type { ActionStep } from "../../src/actions/executor.js";
 import { SafetyRails, type SafetyRailsConfig } from "../../src/safety/safety-rails.js";
 
 function buildConfig(overrides?: Partial<SafetyRailsConfig>): SafetyRailsConfig

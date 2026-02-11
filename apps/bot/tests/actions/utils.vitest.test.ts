@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isItemMatch, resolveItemName, resolveWoodType } from "../../src/actions/action-utils.js";
+import { isItemMatch, resolveItemName, resolveWoodType } from "../../src/actions/utils.js";
 import { makeMockBot } from "../test-helpers.js";
 
 describe("actions/action-utils.ts", () => {

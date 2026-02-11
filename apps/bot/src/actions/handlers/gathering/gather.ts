@@ -1,15 +1,14 @@
 import type { Bot } from "mineflayer";
 import type { Block } from "prismarine-block";
 import type { Item } from "prismarine-item";
-import { craftFromInventory } from "./crafting.js";
-import { handleLoot } from "./looting.js";
-import type { GatherParams } from "../action-types.js";
-import type { ResourceLockManager } from "../../teamwork/coordination.js";
-import type { PickupParams } from "../action-types.js";
-import { collectBlocks, resolveItemToBlock, resolveProductToRaw } from "./mining.js";
-import { listChestMemory } from "../../perception/chest-memory.js";
-import { moveToward, findNearestEntity, waitForNextTick } from "./movement.js";
-import { resolveItemName, isItemMatch } from "../action-utils.js";
+import { craftFromInventory } from "../crafting/craft.js";
+import { handleLoot } from "../looting/loot.js";
+import type { GatherParams, PickupParams  } from "../../types.js";
+import type { ResourceLockManager } from "../../../teamwork/coordination.js";
+import { collectBlocks, resolveItemToBlock, resolveProductToRaw } from "../mining/mine.js";
+import { listChestMemory } from "../../../perception/chest-memory.js";
+import { moveToward, findNearestEntity, waitForNextTick } from "../moving/move.js";
+import { resolveItemName, isItemMatch } from "../../utils.js";
 
 export async function handleGather(bot: Bot, step: { params?: Record<string, unknown> }, resourceLocks?: ResourceLockManager): Promise<void>
 {

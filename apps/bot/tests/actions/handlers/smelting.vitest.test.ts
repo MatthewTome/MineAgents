@@ -1,32 +1,32 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { handleSmelt } from "../../../src/actions/handlers/smelting.js";
-import { craftFromInventory } from "../../../src/actions/handlers/crafting.js";
-import { handleMine } from "../../../src/actions/handlers/mining.js";
+import { handleSmelt } from "../../../src/actions/handlers/smelting/smelt.js";
+import { craftFromInventory } from "../../../src/actions/handlers/crafting/craft.js";
+import { handleMine } from "../../../src/actions/handlers/mining/mine.js";
 import { Vec3 } from "vec3";
 
-vi.mock("../../../src/actions/handlers/movement.js", () => ({
+vi.mock("../../../src/actions/handlers/moving/move.js", () => ({
     moveToward: vi.fn().mockResolvedValue(undefined),
     waitForNextTick: vi.fn().mockResolvedValue(undefined)
 }));
 
-vi.mock("../../../src/actions/handlers/crafting.js", () => ({
+vi.mock("../../../src/actions/handlers/crafting/craft.js", () => ({
     craftFromInventory: vi.fn().mockResolvedValue(undefined)
 }));
 
-vi.mock("../../../src/actions/handlers/mining.js", () => ({
+vi.mock("../../../src/actions/handlers/mining/mine.js", () => ({
     handleMine: vi.fn().mockResolvedValue(undefined)
 }));
 
-vi.mock("../../../src/actions/handlers/building.js", () => ({
+vi.mock("../../../src/actions/handlers/building/build.js", () => ({
     findReferenceBlock: vi.fn().mockReturnValue({ position: { x: 0, y: -1, z: 0 } })
 }));
 
-vi.mock("../../../src/actions/action-utils.js", () => ({
+vi.mock("../../../src/actions/utils.js", () => ({
     resolveItemName: vi.fn((bot, name) => name),
     requireInventoryItem: vi.fn()
 }));
 
-vi.mock("../../../src/actions/handlers/teamwork.js", () => ({
+vi.mock("../../../src/actions/handlers/teamwork/teamwork.js", () => ({
     buildLockKey: vi.fn(() => "lock"),
     withResourceLock: vi.fn(async (locks, key, fn) => await fn())
 }));

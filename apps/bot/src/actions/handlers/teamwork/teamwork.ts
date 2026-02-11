@@ -1,7 +1,7 @@
 import type { Bot } from "mineflayer";
 import type { Vec3 } from "vec3";
-import type { RequestResourceParams } from "../action-types.js";
-import type { ResourceLockManager } from "../../teamwork/coordination.js";
+import type { RequestResourceParams } from "../../types.js";
+import type { ResourceLockManager } from "../../../teamwork/coordination.js";
 
 export async function handleRequestResource(bot: Bot, step: { params?: Record<string, unknown> }): Promise<void>
 {

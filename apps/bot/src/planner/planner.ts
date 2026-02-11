@@ -1,7 +1,7 @@
 import { RecipeLibrary } from "./knowledge.js";
 import { buildPlannerPrompt } from "./prompt.js";
 import { extractText, parsePlan } from "./parsing.js";
-import type { HuggingFacePlannerOptions, PlanRequest, PlanResult } from "./planner-types.js";
+import type { HuggingFacePlannerOptions, PlanRequest, PlanResult } from "./types.js";
 import type { SessionLogger } from "../logger/session-logger.js";
 import type { DebugTracer } from "../logger/debug-trace.js";
 

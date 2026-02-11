@@ -1,8 +1,8 @@
 import type { Bot } from "mineflayer";
 import { Vec3 } from "vec3";
-import type { DropParams, EquipParams } from "../action-types.js";
-import { findNearestEntity, moveToward, waitForNextTick } from "./movement.js";
-import type { GiveParams } from "../action-types.js";
+import type { DropParams, EquipParams } from "../../types.js";
+import { findNearestEntity, moveToward, waitForNextTick } from "../moving/move.js";
+import type { GiveParams } from "../../types.js";
 
 export async function handleGive(bot: Bot, step: { params?: Record<string, unknown> }): Promise<void>
 {

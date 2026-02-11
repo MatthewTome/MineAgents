@@ -1,9 +1,9 @@
 import type { Bot } from "mineflayer";
 import { Vec3 } from "vec3";
-import type { MineParams } from "../action-types.js";
+import type { MineParams } from "../../types.js";
 import type { Block } from "prismarine-block";
-import { resolveItemName } from "../action-utils.js";
-import { raceWithTimeout } from "./movement.js";
+import { resolveItemName } from "../../utils.js";
+import { raceWithTimeout, waitForNextTick } from "../moving/move.js";
 
 export async function collectBlocks(bot: Bot, blocks: Block[]): Promise<boolean>
 {
@@ -24,12 +24,16 @@ export async function collectBlocks(bot: Bot, blocks: Block[]): Promise<boolean>
     {
         await raceWithTimeout(collection.collect(blocks), 1000000);
 
+        await waitForNextTick(bot);
+
         for (const target of targets)
         {
             const blockAfter = bot.blockAt(target.position);
             if (blockAfter && blockAfter.type === target.type)
             {
-                throw new Error(`Mining verification failed: Block at ${target.position} was not removed.`);
+                if (blockAfter.name !== 'air' && blockAfter.name !== 'void_air' && blockAfter.name !== 'cave_air') {
+                     throw new Error(`Mining verification failed: Block at ${target.position} was not removed.`);
+                }
             }
         }
 

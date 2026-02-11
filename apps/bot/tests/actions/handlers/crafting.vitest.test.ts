@@ -1,18 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { craftFromInventory } from "../../../src/actions/handlers/crafting.js";
+import { craftFromInventory } from "../../../src/actions/handlers/crafting/craft.js";
 import { makeMockBot } from "../../test-helpers.js";
 
-vi.mock("../../../src/actions/handlers/movement.js", () => ({
+vi.mock("../../../src/actions/handlers/moving/move.js", () => ({
     waitForNextTick: vi.fn().mockResolvedValue(undefined),
     moveToward: vi.fn().mockResolvedValue(undefined)
 }));
 
-vi.mock("../../../src/actions/handlers/teamwork.js", () => ({
+vi.mock("../../../src/actions/handlers/teamwork/teamwork.js", () => ({
     buildLockKey: vi.fn().mockReturnValue("lock-key"),
     withResourceLock: vi.fn().mockImplementation((locks, key, action) => action())
 }));
 
-vi.mock("../../../src/actions/handlers/building.js", () => ({
+vi.mock("../../../src/actions/handlers/building/build.js", () => ({
     findReferenceBlock: vi.fn().mockReturnValue({ position: { x: 0, y: 0, z: 0 } })
 }));
 

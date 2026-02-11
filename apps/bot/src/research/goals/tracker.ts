@@ -1,6 +1,6 @@
-import type { PerceptionSnapshot } from "../settings/types.js";
-import { GoalDefinition, GoalStatus, GoalEvent, GoalSignal } from "./goal-types.js";
-import { InMemoryGoalDashboard } from "./goal-dashboard.js";
+import type { PerceptionSnapshot } from "../../settings/types.js";
+import { GoalDefinition, GoalStatus, GoalEvent, GoalSignal } from "./types.js";
+import { InMemoryGoalDashboard } from "./dashboard.js";
 
 export interface TrackedGoal
 {
@@ -36,10 +36,6 @@ export class GoalTracker
         return id;
     }
 
-    /**
-     * Returns the first goal that is currently pending.
-     * This fixes the issue where completed goals at the start of the map blocked new goals.
-     */
     getActiveGoal(): TrackedGoal | undefined
     {
         for (const goal of this.goals.values())

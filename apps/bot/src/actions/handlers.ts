@@ -1,18 +1,17 @@
-import type { ActionHandler } from "./action-executor.js";
+import type { ActionHandler } from "./executor.js";
 import type { DebugTracer } from "../logger/debug-trace.js";
 import { ResourceLockManager } from "../teamwork/coordination.js";
-import { handleMove } from "./handlers/movement.js";
-import { handleMine } from "./handlers/mining.js";
-import { handleGather } from "./handlers/gathering.js";
-import { handleCraft } from "./handlers/crafting.js";
-import { handleSmelt } from "./handlers/smelting.js";
-import { handleBuild, handlePlace } from "./handlers/building.js";
-import { handleLoot } from "./handlers/looting.js";
-import { handlePerceive } from "./handlers/perceiving.js";
-import { handleDrop, handleEquip, handleGive } from "./handlers/inventory-management.js";
-import { handleRequestResource } from "./handlers/teamwork.js";
-import { handlePickup } from "./handlers/gathering.js";
-import { clearInventory } from "./handlers/inventory-management.js";
+import { handleMove } from "./handlers/moving/move.js";
+import { handleMine } from "./handlers/mining/mine.js";
+import { handleCraft } from "./handlers/crafting/craft.js";
+import { handleSmelt } from "./handlers/smelting/smelt.js";
+import { handleBuild } from "./handlers/building/build.js";
+import { handlePlace } from "./handlers/placing/place.js";
+import { handleLoot } from "./handlers/looting/loot.js";
+import { handlePerceive } from "./handlers/perceiving/perceive.js";
+import { handleDrop, handleEquip, handleGive, clearInventory } from "./handlers/inventory-management/inventory-management.js";
+import { handleRequestResource } from "./handlers/teamwork/teamwork.js";
+import { handleGather, handlePickup } from "./handlers/gathering/gather.js";
 
 export { clearInventory };
 

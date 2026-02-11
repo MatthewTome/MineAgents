@@ -1,5 +1,5 @@
 import { Filter } from "bad-words";
-import type { ActionStep } from "../actions/action-executor.js";
+import type { ActionStep } from "../actions/executor.js";
 import type { SessionLogger } from "../logger/session-logger.js";
 import type { DebugTracer } from "../logger/debug-trace.js";
 

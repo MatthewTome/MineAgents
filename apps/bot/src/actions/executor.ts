@@ -115,7 +115,7 @@ export class ActionExecutor
         this.safety = safety;
     }
 
-    async executePlan(steps: ActionStep[]): Promise<ActionResult[]>
+    async executePlan(steps: ActionStep[], interruptCheck?: () => boolean): Promise<ActionResult[]>
     {
         const run = async () =>
         {
@@ -127,6 +127,14 @@ export class ActionExecutor
                 if (this.aborted)
                 {
                     const entry = this.logEntry(step, "aborted", 0, "Plan execution aborted externally");
+                    results.push(this.toResult(entry));
+                    break;
+                }
+
+                if (interruptCheck && interruptCheck())
+                {
+                    this.aborted = true;
+                    const entry = this.logEntry(step, "aborted", 0, "Plan interrupted by goal completion or cancellation");
                     results.push(this.toResult(entry));
                     break;
                 }

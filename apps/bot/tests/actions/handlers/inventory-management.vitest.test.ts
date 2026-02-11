@@ -1,16 +1,15 @@
 import { describe, it, expect, vi } from "vitest";
+import { handleDrop, clearInventory, handleGive } from "../../../src/actions/handlers/inventory-management/inventory-management.js";
+import { findNearestEntity } from "../../../src/actions/handlers/moving/move.js";
+import { makeMockBot } from "../../test-helpers.js";
 
-vi.mock("../../../src/actions/handlers/movement.js", () => ({
+vi.mock("../../../src/actions/handlers/moving/move.js", () => ({
   waitForNextTick: vi.fn().mockResolvedValue(undefined),
   moveToward: vi.fn(),
   findNearestEntity: vi.fn()
 }));
 
-import { handleDrop, clearInventory, handleGive } from "../../../src/actions/handlers/inventory-management.js";
-import { findNearestEntity } from "../../../src/actions/handlers/movement.js";
-import { makeMockBot } from "../../test-helpers.js";
-
-describe("actions/handlers/inventory-management.ts", () => {
+describe("actions/handlers//inventory-management.ts", () => {
   it("drops matching items when requested", async () => {
     const bot = makeMockBot({
       items: [

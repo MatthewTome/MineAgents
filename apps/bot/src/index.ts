@@ -13,17 +13,17 @@ import { loadBotConfig, ConfigError } from "./settings/config.js";
 import { PerceptionCollector } from "./perception/perception.js";
 import { PerceptionSnapshot } from "./settings/types.js";
 import { runSetupWizard } from "./startup/helpers.js";
-import { ActionExecutor } from "./actions/action-executor.js";
-import { createDefaultActionHandlers, clearInventory } from "./actions/action-handlers.js";
-import { wireChatBridge, PlanNarrator } from "./actions/handlers/chat.js";
+import { ActionExecutor } from "./actions/executor.js";
+import { createDefaultActionHandlers, clearInventory } from "./actions/handlers.js";
+import { wireChatBridge, PlanNarrator } from "./actions/handlers/chatting/chat.js";
 import { ReflectionLogger } from "./logger/reflection-log.js";
 import { PlannerWorkerClient } from "./planner/planner-worker-client.js";
 import { SessionLogger } from "./logger/session-logger.js";
 import { DebugTracer } from "./logger/debug-trace.js";
-import { goalNeedsBuildSite, scoutBuildSite } from "./actions/handlers/building.js";
+import { goalNeedsBuildSite, scoutBuildSite } from "./actions/handlers/building/index.js";
 import { SafetyRails } from "./safety/safety-rails.js";
 import { RecipeLibrary } from "./planner/knowledge.js";
-import { GoalTracker, GoalDefinition, GoalFactory } from "./research/goal-index.js";
+import { GoalTracker, GoalDefinition, GoalFactory } from "./research/goals/index.js";
 import { RoleManager, resolveRole, listRoleNames, type AgentRole } from "./teamwork/roles.js";
 import { StandbyManager } from "./teamwork/standby-manager.js";
 import { ResourceLockManager, resolveLeaderForGoal } from "./teamwork/coordination.js";
@@ -734,6 +734,8 @@ export async function createBot()
 
             if (currentGoal && !isPlanning && planner && Date.now() >= nextPlanningAttempt)
             {
+                const contextName = currentGoal;
+
                 if (multiAgentSession && standbyManager.isAwaitingTeamPlan())
                 {
                     const existingPlan = readTeamPlanFile(teamPlanPath);
@@ -1027,8 +1029,19 @@ export async function createBot()
 
                         executor.reset();
 
-                        const results = await executor.executePlan(plan.steps);
+                        const results = await executor.executePlan(plan.steps, () =>
+                        {
+                            const active = goalTracker.getActiveGoal();
+                            if (!active || active.definition.name !== contextName)
+                            {
+                                console.log(`[planner] Interrupting plan execution (Goal changed or completed: ${contextName} -> ${active?.definition.name ?? "null"})`);
+                                return true;
+                            }
+                            return false;
+                        });
+
                         const failed = results.find(r => r.status === "failed");
+                        const aborted = results.find(r => r.status === "aborted");
                         const succeeded = results.filter(r => r.status === "success").map(r => r.id);
                         const failedIds = results.filter(r => r.status === "failed").map(r => r.id);
 
@@ -1082,9 +1095,13 @@ export async function createBot()
                                 }
                             }
                         }
+                        else if (aborted)
+                        {
+                            console.log(`[planner] Plan execution aborted for goal: "${contextName}"`);
+                        }
                         else
                         {
-                            console.log(`[planner] Plan execution completed for goal: "${currentGoal}"`);
+                            console.log(`[planner] Plan execution completed for goal: "${contextName}"`);
 
                             if (roleManager.getRole() === "supervisor" && multiAgentSession)
                             {
@@ -1099,7 +1116,7 @@ export async function createBot()
                                 else if (latestPlan && isTeamPlanComplete(latestPlan))
                                 {
                                     safeChat(bot, safety, "All team tasks complete! Goal achieved.", "planner.complete");
-                                    sessionLogger.info("planner.execution.complete", "Full team plan completed", { goal: currentGoal });
+                                    sessionLogger.info("planner.execution.complete", "Full team plan completed", { goal: contextName });
                                     const events = goalTracker.notifyEvent("planner.success", {});
                                     events.forEach(e => sessionLogger.info("goal.update", "Goal succeeded via full team execution", { ...e }));
                                 }
@@ -1109,6 +1126,11 @@ export async function createBot()
                                     const events = goalTracker.notifyEvent("planner.success", {});
                                     events.forEach(e => sessionLogger.info("goal.update", "Goal succeeded via execution", { ...e }));
                                 }
+                            }
+                            else if (contextName)
+                            {
+                                safeChat(bot, safety, "I'm done with the plan!", "planner.complete");
+                                goalTracker.notifyEvent("planner.success", {});
                             }
                         }
                     }

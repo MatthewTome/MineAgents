@@ -1,17 +1,16 @@
 import { describe, it, expect, vi } from "vitest";
-import { handleLoot } from "../../../src/actions/handlers/looting.js";
+import { handleLoot } from "../../../src/actions/handlers/looting/loot.js";
 import { makeMockBot, makePosition } from "../../test-helpers.js";
+import { recordChestContents } from "../../../src/perception/chest-memory.js";
+import { moveToward } from "../../../src/actions/handlers/moving/move.js";
 
 vi.mock("../../../src/perception/chest-memory.js", () => ({
   recordChestContents: vi.fn()
 }));
 
-vi.mock("../../../src/actions/handlers/movement.js", () => ({
+vi.mock("../../../src/actions/handlers/moving/move.js", () => ({
   moveToward: vi.fn()
 }));
-
-import { recordChestContents } from "../../../src/perception/chest-memory.js";
-import { moveToward } from "../../../src/actions/handlers/movement.js";
 
 describe("actions/handlers/looting.ts", () => {
   it("withdraws target items and records chest contents", async () => {

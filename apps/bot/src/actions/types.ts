@@ -1,4 +1,4 @@
-import type { Vec3Input, MoveParams } from "./handlers/movement.js";
+import type { Vec3Input, MoveParams } from "./handlers/moving/move.js";
 
 export type { Vec3Input, MoveParams };
 

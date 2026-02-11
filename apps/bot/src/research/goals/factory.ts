@@ -1,5 +1,5 @@
-import { GoalDefinition, GoalMetadata } from "./goal-types.js";
-import type { PerceptionSnapshot } from "../settings/types.js";
+import { GoalDefinition, GoalMetadata } from "./types.js";
+import type { PerceptionSnapshot } from "../../settings/types.js";
 
 export class GoalFactory
 {
