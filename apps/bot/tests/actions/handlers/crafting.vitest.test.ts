@@ -1,391 +1,231 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { craftFromInventory } from "../../../src/actions/handlers/crafting/craft.js";
-import { makeMockBot } from "../../test-helpers.js";
+import { CraftingSystem } from "../../../src/actions/handlers/crafting/craft.js";
 
-vi.mock("../../../src/actions/handlers/moving/move.js", () => ({
-    waitForNextTick: vi.fn().mockResolvedValue(undefined),
-    moveToward: vi.fn().mockResolvedValue(undefined)
-}));
+import { Bot } from 'mineflayer';
+import { Recipe } from 'prismarine-recipe';
+import { Item } from 'prismarine-item';
+import { Window } from 'prismarine-windows';
+import { Block } from 'prismarine-block';
 
-vi.mock("../../../src/actions/handlers/teamwork/teamwork.js", () => ({
-    buildLockKey: vi.fn().mockReturnValue("lock-key"),
-    withResourceLock: vi.fn().mockImplementation((locks, key, action) => action())
-}));
+const mockClickWindow = vi.fn();
+const mockOpenBlock = vi.fn();
+const mockCloseWindow = vi.fn();
+const mockTossStack = vi.fn();
+const mockRecipesAll = vi.fn();
 
-vi.mock("../../../src/actions/handlers/building/build.js", () => ({
-    findReferenceBlock: vi.fn().mockReturnValue({ position: { x: 0, y: 0, z: 0 } })
-}));
+const createMockItem = (type: number, count: number, slot: number): Item => ({
+    type,
+    count,
+    metadata: 0,
+    stackSize: 64,
+    slot,
+    name: 'mock_item',
+    displayName: 'Mock Item',
+    durabilityUsed: 0,
+    nbt: null,
+    enchants: [],
+    customName: null,
+    customLore: null,
+    repairCost: 0
+} as unknown as Item);
 
-const ESSENTIAL_ITEMS = [
-    { name: "oak_planks", id: 1, requiresTable: false },
-    { name: "stick", id: 2, requiresTable: false },
-    { name: "crafting_table", id: 3, requiresTable: false },
-    { name: "wooden_pickaxe", id: 4, requiresTable: true },
-    { name: "stone_pickaxe", id: 5, requiresTable: true },
-    { name: "iron_pickaxe", id: 6, requiresTable: true },
-    { name: "iron_axe", id: 7, requiresTable: true },
-    { name: "iron_shovel", id: 8, requiresTable: true },
-    { name: "iron_sword", id: 9, requiresTable: true },
-    { name: "furnace", id: 10, requiresTable: true },
-    { name: "chest", id: 11, requiresTable: true },
-];
+const createMockRecipe = (id: number, count: number, requiresTable: boolean, ingredients?: any[], inShape?: any[], delta?: any[]): Recipe => ({
+    result: { id, count },
+    requiresTable,
+    ingredients,
+    inShape,
+    delta,
+    outShape: undefined,
+    shape: inShape
+} as unknown as Recipe);
 
-const INGREDIENT_REGISTRY = {
-    oak_log: { id: 100, name: "oak_log" },
-    oak_planks: { id: 1, name: "oak_planks" },
-    stick: { id: 2, name: "stick" },
-    crafting_table: { id: 3, name: "crafting_table" },
-    cobblestone: { id: 101, name: "cobblestone" },
-    iron_ingot: { id: 102, name: "iron_ingot" },
-    wooden_pickaxe: { id: 4, name: "wooden_pickaxe" },
-    stone_pickaxe: { id: 5, name: "stone_pickaxe" },
-    iron_pickaxe: { id: 6, name: "iron_pickaxe" },
-    iron_axe: { id: 7, name: "iron_axe" },
-    iron_shovel: { id: 8, name: "iron_shovel" },
-    iron_sword: { id: 9, name: "iron_sword" },
-    furnace: { id: 10, name: "furnace" },
-    chest: { id: 11, name: "chest" },
-};
+describe('CraftingSystem', () => {
+    let bot: Bot;
+    let craftingSystem: CraftingSystem;
+    let inventoryWindow: Window;
 
-function createMockTable() {
-    return {
-        name: "crafting_table",
-        position: { x: 5, y: 64, z: 5 }
-    };
-}
-
-function setupMockCraft(bot: any) {
-    bot.craft = vi.fn().mockImplementation(async (recipe, count, table) => {
-        const resultId = recipe.result.id;
-        const amount = (recipe.result.count || 1) * (count || 1);
-        
-        const items = bot.inventory.items();
-        const existing = items.find((i: any) => i.type === resultId);
-        
-        if (existing) {
-            existing.count += amount;
-        } else {
-            const entry = Object.values(INGREDIENT_REGISTRY).find((v: any) => v.id === resultId);
-            const name = entry ? entry.name : `item_${resultId}`;
-            items.push({ name, count: amount, type: resultId });
-        }
-    });
-}
-
-describe("actions/handlers/crafting.ts", () => {
-    
     beforeEach(() => {
         vi.clearAllMocks();
-    });
 
-    it("skips crafting when inventory already satisfies the request", async () => {
-        const bot = makeMockBot({
-            items: [{ name: "oak_planks", count: 4, type: 1 }],
-            registryItems: INGREDIENT_REGISTRY
-        });
-        setupMockCraft(bot);
-        const recipesFor = vi.fn().mockReturnValue([{ id: 1, requiresTable: false, result: { id: 1, count: 4 } }]);
-        (bot as any).recipesFor = recipesFor;
+        inventoryWindow = {
+            id: 0,
+            type: 'minecraft:inventory',
+            slots: new Array(45).fill(null),
+            inventoryStart: 9,
+            inventoryEnd: 45,
+            selectedItem: null,
+            count: vi.fn(),
+            items: vi.fn(),
+        } as unknown as Window;
 
-        await craftFromInventory(bot as any, { recipe: "oak_planks", count: 2 });
+        bot = {
+            inventory: inventoryWindow,
+            openBlock: mockOpenBlock,
+            closeWindow: mockCloseWindow,
+            clickWindow: mockClickWindow,
+            tossStack: mockTossStack,
+            recipesAll: mockRecipesAll,
+        } as unknown as Bot;
 
-        expect(bot.craft).not.toHaveBeenCalled();
-    });
-
-    it("falls back to material when crafting structure aliases", async () => {
-        const bot = makeMockBot({
-            items: [{ name: "oak_log", count: 2, type: 100 }],
-            registryItems: INGREDIENT_REGISTRY
-        });
-        setupMockCraft(bot);
-        const recipe = { 
-            id: 1, 
-            requiresTable: false, 
-            result: { id: 1, count: 4, metadata: 0 },
-            delta: [] 
+        bot.inventory.items = () => {
+            return inventoryWindow.slots.filter(s => s !== null && s.slot >= inventoryWindow.inventoryStart) as Item[];
         };
-        const recipesFor = vi.fn().mockReturnValue([recipe]);
-        (bot as any).recipesFor = recipesFor;
 
-        await craftFromInventory(bot as any, { recipe: "platform", material: "oak_planks", count: 1 });
-
-        expect(recipesFor).toHaveBeenCalledWith(1, null, 1, null);
-        expect(bot.craft).toHaveBeenCalledWith(recipe, 1, undefined);
+        craftingSystem = new CraftingSystem(bot);
     });
 
-    describe("API recipe lookups for essential items", () => {
-        ESSENTIAL_ITEMS.forEach(({ name, id, requiresTable }) => {
-            it(`finds recipe for ${name} via API`, async () => {
-                const mockTable = createMockTable();
-                const bot = makeMockBot({
-                    items: [],
-                    registryItems: INGREDIENT_REGISTRY
-                });
-                setupMockCraft(bot);
+    describe('recipesFor', () => {
+        it('should return empty list if material requirements are not met', () => {
+            const recipe = createMockRecipe(100, 1, false, undefined, undefined, [
+                { id: 1, count: -1, metadata: 0 }
+            ]);
+            mockRecipesAll.mockReturnValue([recipe]);
 
-                const recipe = { 
-                    id, 
-                    requiresTable, 
-                    delta: [], 
-                    result: { id, count: 1, metadata: 0 } 
-                };
-                const recipesFor = vi.fn().mockImplementation((itemId, metadata, count, table) => {
-                    if (requiresTable && table) return [recipe];
-                    if (!requiresTable && table === null) return [recipe];
-                    return [];
-                });
-                (bot as any).recipesFor = recipesFor;
+            const results = craftingSystem.recipesFor(100, null, 1, null);
+            expect(results).toHaveLength(0);
+        });
 
-                if (requiresTable) {
-                    bot.findBlock = vi.fn().mockReturnValue(mockTable);
+        it('should return recipe if ingredients exist in inventory', () => {
+            const recipe = createMockRecipe(100, 1, false, undefined, undefined, [
+                { id: 1, count: -1, metadata: 0 }
+            ]);
+            mockRecipesAll.mockReturnValue([recipe]);
+
+            inventoryWindow.slots[10] = createMockItem(1, 10, 10);
+
+            const results = craftingSystem.recipesFor(100, null, 1, null);
+            expect(results).toHaveLength(1);
+            expect(results[0]).toBe(recipe);
+        });
+
+        it('should exclude recipes requiring a table if no table block is provided', () => {
+            const recipe = createMockRecipe(100, 1, true);
+            mockRecipesAll.mockReturnValue([recipe]);
+
+            const results = craftingSystem.recipesFor(100, null, 1, null);
+            expect(results).toHaveLength(0);
+        });
+        
+        it('should include recipes requiring a table if table block IS provided', () => {
+            const recipe = createMockRecipe(100, 1, true);
+            mockRecipesAll.mockReturnValue([recipe]);
+
+            const mockTableBlock = { name: 'crafting_table' } as Block;
+            const results = craftingSystem.recipesFor(100, null, 1, mockTableBlock);
+            expect(results).toHaveLength(1);
+        });
+    });
+
+    describe('craft', () => {
+        it('should throw error if recipe requires table but none provided', async () => {
+            const recipe = createMockRecipe(100, 1, true);
+            await expect(craftingSystem.craft(recipe)).rejects.toThrow("Recipe requires craftingTable");
+        });
+
+        it('should craft shapeless recipe successfully in inventory', async () => {
+            const logId = 1;
+            const plankId = 2;
+            const recipe = createMockRecipe(plankId, 4, false, 
+                [{ id: logId, metadata: 0 }],
+                undefined, 
+                [{ id: logId, count: -1, metadata: 0 }]
+            );
+
+            inventoryWindow.slots[10] = createMockItem(logId, 1, 10);
+
+            await craftingSystem.craft(recipe);
+
+            expect(mockClickWindow).toHaveBeenCalledWith(10, 0, 0);
+            expect(mockClickWindow).toHaveBeenCalledWith(4, 1, 0);
+            expect(mockClickWindow).toHaveBeenCalledWith(0, 0, 0);
+        });
+
+        it('should craft shaped recipe successfully with table', async () => {
+            const tableBlock = { name: 'crafting_table' } as Block;
+            
+            const tableWindow = {
+                type: 'minecraft:crafting',
+                slots: new Array(46).fill(null),
+                inventoryStart: 10,
+                inventoryEnd: 46,
+                selectedItem: null,
+            } as unknown as Window;
+            mockOpenBlock.mockResolvedValue(tableWindow);
+
+            const plankId = 2;
+            const stickId = 3;
+            const recipe = createMockRecipe(stickId, 4, true, undefined, [
+                [{ id: plankId }, { id: -1 }],
+                [{ id: plankId }, { id: -1 }]
+            ]);
+
+            tableWindow.slots[10] = createMockItem(plankId, 2, 10);
+
+            mockClickWindow.mockImplementation((slot, button, mode) => {
+                if (slot === 10 && button === 0) {
+                    tableWindow.selectedItem = createMockItem(plankId, 2, -1);
+                    tableWindow.slots[10] = null;
                 }
-
-                await craftFromInventory(bot as any, { recipe: name, count: 1 });
-
-                expect(recipesFor).toHaveBeenCalled();
-                expect(bot.craft).toHaveBeenCalled();
+                if ((slot === 1 || slot === 4) && button === 1) {
+                    if (tableWindow.selectedItem) {
+                        tableWindow.selectedItem.count--;
+                        if (tableWindow.selectedItem.count <= 0) {
+                            tableWindow.selectedItem = null;
+                        }
+                    }
+                }
             });
-        });
-    });
 
-    describe("hardcoded fallback recipes when API returns empty", () => {
-        it("crafts oak_planks using hardcoded fallback with oak_log ingredient", async () => {
-            const bot = makeMockBot({
-                items: [{ name: "oak_log", count: 1, type: 100 }],
-                registryItems: INGREDIENT_REGISTRY
-            });
-            setupMockCraft(bot);
+            await craftingSystem.craft(recipe, 1, tableBlock);
 
-            const recipesFor = vi.fn().mockReturnValue([]);
-            (bot as any).recipesFor = recipesFor;
-            (bot as any).recipesAll = vi.fn().mockReturnValue([]);
-
-            await craftFromInventory(bot as any, { recipe: "oak_planks", count: 1 });
-
-            expect(bot.craft).toHaveBeenCalled();
-            const craftedRecipe = (bot.craft as ReturnType<typeof vi.fn>).mock.calls[0][0];
-            expect(craftedRecipe).toHaveProperty("result");
-            expect(craftedRecipe).toHaveProperty("delta");
-            expect(craftedRecipe.result.id).toBe(1);
-            expect(craftedRecipe.requiresTable).toBe(false);
+            expect(mockOpenBlock).toHaveBeenCalledWith(tableBlock);
+            expect(mockClickWindow).toHaveBeenCalledTimes(5);
+            expect(mockCloseWindow).toHaveBeenCalledWith(tableWindow);
         });
 
-        it("crafts stick using hardcoded fallback with planks ingredient", async () => {
-            const bot = makeMockBot({
-                items: [{ name: "oak_planks", count: 2, type: 1 }],
-                registryItems: INGREDIENT_REGISTRY
-            });
-            setupMockCraft(bot);
-
-            const recipesFor = vi.fn().mockReturnValue([]);
-            (bot as any).recipesFor = recipesFor;
-            (bot as any).recipesAll = vi.fn().mockReturnValue([]);
-
-            await craftFromInventory(bot as any, { recipe: "stick", count: 1 });
-
-            expect(bot.craft).toHaveBeenCalled();
-            const craftedRecipe = (bot.craft as ReturnType<typeof vi.fn>).mock.calls[0][0];
-            expect(craftedRecipe.result.id).toBe(2);
-            expect(craftedRecipe.requiresTable).toBe(false);
+        it('should handle missing ingredients during execution (Race Condition)', async () => {
+            const recipe = createMockRecipe(100, 1, false, undefined, [[{ id: 1 }]]);
+            
+            await expect(craftingSystem.craft(recipe)).rejects.toThrow("Missing ingredient: ID 1");
         });
 
-        it("crafts crafting_table using hardcoded fallback with planks ingredient", async () => {
-            const bot = makeMockBot({
-                items: [{ name: "oak_planks", count: 4, type: 1 }],
-                registryItems: INGREDIENT_REGISTRY
+        it('should toss result if inventory is full after crafting', async () => {
+            const logId = 1;
+            const plankId = 2;
+            const recipe = createMockRecipe(plankId, 4, false, undefined, [[{ id: logId }]]);
+
+            inventoryWindow.slots[10] = createMockItem(logId, 1, 10);
+            
+            for (let i = 9; i < 45; i++) {
+                if (i !== 10) inventoryWindow.slots[i] = createMockItem(999, 64, i);
+            }
+
+            mockClickWindow.mockImplementation((slot, button, mode) => {
+                if (slot === 0) {
+                    inventoryWindow.selectedItem = createMockItem(plankId, 4, -1);
+                }
             });
-            setupMockCraft(bot);
 
-            const recipesFor = vi.fn().mockReturnValue([]);
-            (bot as any).recipesFor = recipesFor;
-            (bot as any).recipesAll = vi.fn().mockReturnValue([]);
+            await craftingSystem.craft(recipe);
 
-            await craftFromInventory(bot as any, { recipe: "crafting_table", count: 1 });
-
-            expect(bot.craft).toHaveBeenCalled();
-            const craftedRecipe = (bot.craft as ReturnType<typeof vi.fn>).mock.calls[0][0];
-            expect(craftedRecipe.result.id).toBe(3);
-            expect(craftedRecipe.requiresTable).toBe(false);
+            expect(mockTossStack).toHaveBeenCalled();
         });
 
-        it("crafts wooden_pickaxe using hardcoded fallback with table", async () => {
-            const mockTable = createMockTable();
-            const bot = makeMockBot({
-                items: [
-                    { name: "oak_planks", count: 3, type: 1 },
-                    { name: "stick", count: 2, type: 2 }
-                ],
-                registryItems: INGREDIENT_REGISTRY
-            });
-            setupMockCraft(bot);
+        it('should put away held item before picking up a different ingredient', async () => {
+            const woodId = 1;
+            const stoneId = 2;
+            const recipe = createMockRecipe(100, 1, false, undefined, [[{ id: woodId }]]);
 
-            const recipesFor = vi.fn().mockReturnValue([]);
-            (bot as any).recipesFor = recipesFor;
-            (bot as any).recipesAll = vi.fn().mockReturnValue([]);
-            bot.findBlock = vi.fn().mockReturnValue(mockTable);
+            inventoryWindow.slots[9] = createMockItem(999, 64, 9);
+            inventoryWindow.slots[10] = createMockItem(woodId, 1, 10);
+            inventoryWindow.slots[11] = null;
 
-            await craftFromInventory(bot as any, { recipe: "wooden_pickaxe", count: 1 });
+            inventoryWindow.selectedItem = createMockItem(stoneId, 1, -1);
 
-            expect(bot.craft).toHaveBeenCalled();
-            const craftedRecipe = (bot.craft as ReturnType<typeof vi.fn>).mock.calls[0][0];
-            expect(craftedRecipe.result.id).toBe(4);
-            expect(craftedRecipe.requiresTable).toBe(true);
-        });
+            await craftingSystem.craft(recipe);
 
-        it("crafts stone_pickaxe using hardcoded fallback with cobblestone and sticks", async () => {
-            const mockTable = createMockTable();
-            const bot = makeMockBot({
-                items: [
-                    { name: "cobblestone", count: 3, type: 101 },
-                    { name: "stick", count: 2, type: 2 }
-                ],
-                registryItems: INGREDIENT_REGISTRY
-            });
-            setupMockCraft(bot);
-
-            const recipesFor = vi.fn().mockReturnValue([]);
-            (bot as any).recipesFor = recipesFor;
-            (bot as any).recipesAll = vi.fn().mockReturnValue([]);
-            bot.findBlock = vi.fn().mockReturnValue(mockTable);
-
-            await craftFromInventory(bot as any, { recipe: "stone_pickaxe", count: 1 });
-
-            expect(bot.craft).toHaveBeenCalled();
-            const craftedRecipe = (bot.craft as ReturnType<typeof vi.fn>).mock.calls[0][0];
-            expect(craftedRecipe.result.id).toBe(5);
-            expect(craftedRecipe.requiresTable).toBe(true);
-        });
-
-        it("crafts iron_pickaxe using hardcoded fallback with iron_ingot and sticks", async () => {
-            const mockTable = createMockTable();
-            const bot = makeMockBot({
-                items: [
-                    { name: "iron_ingot", count: 3, type: 102 },
-                    { name: "stick", count: 2, type: 2 }
-                ],
-                registryItems: INGREDIENT_REGISTRY
-            });
-            setupMockCraft(bot);
-
-            const recipesFor = vi.fn().mockReturnValue([]);
-            (bot as any).recipesFor = recipesFor;
-            (bot as any).recipesAll = vi.fn().mockReturnValue([]);
-            bot.findBlock = vi.fn().mockReturnValue(mockTable);
-
-            await craftFromInventory(bot as any, { recipe: "iron_pickaxe", count: 1 });
-
-            expect(bot.craft).toHaveBeenCalled();
-            const craftedRecipe = (bot.craft as ReturnType<typeof vi.fn>).mock.calls[0][0];
-            expect(craftedRecipe.result.id).toBe(6);
-            expect(craftedRecipe.requiresTable).toBe(true);
-        });
-
-        it("crafts furnace using hardcoded fallback with cobblestone", async () => {
-            const mockTable = createMockTable();
-            const bot = makeMockBot({
-                items: [{ name: "cobblestone", count: 8, type: 101 }],
-                registryItems: INGREDIENT_REGISTRY
-            });
-            setupMockCraft(bot);
-
-            const recipesFor = vi.fn().mockReturnValue([]);
-            (bot as any).recipesFor = recipesFor;
-            (bot as any).recipesAll = vi.fn().mockReturnValue([]);
-            bot.findBlock = vi.fn().mockReturnValue(mockTable);
-
-            await craftFromInventory(bot as any, { recipe: "furnace", count: 1 });
-
-            expect(bot.craft).toHaveBeenCalled();
-            const craftedRecipe = (bot.craft as ReturnType<typeof vi.fn>).mock.calls[0][0];
-            expect(craftedRecipe.result.id).toBe(10);
-            expect(craftedRecipe.requiresTable).toBe(true);
-        });
-
-        it("crafts chest using hardcoded fallback with planks", async () => {
-            const mockTable = createMockTable();
-            const bot = makeMockBot({
-                items: [{ name: "oak_planks", count: 8, type: 1 }],
-                registryItems: INGREDIENT_REGISTRY
-            });
-            setupMockCraft(bot);
-
-            const recipesFor = vi.fn().mockReturnValue([]);
-            (bot as any).recipesFor = recipesFor;
-            (bot as any).recipesAll = vi.fn().mockReturnValue([]);
-            bot.findBlock = vi.fn().mockReturnValue(mockTable);
-
-            await craftFromInventory(bot as any, { recipe: "chest", count: 1 });
-
-            expect(bot.craft).toHaveBeenCalled();
-            const craftedRecipe = (bot.craft as ReturnType<typeof vi.fn>).mock.calls[0][0];
-            expect(craftedRecipe.result.id).toBe(11);
-            expect(craftedRecipe.requiresTable).toBe(true);
-        });
-    });
-
-    describe("error handling", () => {
-        it("throws error for unknown item with no fallback", async () => {
-            const bot = makeMockBot({
-                items: [],
-                registryItems: { ...INGREDIENT_REGISTRY, unknown_item: { id: 999, name: "unknown_item" } }
-            });
-            setupMockCraft(bot);
-
-            const recipesFor = vi.fn().mockReturnValue([]);
-            (bot as any).recipesFor = recipesFor;
-            (bot as any).recipesAll = vi.fn().mockReturnValue([]);
-
-            await expect(craftFromInventory(bot as any, { recipe: "unknown_item", count: 1 }))
-                .rejects.toThrow("No crafting recipe found for unknown_item");
-        });
-
-        it("throws error when crafting table required but not accessible", async () => {
-            const bot = makeMockBot({
-                items: [
-                    { name: "iron_ingot", count: 3, type: 102 },
-                    { name: "stick", count: 2, type: 2 }
-                ],
-                registryItems: INGREDIENT_REGISTRY
-            });
-            setupMockCraft(bot);
-
-            const recipesFor = vi.fn().mockReturnValue([]);
-            (bot as any).recipesFor = recipesFor;
-            (bot as any).recipesAll = vi.fn().mockReturnValue([]);
-            bot.findBlock = vi.fn().mockReturnValue(null);
-
-            await expect(craftFromInventory(bot as any, { recipe: "iron_pickaxe", count: 1 }))
-                .rejects.toThrow("Could not access crafting table");
-        });
-
-        it("throws error when ingredients are missing for fallback recipe", async () => {
-            const bot = makeMockBot({
-                items: [],
-                registryItems: INGREDIENT_REGISTRY
-            });
-            setupMockCraft(bot);
-
-            const recipesFor = vi.fn().mockReturnValue([]);
-            (bot as any).recipesFor = recipesFor;
-            (bot as any).recipesAll = vi.fn().mockReturnValue([]);
-
-            await expect(craftFromInventory(bot as any, { recipe: "oak_planks", count: 1 }))
-                .rejects.toThrow("Insufficient ingredients");
-        });
-
-        it("throws error with specific missing ingredient info", async () => {
-            const bot = makeMockBot({
-                items: [{ name: "oak_planks", count: 1, type: 1 }],
-                registryItems: INGREDIENT_REGISTRY
-            });
-            setupMockCraft(bot);
-
-            const recipesFor = vi.fn().mockReturnValue([]);
-            (bot as any).recipesFor = recipesFor;
-            (bot as any).recipesAll = vi.fn().mockReturnValue([]);
-
-            await expect(craftFromInventory(bot as any, { recipe: "stick", count: 1 }))
-                .rejects.toThrow(/Missing.*oak_planks/);
+            expect(mockClickWindow).toHaveBeenNthCalledWith(1, 11, 0, 0);
+            expect(mockClickWindow).toHaveBeenNthCalledWith(2, 10, 0, 0);
         });
     });
 });

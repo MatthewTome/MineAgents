@@ -25,7 +25,7 @@ This folder contains the bot's action handlers. You can trigger **any action dir
 
 ## Actions you can run
 
-Below is a laymen-friendly guide to each action, along with example chat commands.
+Below is a guide to each action, along with example chat commands.
 
 ### chat
 Send a message as the bot.
@@ -81,7 +81,7 @@ Craft items in the crafting grid or at a crafting table.
 ### smelt
 Smelt items in a furnace.
 ```
-!act smelt {"item":"iron_ore","fuel":"coal","count":1}
+!act smelt {"item":"raw_iron","fuel":"coal","count":9}
 ```
 
 ### build

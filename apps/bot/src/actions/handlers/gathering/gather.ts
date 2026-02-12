@@ -1,7 +1,7 @@
 import type { Bot } from "mineflayer";
 import type { Block } from "prismarine-block";
 import type { Item } from "prismarine-item";
-import { craftFromInventory } from "../crafting/craft.js";
+import { CraftingSystem } from "../crafting/craft.js";
 import { handleLoot } from "../looting/loot.js";
 import type { GatherParams, PickupParams  } from "../../types.js";
 import type { ResourceLockManager } from "../../../teamwork/coordination.js";
@@ -144,7 +144,27 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
                 {
                     console.log(`[gather] Crafting ${targetItem} from ${raw}...`);
                     await handleGather(bot, { params: { item: raw, timeoutMs: remaining / 2, maxDistance } }, resourceLocks);
-                    await craftFromInventory(bot, { recipe: targetItem }, resourceLocks);
+                    
+                    const crafting = new CraftingSystem(bot);
+                    const itemDef = bot.registry.itemsByName[targetItem];
+                    
+                    if (itemDef)
+                    {
+                        const table = bot.findBlock({ matching: (b) => b.name === 'crafting_table', maxDistance: maxDistance });
+                        const recipes = crafting.recipesFor(itemDef.id, null, 1, table || null);
+
+                        if (recipes.length > 0)
+                        {
+                            const recipe = recipes[0];
+                            if (recipe.requiresTable)
+                            {
+                                if (!table) throw new Error("Crafting table required but not found.");
+                                await moveWithMovementPlugin(bot, table.position, 3, 10000);
+                            }
+
+                            await crafting.craft(recipe, 1, table || undefined);
+                        }
+                    }
                     
                     const crafted = bot.inventory.items().find((item) => isItemMatch(item.name, targetItem));
                     if (crafted) return;

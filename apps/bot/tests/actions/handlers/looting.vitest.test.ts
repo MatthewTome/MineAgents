@@ -2,14 +2,14 @@ import { describe, it, expect, vi } from "vitest";
 import { handleLoot } from "../../../src/actions/handlers/looting/loot.js";
 import { makeMockBot, makePosition } from "../../test-helpers.js";
 import { recordChestContents } from "../../../src/perception/chest-memory.js";
-import { moveToward } from "../../../src/actions/handlers/moving/move.js";
+import { moveWithMovementPlugin } from "../../../src/actions/handlers/moving/move.js";
 
 vi.mock("../../../src/perception/chest-memory.js", () => ({
   recordChestContents: vi.fn()
 }));
 
 vi.mock("../../../src/actions/handlers/moving/move.js", () => ({
-  moveToward: vi.fn()
+  moveWithMovementPlugin: vi.fn()
 }));
 
 describe("actions/handlers/looting.ts", () => {
@@ -28,7 +28,7 @@ describe("actions/handlers/looting.ts", () => {
 
     await handleLoot(bot as any, { params: { item: "oak_log", count: 2 } });
 
-    expect(moveToward).toHaveBeenCalledWith(bot, chestPosition, 2.5, 15000);
+    expect(moveWithMovementPlugin).toHaveBeenCalledWith(bot, chestPosition, 2.5, 15000);
     expect(recordChestContents).toHaveBeenCalledWith(chestPosition, [{ name: "oak_log", count: 3 }]);
     expect(chest.withdraw).toHaveBeenCalledWith(1, null, 2);
     expect(chest.close).toHaveBeenCalled();

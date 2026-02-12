@@ -6,7 +6,7 @@ import { buildLockKey, withResourceLock } from "../teamwork/teamwork.js";
 import { findReferenceBlock } from "../building/index.js";
 import type { SmeltParams } from "../../types.js";
 import type { ResourceLockManager } from "../../../teamwork/coordination.js";
-import { craftFromInventory } from "../crafting/craft.js";
+import { CraftingSystem } from "../crafting/craft.js";
 import { handleMine } from "../mining/mine.js";
 
 export async function handleSmelt(bot: Bot, step: { params?: Record<string, unknown> }, resourceLocks?: ResourceLockManager): Promise<void>
@@ -31,9 +31,20 @@ export async function handleSmelt(bot: Bot, step: { params?: Record<string, unkn
         {
             console.log("[smelt] No furnace in inventory. Attempting to craft one.");
             
+            const crafting = new CraftingSystem(bot);
+            const furnaceDef = bot.registry.itemsByName['furnace'];
+            
             try 
             {
-                await craftFromInventory(bot, { recipe: "furnace" }, resourceLocks);
+                const table = bot.findBlock({ matching: (b) => b.name === 'crafting_table', maxDistance: 32 });
+                if (!table) throw new Error("Cannot craft furnace: No crafting table found.");
+                
+                await moveWithMovementPlugin(bot, table.position, 3, 10000);
+                
+                const recipes = crafting.recipesFor(furnaceDef.id, null, 1, table);
+                if (recipes.length === 0) throw new Error("No furnace recipe available.");
+                
+                await crafting.craft(recipes[0], 1, table);
             } 
             catch (err: any) 
             {
@@ -46,7 +57,16 @@ export async function handleSmelt(bot: Bot, step: { params?: Record<string, unkn
                     const needed = 8 - currentCobble;
                     console.log(`[smelt] Need ${needed} more cobblestone. Mining...`);
                     await handleMine(bot, { params: { block: "cobblestone", count: needed, maxDistance: 32 } });
-                    await craftFromInventory(bot, { recipe: "furnace" }, resourceLocks);
+                    
+                    const table = bot.findBlock({ matching: (b) => b.name === 'crafting_table', maxDistance: 32 });
+                    if (!table) throw new Error("Cannot craft furnace after mining: No crafting table found.");
+
+                    await moveWithMovementPlugin(bot, table.position, 3, 10000);
+
+                    const recipes = crafting.recipesFor(furnaceDef.id, null, 1, table);
+                    if (recipes.length === 0) throw new Error("No furnace recipe available after mining.");
+                    
+                    await crafting.craft(recipes[0], 1, table);
                 }
                 else
                 {
@@ -81,38 +101,67 @@ export async function handleSmelt(bot: Bot, step: { params?: Record<string, unkn
         const furnace = await bot.openFurnace(furnaceBlock!);
 
         const fuel = bot.inventory.items().find((item) => item.name === fuelItem);
-        if (!fuel) throw new Error(`No fuel found for smelting (looked for ${fuelItem})`);
-        
-        try
-        {
-            await furnace.putFuel(fuel.type, null, fuel.count);
-        }
-        catch (err)
-        {
-            console.warn(`[smelt] Fuel placement warning: ${err}`);
-        }
-
         const input = bot.inventory.items().find((item) => item.name.includes(rawItem));
-        if (!input) throw new Error(`No input item ${rawItem} found to smelt`);
         
-        try
-        {
-            await furnace.putInput(input.type, null, input.count);
-        }
-        catch (err)
-        {
-             console.warn(`[smelt] Input placement warning: ${err}`);
+        if (!fuel) throw new Error(`No fuel found (${fuelItem})`);
+        if (!input) throw new Error(`No input found (${rawItem})`);
+
+        const amountToSmelt = Math.min(count, input.count);
+        
+        try {
+            await furnace.putFuel(fuel.type, null, fuel.count);
+            await furnace.putInput(input.type, null, amountToSmelt);
+        } catch (err) {
+            furnace.close();
+            throw new Error(`Failed to put items in furnace: ${err}`);
         }
 
-        console.log("[smelt] Cooking... waiting 10s");
-        await new Promise((resolve) => setTimeout(resolve, 10000));
+        console.log(`[smelt] Smelting ${amountToSmelt} ${rawItem}...`);
 
-        try
-        {
-            await furnace.takeOutput();
-        }
-        catch { }
+        await new Promise<void>((resolve, reject) => {
+            
+            const onUpdate = async () => {
+                const inputLeft = furnace.inputItem();
+                const fuelLeft = furnace.fuelItem();
 
+                const output = furnace.outputItem();
+                if (output && output.count > 0) {
+                    try {
+                        await furnace.takeOutput();
+                        console.log(`[smelt] Collected ${output.count} ${output.name}`);
+                    } catch (e) {
+                        console.log("[smelt] Failed to take output (inventory full?)");
+                    }
+                }
+
+                if (!inputLeft) {
+                    cleanup();
+                    resolve();
+                    return;
+                }
+
+                if (!fuelLeft && furnace.fuel === 0 && furnace.progress === 0) {
+                    cleanup();
+                    reject(new Error("Ran out of fuel during smelting"));
+                    return;
+                }
+            };
+
+            const cleanup = () => {
+                furnace.removeListener('update', onUpdate);
+                furnace.removeListener('close', onClose);
+            };
+
+            const onClose = () => {
+                cleanup();
+                resolve();
+            };
+
+            furnace.on('update', onUpdate);
+            furnace.on('close', onClose);
+        });
+
+        console.log("[smelt] Smelting complete.");
         furnace.close();
     });
 }

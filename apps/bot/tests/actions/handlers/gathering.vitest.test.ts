@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import type { Bot } from "mineflayer";
 import { handleGather } from "../../../src/actions/handlers/gathering/gather.js";
 import { handleLoot } from "../../../src/actions/handlers/looting/loot.js";
-import { craftFromInventory } from "../../../src/actions/handlers/crafting/craft.js";
+import { handleCraft } from "../../../src/actions/handlers/crafting/craft.js";
 import { collectBlocks, resolveItemToBlock, resolveProductToRaw } from "../../../src/actions/handlers/mining/mine.js";
 import { moveWithMovementPlugin, findNearestEntity, waitForNextTick } from "../../../src/actions/handlers/moving/move.js";
 import { listChestMemory } from "../../../src/perception/chest-memory.js";
@@ -12,7 +12,7 @@ vi.mock("../../../src/actions/handlers/looting/loot.js", () => ({
 }));
 
 vi.mock("../../../src/actions/handlers/crafting/craft.js", () => ({
-    craftFromInventory: vi.fn()
+    handleCraft: vi.fn()
 }));
 
 vi.mock("../../../src/actions/handlers/moving/move.js", () => ({
@@ -95,7 +95,7 @@ describe("handleGather", () =>
         vi.mocked(findNearestEntity).mockReturnValue(null);
 
         vi.mocked(handleLoot).mockResolvedValue(undefined);
-        vi.mocked(craftFromInventory).mockResolvedValue(undefined);
+        vi.mocked(handleCraft).mockResolvedValue(undefined);
         vi.mocked(moveWithMovementPlugin).mockResolvedValue(undefined);
         vi.mocked(collectBlocks).mockResolvedValue(false);
     });
@@ -175,12 +175,12 @@ describe("handleGather", () =>
             product.includes("planks") ? "oak_log" : null
         );
 
-        vi.mocked(craftFromInventory).mockImplementation(async () => {
+        vi.mocked(handleCraft).mockImplementation(async () => {
             items.push({ name: "oak_planks", count: 4 });
         });
 
         await handleGather(bot, { params: { item: "planks", timeoutMs: 6000 } });
 
-        expect(craftFromInventory).toHaveBeenCalledWith(bot, { recipe: "oak_planks" }, undefined);
+        expect(handleCraft).toHaveBeenCalledWith(bot, { recipe: "oak_planks" }, undefined);
     });
 });

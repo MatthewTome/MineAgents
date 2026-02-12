@@ -1,214 +1,308 @@
-import type { Bot } from "mineflayer";
-import { Vec3 } from "vec3";
-import { moveWithMovementPlugin, waitForNextTick } from "../moving/move.js";
-import { resolveWoodType, isItemMatch } from "../../utils.js";
-import { buildLockKey, withResourceLock } from "../teamwork/teamwork.js";
-import { findReferenceBlock } from "../building/index.js";
-import type { CraftParams } from "../../types.js";
+import { Bot } from 'mineflayer';
+import { Block } from 'prismarine-block';
+import { Item } from 'prismarine-item';
+import { Recipe } from 'prismarine-recipe';
+import { Window } from 'prismarine-windows';
+import { moveWithMovementPlugin } from "../moving/move.js";
+import { resolveItemName } from "../../utils.js";
 import type { ResourceLockManager } from "../../../teamwork/coordination.js";
-import {
-    buildRecipeFromDefinition,
-    hasIngredientsForRecipe,
-    getMissingIngredients,
-    resolveRecipeForItem,
-    type BuiltRecipe
-} from "./recipe-definitions.js";
 
-export async function handleCraft(bot: Bot, step: { params?: Record<string, unknown> }, resourceLocks?: ResourceLockManager): Promise<void>
+export class CraftingSystem
 {
-    const params = (step.params ?? {}) as unknown as CraftParams;
-    await craftFromInventory(bot, params, resourceLocks);
-}
+    private bot: Bot;
+    private windowCraftingTable: Window | undefined;
 
-function countItems(bot: Bot, name: string): number
-{
-    const items = bot.inventory.items().filter(i => isItemMatch(i.name, name));
-    return items.reduce((acc, i) => acc + i.count, 0);
-}
-
-export async function craftFromInventory(bot: Bot, params: CraftParams, resourceLocks?: ResourceLockManager): Promise<void>
-{
-    let itemName = params.recipe.toLowerCase();
-
-    if (itemName.startsWith("craft_"))
+    constructor(bot: Bot)
     {
-        itemName = itemName.substring(6);
+        this.bot = bot;
     }
 
-    let count = params.count ?? 1;
-    const trimmedRecipe = itemName.trim();
-    const leadingCountMatch = trimmedRecipe.match(/^(?:x)?(\d+)\s+(.+)$/);
-    const trailingCountMatch = trimmedRecipe.match(/^(.+)\s+x(\d+)$/);
-
-    if (params.count === undefined)
+    public async craft(recipe: Recipe, count: number = 1, craftingTable?: Block): Promise<void>
     {
-        if (leadingCountMatch)
+        if (recipe.requiresTable && !craftingTable)
         {
-            count = Number.parseInt(leadingCountMatch[1], 10);
-            itemName = leadingCountMatch[2];
+            throw new Error("Recipe requires craftingTable but none provided");
         }
-        else if (trailingCountMatch)
+
+        console.log(`[Intent] Starting crafting sequence: ${recipe.result.count * count}x (Recipe ID: ${recipe.result.id})`);
+
+        try
         {
-            count = Number.parseInt(trailingCountMatch[2], 10);
-            itemName = trailingCountMatch[1];
-        }
-    }
-
-    itemName = itemName.trim().toLowerCase().replace(/\s+/g, "_");
-    if (itemName.endsWith("_plank"))
-    {
-        itemName = `${itemName}s`;
-    }
-
-    if (itemName.endsWith("sticks"))
-    {
-        itemName = itemName.replace(/sticks$/, "stick");
-    }
-
-    if (itemName.endsWith("plank"))
-    {
-        itemName = `${itemName}s`;
-    }
-
-    const structureNames = ["platform", "walls", "roof", "door_frame"];
-    if (structureNames.includes(itemName))
-    {
-        console.warn(`[craft] Recipe '${itemName}' looks like a structure. Attempting to switch to material '${params.material ?? "oak_planks"}'`);
-        itemName = params.material?.toLowerCase() ?? "oak_planks";
-    }
-
-    if (itemName.endsWith("door") && !itemName.includes("_"))
-    {
-        const availableWood = resolveWoodType();
-        itemName = `${availableWood}_door`;
-        console.log(`[craft] Resolved generic 'door' to '${itemName}' based on inventory.`);
-    }
-
-    const existing = bot.inventory.items().find((item) => item.name === itemName);
-    if (existing && existing.count >= count)
-    {
-        console.log(`[craft] Already have ${existing.count} ${itemName}, skipping craft.`);
-        return;
-    }
-
-    let itemType = bot.registry.itemsByName[itemName];
-    if (!itemType && itemName.includes("plank"))
-    {
-        const logItem = bot.inventory.items().find((item) => item.name.endsWith("_log"));
-        const fallbackPlank = logItem ? logItem.name.replace("_log", "_planks") : "oak_planks";
-        itemType = bot.registry.itemsByName[fallbackPlank];
-        if (itemType)
-        {
-            itemName = itemType.name ?? fallbackPlank;
-        }
-    }
-
-    if (!itemType)
-    {
-        throw new Error(`Unknown item name: ${itemName}`);
-    }
-
-    console.log(`[craft] Looking up recipe for ${itemName} (id: ${itemType.id})`);
-
-    let tableBlock = params.craftingTable
-        ? bot.blockAt(new Vec3(params.craftingTable.x, params.craftingTable.y, params.craftingTable.z))
-        : bot.findBlock({ matching: (block) => block.name === "crafting_table", maxDistance: 32 });
-
-    const inventoryRecipes = bot.recipesFor(itemType.id, null, 1, null);
-    const tableRecipes = tableBlock ? bot.recipesFor(itemType.id, null, 1, tableBlock) : [];
-
-    console.log(`[craft] Inventory recipes found: ${inventoryRecipes.length}, Table recipes found: ${tableRecipes.length}`);
-
-    let recipe = inventoryRecipes[0] ?? tableRecipes[0];
-    let fallbackRecipe: BuiltRecipe | null = null;
-
-    if (!recipe)
-    {
-        const fallbackDef = resolveRecipeForItem(itemName, bot);
-        if (fallbackDef)
-        {
-            console.log(`[craft] Using hardcoded fallback recipe for ${itemName}`);
-            fallbackRecipe = buildRecipeFromDefinition(bot, fallbackDef);
-            if (!fallbackRecipe)
+            for (let i = 0; i < count; i++)
             {
-                throw new Error(`Failed to build fallback recipe for ${itemName}`);
-            }
-
-            if (!hasIngredientsForRecipe(bot, fallbackRecipe))
-            {
-                console.log("[craft] Missing ingredients. Waiting 2s for pickup...");
-                await new Promise(resolve => setTimeout(resolve, 2000));
-            }
-
-            if (!hasIngredientsForRecipe(bot, fallbackRecipe))
-            {
-                const missing = getMissingIngredients(bot, fallbackRecipe);
-                const missingStr = missing.map(m => `${m.needed - m.have} ${m.name}`).join(", ");
-                throw new Error(`Insufficient ingredients for ${itemName}. Missing: ${missingStr}`);
+                await this.craftOnce(recipe, craftingTable);
             }
         }
-        else
+        catch (err)
         {
-            const allRecipes = bot.recipesAll ? bot.recipesAll(itemType.id, null, null) : [];
-            console.warn(`[craft] WARNING: No recipes found for ${itemName} (id: ${itemType.id}), recipesAll returned ${allRecipes.length}`);
-            throw new Error(`No crafting recipe found for ${itemName} in Minecraft data.`);
+            console.error(`[Reflect] Crafting failed: ${(err as Error).message}`);
+            throw err;
         }
+        finally
+        {
+            if (this.windowCraftingTable)
+            {
+                this.bot.closeWindow(this.windowCraftingTable);
+                this.windowCraftingTable = undefined;
+                console.log("[Act] Closed crafting window.");
+            }
+        }
+
+        console.log(`[Reflect] Crafting complete.`);
     }
 
-    const craftableRecipe = fallbackRecipe ?? recipe;
-    const productCount = craftableRecipe.result.count;
-    const craftTimes = Math.ceil(count / productCount);
-    
-    console.log(`[craft] Recipe produces ${productCount} ${itemName}. Target ${count}. Crafting ${craftTimes} batches.`);
-
-    const startCount = countItems(bot, itemName);
-
-    if (craftableRecipe.requiresTable)
+    public recipesFor(itemType: number, metadata: number | null, minResultCount: number | null, craftingTable: Block | boolean | null): Recipe[]
     {
-        if (!tableBlock)
+        const results: Recipe[] = [];
+        const recipeList = this.bot.recipesAll(itemType, metadata, craftingTable); 
+
+        for (const recipe of recipeList)
         {
-            const tableItem = bot.inventory.items().find((item) => item.name === "crafting_table");
-            if (tableItem)
+            if (recipe.requiresTable && !craftingTable)
             {
-                const pos = bot.entity.position.offset(1, 0, 0).floored();
-                const ref = findReferenceBlock(bot, pos);
-                if (ref)
+                continue;
+            }
+
+            if (this.requirementsMetForRecipe(recipe, minResultCount))
+            {
+                results.push(recipe);
+            }
+        }
+
+        return results;
+    }
+
+    private requirementsMetForRecipe(recipe: Recipe, minResultCount: number | null): boolean
+    {
+        const craftCount = minResultCount ? Math.ceil(minResultCount / recipe.result.count) : 1;
+
+        if (recipe.delta)
+        {
+            for (const deltaItem of recipe.delta)
+            {
+                const currentCount = this.countInventory(deltaItem.id, deltaItem.metadata);
+                
+                if (currentCount + (deltaItem.count * craftCount) < 0)
                 {
-                    await bot.equip(tableItem, "hand");
-                    await bot.placeBlock(ref, new Vec3(0, 1, 0));
-                    await waitForNextTick(bot);
-                    tableBlock = bot.blockAt(pos);
+                    return false; 
                 }
             }
         }
-
-        if (!tableBlock) throw new Error("Could not access crafting table.");
-
-        const confirmedTable = tableBlock;
-        const lockKey = buildLockKey("crafting_table", confirmedTable.position);
-        await withResourceLock(resourceLocks, lockKey, async () =>
-        {
-            await moveWithMovementPlugin(bot, confirmedTable.position, 3, 15000);
-            await bot.craft(craftableRecipe as any, craftTimes, confirmedTable);
-        });
-    }
-    else
-    {
-        await bot.craft(craftableRecipe as any, craftTimes, undefined);
+        
+        return true; 
     }
 
-    await waitForNextTick(bot);
-    let endCount = countItems(bot, itemName);
-
-    if (endCount <= startCount)
+    private async craftOnce(recipe: Recipe, tableBlock?: Block): Promise<void>
     {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        endCount = countItems(bot, itemName);
-        if (endCount <= startCount)
+        let window: Window = this.bot.inventory;
+
+        if (recipe.requiresTable && tableBlock)
         {
-             throw new Error(`Crafting verification failed: attempted to craft ${itemName}, but inventory count did not increase (held: ${startCount} -> ${endCount}).`);
+            if (!this.windowCraftingTable)
+            {
+                console.log("[Act] Opening Crafting Table...");
+                this.windowCraftingTable = await this.bot.openBlock(tableBlock);
+            }
+            window = this.windowCraftingTable;
+        }
+
+        if (recipe.inShape)
+        {
+            await this.placeShaped(recipe, window);
+        }
+        else if (recipe.ingredients)
+        {
+            await this.placeShapeless(recipe, window);
+        }
+
+        await this.collectResult(window);
+    }
+
+    private async placeShaped(recipe: Recipe, window: Window): Promise<void>
+    {
+        const inShape = recipe.inShape;
+        if (!inShape) return;
+
+        console.log("[Act] Placing shaped ingredients...");
+
+        for (let y = 0; y < inShape.length; y++)
+        {
+            for (let x = 0; x < inShape[y].length; x++)
+            {
+                const ingredient = inShape[y][x];
+                
+                if (ingredient.id === -1) continue;
+
+                const destSlot = this.getGridSlot(x, y, window.type === 'minecraft:crafting');
+
+                await this.placeItemInSlot(window, ingredient.id, ingredient.metadata ?? null, destSlot);
+            }
         }
     }
 
-    console.log(`[craft] Successfully crafted ${count} (approx) ${itemName}. Inventory now has ${endCount}.`);
+    private async placeShapeless(recipe: Recipe, window: Window): Promise<void>
+    {
+        const ingredients = recipe.ingredients;
+        if (!ingredients) return;
+
+        console.log("[Act] Placing shapeless ingredients...");
+
+        const availableSlots = window.type === 'minecraft:crafting' 
+            ? [1, 2, 3, 4, 5, 6, 7, 8, 9] 
+            : [1, 2, 3, 4];
+
+        for (const ingredient of ingredients)
+        {
+            const destSlot = availableSlots.pop();
+            
+            if (destSlot === undefined) 
+            {
+                throw new Error("Not enough crafting slots for shapeless recipe");
+            }
+
+            await this.placeItemInSlot(window, ingredient.id, ingredient.metadata ?? null, destSlot);
+        }
+    }
+
+    private async placeItemInSlot(window: Window, id: number, metadata: number | null, destSlot: number): Promise<void>
+    {
+        const heldItem = window.selectedItem;
+
+        const holdingCorrect = heldItem && heldItem.type === id && (metadata === null || heldItem.metadata === metadata);
+
+        if (!holdingCorrect)
+        {
+            if (heldItem)
+            {
+                await this.putAwayHeldItem(window);
+            }
+
+            const itemInInventory = this.findInventoryItem(window, id, metadata);
+            
+            if (!itemInInventory)
+            {
+                throw new Error(`Missing ingredient: ID ${id}`);
+            }
+
+            await this.bot.clickWindow(itemInInventory.slot, 0, 0);
+        }
+
+        await this.bot.clickWindow(destSlot, 1, 0);
+    }
+
+    private async collectResult(window: Window): Promise<void>
+    {
+        await this.putAwayHeldItem(window);
+
+        console.log("[Act] Collecting crafted result...");
+        await this.bot.clickWindow(0, 0, 0);
+
+        const emptySlotIndex = window.slots.findIndex((s, index) => {
+            if (index < window.inventoryStart) return false;
+            return s === null;
+        });
+        
+        if (emptySlotIndex !== -1)
+        {
+            await this.bot.clickWindow(emptySlotIndex, 0, 0);
+        }
+        else
+        {
+            await this.bot.tossStack(this.bot.inventory.selectedItem!);
+        }
+    }
+
+    private getGridSlot(x: number, y: number, isTable: boolean): number
+    {
+        if (isTable)
+        {
+            return 1 + x + (y * 3);
+        }
+        else
+        {
+            return 1 + x + (y * 2);
+        }
+    }
+    private findInventoryItem(window: Window, id: number, metadata: number | null): Item | undefined
+    {
+        for (let i = window.inventoryStart; i < window.inventoryEnd; i++)
+        {
+            const item = window.slots[i];
+            if (item && item.type === id && (metadata === null || item.metadata === metadata))
+            {
+                return item;
+            }
+        }
+        return undefined;
+    }
+
+    private async putAwayHeldItem(window: Window): Promise<void>
+    {
+        if (!window.selectedItem) return;
+
+        const held = window.selectedItem;
+
+        const destIndex = window.slots.findIndex((s, index) => {
+            if (index < window.inventoryStart || index >= window.inventoryEnd) return false;
+            
+            if (s === null) return true;
+
+            return s.type === held.type && s.count < s.stackSize;
+        });
+
+        if (destIndex !== -1)
+        {
+            await this.bot.clickWindow(destIndex, 0, 0);
+        }
+        else
+        {
+            await this.bot.tossStack(window.selectedItem);
+        }
+    }
+
+    private countInventory(id: number, metadata: number | null): number
+    {
+        return this.bot.inventory.items().filter(item => 
+            item.type === id && (metadata === null || item.metadata === metadata)
+        ).reduce((acc, item) => acc + item.count, 0);
+    }
+}
+
+export async function handleCraft(bot: Bot, step: { params?: Record<string, unknown> }, resourceLocks?: ResourceLockManager): Promise<void>
+{
+    const params = step.params as unknown as { recipe: string; count?: number };
+    const name = params.recipe;
+    const count = params.count ?? 1;
+    
+    if (!name) throw new Error("Crafting requires a recipe name.");
+    
+    const itemName = resolveItemName(bot, name);
+    const itemDef = bot.registry.itemsByName[itemName];
+    
+    if (!itemDef) throw new Error(`Unknown item: ${name} (resolved: ${itemName})`);
+    
+    const system = new CraftingSystem(bot);
+
+    const table = bot.findBlock({ matching: (b) => b.name === 'crafting_table', maxDistance: 32 });
+    
+    const recipes = system.recipesFor(itemDef.id, null, count, table || true);
+
+    if (recipes.length === 0) 
+    {
+        throw new Error(`No recipes found for ${itemName} (insufficient materials or impossible)`);
+    }
+    
+    const recipe = recipes[0];
+    
+    if (recipe.requiresTable) 
+    {
+        if (!table) 
+        {
+             throw new Error(`Recipe for ${itemName} requires a crafting table, but none was found nearby.`);
+        }
+        console.log(`[handleCraft] Moving to crafting table at ${table.position}...`);
+        await moveWithMovementPlugin(bot, table.position, 2, 10000);
+    }
+    
+    await system.craft(recipe, count, table || undefined);
 }

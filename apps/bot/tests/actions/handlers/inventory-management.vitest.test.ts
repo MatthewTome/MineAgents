@@ -9,7 +9,7 @@ vi.mock("../../../src/actions/handlers/moving/move.js", () => ({
   findNearestEntity: vi.fn()
 }));
 
-describe("actions/handlers//inventory-management.ts", () => {
+describe("actions/handlers/inventory-management.ts", () => {
   it("drops matching items when requested", async () => {
     const bot = makeMockBot({
       items: [
