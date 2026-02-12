@@ -12,19 +12,22 @@ export async function handleLoot(bot: Bot, step: { params?: Record<string, unkno
     const maxDistance = params.maxDistance ?? 16;
     const targetItem = params.item?.toLowerCase();
     const targetCount = params.count ?? 0;
-    const chestId = bot.registry?.blocksByName?.chest?.id;
-    if (typeof chestId !== "number")
-    {
-        throw new Error("Chest block not registered for this version.");
+
+    const containerNames = ['chest', 'trapped_chest', 'barrel'];
+    const containerIds = containerNames
+        .map(name => bot.registry.blocksByName[name]?.id)
+        .filter((id): id is number => id !== undefined);
+
+    if (containerIds.length === 0) {
+        throw new Error("No container blocks registered for this version.");
     }
 
     const chestBlock = params.position
         ? bot.blockAt(new Vec3(params.position.x, params.position.y, params.position.z))
-        : bot.findBlock({ matching: chestId, maxDistance });
+        : bot.findBlock({ matching: containerIds, maxDistance });
 
-    if (!chestBlock)
-    {
-        throw new Error("No chest found nearby.");
+    if (!chestBlock) {
+        throw new Error("No chest/container found nearby.");
     }
 
     const lockKey = buildLockKey("chest", chestBlock.position);
@@ -33,13 +36,14 @@ export async function handleLoot(bot: Bot, step: { params?: Record<string, unkno
         await moveWithMovementPlugin(bot, chestBlock.position, 2.5, 15000);
 
         const chest = await bot.openContainer(chestBlock);
-        const items = chest.containerItems().map((item) => ({ name: item.name, count: item.count ?? 0 }));
-        recordChestContents(chestBlock.position, items);
+        const containerItems = chest.items().filter(item => item.slot < chest.inventoryStart);
+        const recordedItems = containerItems.map((item) => ({ name: item.name, count: item.count ?? 0 }));
+        recordChestContents(chestBlock.position, recordedItems);
 
         if (targetItem)
         {
             let remaining = targetCount;
-            const matching = chest.containerItems().filter((item) =>
+            const matching = containerItems.filter((item) =>
                 item.name.toLowerCase().includes(targetItem)
             );
 

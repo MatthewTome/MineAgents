@@ -10,7 +10,6 @@ export const SUPPORTED_ACTIONS: Record<string, string> =
     give: "Give items to a teammate. params: { target: string, item: string, count?: number, method?: 'drop'|'chest' }",
     loot: "Open a nearby chest and inspect/withdraw contents. params: { position?:{x,y,z}, maxDistance?: number, item?: string, count?: number }",
     mine: "Break block. params: { block?:string, position?:{x,y,z}, count?: number }",
-    move: "Move. params: { position:{x,y,z} } or { entityName?: string, range?: number }",
     perceive: "Check inventory or surroundings. params: { check: string }",
     pickup: "Pick up nearby dropped items. params: { item?: string }",
     place: "Place a specific block. params: { item: string, position: {x,y,z} }", 
