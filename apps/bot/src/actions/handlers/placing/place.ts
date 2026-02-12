@@ -3,7 +3,7 @@ import { Vec3 } from "vec3";
 import pathfinderPkg from "mineflayer-pathfinder";
 import { waitForNextTick, raceWithTimeout } from "../moving/move.js";
 import { resolveItemName, requireInventoryItem } from "../../utils.js";
-import { moveToward } from "../moving/move.js";
+import { moveWithMovementPlugin } from "../moving/move.js";
 import { PlaceParams } from "../building/types.js";
 import { countInventoryItems } from "../building/utils.js";
 import { evacuateBuildArea } from "../building/safety.js";
@@ -41,7 +41,7 @@ export async function handlePlace(bot: Bot, step: { params?: Record<string, unkn
     if (dist > 4.5) {
         console.log(`[place] Moving closer to target (current dist: ${dist.toFixed(1)})`);
         try {
-            await moveToward(bot, targetPos, 3.5, 10000); 
+            await moveWithMovementPlugin(bot, targetPos, 3.5, 10000); 
         } catch (err) {
             console.warn(`[place] Pre-movement failed: ${err}. Attempting placement anyway.`);
         }

@@ -8,7 +8,7 @@
     {
       "title": "Craft Sticks",
       "action": "craft",
-      "details": "Craft 'X' amount of stick (requires 1 oak_plank per 2 sticks). (Recommended for pipeline: 6 sticks).",
+      "details": "Craft 'X' amount of stick (requires 1 oak_plank per 2 sticks).",
       "checks": ["Have 'X' stick in inventory"]
     }
   ]

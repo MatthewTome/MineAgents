@@ -1,6 +1,6 @@
 import type { Bot } from "mineflayer";
 import { Vec3 } from "vec3";
-import { moveToward } from "../moving/move.js";
+import { moveWithMovementPlugin } from "../moving/move.js";
 
 const MOVE_REQUEST_WAIT_MS = 3000;
 
@@ -52,7 +52,7 @@ export async function evacuateBuildArea(bot: Bot, targets: Vec3[]): Promise<void
     if (bestSpot) {
         const moveTarget = bestSpot.offset(0.5, 0, 0.5);
         try {
-            await moveToward(bot, moveTarget, 0.5, 5000);
+            await moveWithMovementPlugin(bot, moveTarget, 0.5, 5000);
         } catch (e) {
             console.warn("[building] Evacuation pathfinder failed. Trying emergency shove.");
             if (bot.entity.position.distanceTo(moveTarget) < 5) {

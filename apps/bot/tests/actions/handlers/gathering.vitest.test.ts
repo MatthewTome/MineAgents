@@ -4,7 +4,7 @@ import { handleGather } from "../../../src/actions/handlers/gathering/gather.js"
 import { handleLoot } from "../../../src/actions/handlers/looting/loot.js";
 import { craftFromInventory } from "../../../src/actions/handlers/crafting/craft.js";
 import { collectBlocks, resolveItemToBlock, resolveProductToRaw } from "../../../src/actions/handlers/mining/mine.js";
-import { moveToward, findNearestEntity, waitForNextTick } from "../../../src/actions/handlers/moving/move.js";
+import { moveWithMovementPlugin, findNearestEntity, waitForNextTick } from "../../../src/actions/handlers/moving/move.js";
 import { listChestMemory } from "../../../src/perception/chest-memory.js";
 
 vi.mock("../../../src/actions/handlers/looting/loot.js", () => ({
@@ -16,7 +16,7 @@ vi.mock("../../../src/actions/handlers/crafting/craft.js", () => ({
 }));
 
 vi.mock("../../../src/actions/handlers/moving/move.js", () => ({
-    moveToward: vi.fn(),
+    moveWithMovementPlugin: vi.fn(),
     findNearestEntity: vi.fn(),
     waitForNextTick: vi.fn()
 }));
@@ -96,7 +96,7 @@ describe("handleGather", () =>
 
         vi.mocked(handleLoot).mockResolvedValue(undefined);
         vi.mocked(craftFromInventory).mockResolvedValue(undefined);
-        vi.mocked(moveToward).mockResolvedValue(undefined);
+        vi.mocked(moveWithMovementPlugin).mockResolvedValue(undefined);
         vi.mocked(collectBlocks).mockResolvedValue(false);
     });
 
@@ -128,7 +128,7 @@ describe("handleGather", () =>
             getDroppedItem: () => ({ name: "oak_log" })
         } as any);
 
-        vi.mocked(moveToward).mockImplementation(async () => {
+        vi.mocked(moveWithMovementPlugin).mockImplementation(async () => {
             items.push({ name: "oak_log", count: 1 });
         });
 
@@ -136,7 +136,7 @@ describe("handleGather", () =>
 
         await handleGather(bot, { params: { item: "log", timeoutMs: 1000 } });
 
-        expect(moveToward).toHaveBeenCalledWith(bot, dropPosition, 1.0, 15000);
+        expect(moveWithMovementPlugin).toHaveBeenCalledWith(bot, dropPosition, 1.0, 15000);
         expect(collectBlocks).not.toHaveBeenCalled(); 
     });
 

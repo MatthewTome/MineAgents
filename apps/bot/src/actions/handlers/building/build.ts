@@ -1,6 +1,6 @@
 import type { Bot } from "mineflayer";
 import { Vec3 } from "vec3";
-import { raceWithTimeout, findNearestEntity } from "../moving/move.js";
+import { raceWithTimeout, findNearestEntity, moveWithMovementPlugin } from "../moving/move.js";
 import { requireInventoryItem, getReplaceableBlocks, resolveItemName } from "../../utils.js";
 import { BuildParams } from "./types.js";
 import { countInventoryItems } from "./utils.js";
@@ -148,6 +148,15 @@ export async function executeBuild(bot: Bot, params: BuildParams): Promise<void>
                     console.log(`[building] ${obstructer.username} moved. Continuing build.`);
                 }
             }
+        }
+
+        if (bot.entity.position.distanceTo(target) > 4.5) {
+             console.log(`[building] Target ${target} is too far (${bot.entity.position.distanceTo(target).toFixed(1)}m). Moving closer...`);
+             try {
+                 await moveWithMovementPlugin(bot, target, 4.0, 5000);
+             } catch (e) {
+                 console.warn(`[building] Failed to move closer: ${e}`);
+             }
         }
 
         if (bot.entity.position.floored().equals(target) ||

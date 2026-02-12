@@ -1,7 +1,7 @@
 import type { Bot } from "mineflayer";
 import { Vec3 } from "vec3";
 import type { DropParams, EquipParams } from "../../types.js";
-import { findNearestEntity, moveToward, waitForNextTick } from "../moving/move.js";
+import { findNearestEntity, moveWithMovementPlugin, waitForNextTick } from "../moving/move.js";
 import type { GiveParams } from "../../types.js";
 
 export async function handleGive(bot: Bot, step: { params?: Record<string, unknown> }): Promise<void>
@@ -53,7 +53,7 @@ export async function handleGive(bot: Bot, step: { params?: Record<string, unkno
 
         if (!chestBlock) throw new Error("No chest available for deposit");
 
-        await moveToward(bot, chestBlock.position, 2.5, 15000);
+        await moveWithMovementPlugin(bot, chestBlock.position, 2.5, 15000);
         const chest = await bot.openContainer(chestBlock);
 
         let deposited = 0;
@@ -82,7 +82,7 @@ export async function handleGive(bot: Bot, step: { params?: Record<string, unkno
     }
     else
     {
-        await moveToward(bot, targetEntity.position, 3, 15000);
+        await moveWithMovementPlugin(bot, targetEntity.position, 3, 15000);
         await bot.lookAt(targetEntity.position.offset(0, 1, 0), true);
 
         let tossed = 0;

@@ -5,9 +5,9 @@ import { craftFromInventory } from "../crafting/craft.js";
 import { handleLoot } from "../looting/loot.js";
 import type { GatherParams, PickupParams  } from "../../types.js";
 import type { ResourceLockManager } from "../../../teamwork/coordination.js";
-import { collectBlocks, resolveItemToBlock, resolveProductToRaw } from "../mining/mine.js";
+import { collectBlocks, handleMine, resolveItemToBlock, resolveProductToRaw } from "../mining/mine.js";
 import { listChestMemory } from "../../../perception/chest-memory.js";
-import { moveToward, findNearestEntity, waitForNextTick } from "../moving/move.js";
+import { moveWithMovementPlugin, findNearestEntity, waitForNextTick } from "../moving/move.js";
 import { resolveItemName, isItemMatch } from "../../utils.js";
 
 export async function handleGather(bot: Bot, step: { params?: Record<string, unknown> }, resourceLocks?: ResourceLockManager): Promise<void>
@@ -89,7 +89,7 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
         {
             const droppedItem = (dropped as any).getDroppedItem?.();
             console.log(`[gather] Found dropped ${droppedItem?.name ?? "item"} at ${dropped.position.floored()}. Collecting...`);
-            await moveToward(bot, dropped.position, 1.0, 15000);
+            await moveWithMovementPlugin(bot, dropped.position, 1.0, 15000);
             continue; 
         }
 
@@ -112,7 +112,7 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
                     const pos = foundPositions[0];
                     const block = bot.blockAt(pos);
                     
-                    if (block && bot.canDigBlock(block))
+                    if (block)
                     {
                         console.log(`[gather] Mining ${block.name} at ${block.position}...`);
                         try
@@ -126,17 +126,11 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
                             console.warn(`[gather] Mining failed: ${err.message}`);
                         }
                     }
-                    else
-                    {
-                        if (attempts % 10 === 0) {
-                            console.log(`[gather] Found ${blockName} at ${pos} but cannot dig (canDigBlock=${block ? bot.canDigBlock(block) : "null"}).`);
-                        }
-                    }
                 }
             }
             else
             {
-                 if (attempts % 10 === 0) console.warn(`[gather] Block "${blockName}" resolved from "${targetItem}" not found in registry.`);
+                 if (attempts % 3 === 0) console.warn(`[gather] Block "${blockName}" resolved from "${targetItem}" not found in registry.`);
             }
         }
 
@@ -190,7 +184,7 @@ export async function handlePickup(bot: Bot, step: { params?: Record<string, unk
     }
 
     console.log(`[pickup] Moving to collect dropped item at ${droppedItem.position}`);
-    await moveToward(bot, droppedItem.position, 0.5, 15000);
+    await moveWithMovementPlugin(bot, droppedItem.position, 0.5, 15000);
     await waitForNextTick(bot);
     console.log("[pickup] Item collected");
 }

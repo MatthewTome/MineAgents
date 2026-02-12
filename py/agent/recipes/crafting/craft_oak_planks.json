@@ -1,14 +1,14 @@
 {
   "name": "Make Oak Planks",
   "goal": "Process logs into planks",
-  "tags": ["craft", "oak_plank", "wood", "iron_tools_pipeline"],
+  "tags": ["craft", "oak_plank", "wood", "iron_tools_pipeline", "build wooden shelter"],
   "notes": "Use (params.count) to determine what 'X' item count should be.",
   "required_items": ["oak_log"],
   "steps": [
     {
       "title": "Craft Oak Planks",
       "action": "craft",
-      "details": "Craft 'X' amount of oak_plank from oak_log. (Every log crafts into 4 planks). (Recommended for pipeline: 12 oak planks).",
+      "details": "Craft 'X' amount of oak_plank from oak_log. (Every log crafts into 4 planks).",
       "checks": ["Have 'X' oak_plank in inventory"]
     }
   ]

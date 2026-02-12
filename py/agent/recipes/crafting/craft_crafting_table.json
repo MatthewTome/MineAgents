@@ -1,14 +1,14 @@
 {
   "name": "Make a Crafting Table",
   "goal": "Create and place a crafting table",
-  "tags": ["craft", "crafting_table", "crafting table", "workbench", "crafting", "table", "place", "iron_tools_pipeline"],
+  "tags": ["craft", "crafting_table", "crafting table", "workbench", "crafting", "table", "place", "iron_tools_pipeline", "build wooden shelter"],
   "notes": "Use (params.count) to determine what 'X' item count should be.",
   "required_items": ["4 oak_plank"],
   "steps": [
     {
       "title": "Craft Crafting Table",
       "action": "craft",
-      "details": "Craft 'X' crafting_table (each requires 4 oak_plank) and place it on the ground. (Recommended for pipeline: 1 crafting table).",
+      "details": "Craft 'X' crafting_table (each requires 4 oak_plank) and place it on the ground.",
       "checks": ["A crafting_table is in the inventory"]
     },
     {
@@ -16,12 +16,6 @@
       "action": "place",
       "details": "Place the crafting_table on the ground nearby.",
       "checks": ["A crafting_table is placed nearby"]
-    },
-    {
-      "title": "Verify the Crafting Table",
-      "action": "percieve",
-      "details": "Verify '1 crafting_table' is nearby.",
-      "checks": ["A crafting_table is perceived nearby"]
     }
   ]
 }

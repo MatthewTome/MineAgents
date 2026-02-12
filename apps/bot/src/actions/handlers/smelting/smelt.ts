@@ -1,6 +1,6 @@
 import type { Bot } from "mineflayer";
 import { Vec3 } from "vec3";
-import { moveToward, waitForNextTick } from "../moving/move.js";
+import { moveWithMovementPlugin, waitForNextTick } from "../moving/move.js";
 import { resolveItemName } from "../../utils.js";
 import { buildLockKey, withResourceLock } from "../teamwork/teamwork.js";
 import { findReferenceBlock } from "../building/index.js";
@@ -76,7 +76,7 @@ export async function handleSmelt(bot: Bot, step: { params?: Record<string, unkn
     const lockKey = buildLockKey("furnace", furnaceBlock.position);
     await withResourceLock(resourceLocks, lockKey, async () =>
     {
-        await moveToward(bot, furnaceBlock!.position, 3, 15000);
+        await moveWithMovementPlugin(bot, furnaceBlock!.position, 3, 15000);
 
         const furnace = await bot.openFurnace(furnaceBlock!);
 

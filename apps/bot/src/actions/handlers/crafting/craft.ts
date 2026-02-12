@@ -1,6 +1,6 @@
 import type { Bot } from "mineflayer";
 import { Vec3 } from "vec3";
-import { moveToward, waitForNextTick } from "../moving/move.js";
+import { moveWithMovementPlugin, waitForNextTick } from "../moving/move.js";
 import { resolveWoodType, isItemMatch } from "../../utils.js";
 import { buildLockKey, withResourceLock } from "../teamwork/teamwork.js";
 import { findReferenceBlock } from "../building/index.js";
@@ -188,7 +188,7 @@ export async function craftFromInventory(bot: Bot, params: CraftParams, resource
         const lockKey = buildLockKey("crafting_table", confirmedTable.position);
         await withResourceLock(resourceLocks, lockKey, async () =>
         {
-            await moveToward(bot, confirmedTable.position, 3, 15000);
+            await moveWithMovementPlugin(bot, confirmedTable.position, 3, 15000);
             await bot.craft(craftableRecipe as any, craftTimes, confirmedTable);
         });
     }

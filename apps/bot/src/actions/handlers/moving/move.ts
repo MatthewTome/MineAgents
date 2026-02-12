@@ -8,34 +8,6 @@ const { goals } = pathfinderPkg;
 export interface Vec3Input { x: number; y: number; z: number; }
 export interface MoveParams { position?: Vec3Input; entityName?: string; range?: number; timeoutMs?: number; }
 
-export async function moveToward(bot: Bot, target: Vec3, range: number, timeout: number): Promise<void>
-{
-    let pathfinderError: string | null = null;
-
-    if (bot.pathfinder) {
-        try {
-            const goal = new goals.GoalNear(target.x, target.y, target.z, range);
-            await raceWithTimeout(bot.pathfinder.goto(goal), timeout);
-            return;
-        } catch (err) {
-            bot.pathfinder.stop();
-            pathfinderError = err instanceof Error ? err.message : String(err);
-            console.warn(`[move] Pathfinder failed: ${pathfinderError}.`);
-            console.log("[move] Falling back to movement plugin.");
-        }
-    }
-
-    if (await moveWithMovementPlugin(bot, target, range, timeout)) {
-        return;
-    }
-
-    const failureReason = pathfinderError
-        ? `Pathfinder error: ${pathfinderError}`
-        : "Movement plugins unavailable for navigation";
-
-    throw new Error(failureReason);
-}
-
 export async function moveWithMovementPlugin(bot: Bot, target: Vec3, range: number, timeout: number): Promise<boolean>
 {
     const movement = (bot as any).movement;
@@ -121,5 +93,5 @@ export async function handleMove(bot: Bot, step: { params?: Record<string, unkno
 {
     const params = (step.params ?? {}) as unknown as MoveParams;
     const targetPos = resolveTargetPosition(bot, params || {});
-    await moveToward(bot, targetPos, params?.range ?? 1.5, params?.timeoutMs ?? 15000);
+    await moveWithMovementPlugin(bot, targetPos, params?.range ?? 1.5, params?.timeoutMs ?? 15000);
 }

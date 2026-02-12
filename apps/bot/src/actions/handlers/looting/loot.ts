@@ -1,7 +1,7 @@
 import type { Bot } from "mineflayer";
 import { Vec3 } from "vec3";
 import { recordChestContents } from "../../../perception/chest-memory.js";
-import { moveToward } from "../moving/move.js";
+import { moveWithMovementPlugin } from "../moving/move.js";
 import { buildLockKey, withResourceLock } from "../teamwork/teamwork.js";
 import type { LootParams } from "../../types.js";
 import type { ResourceLockManager } from "../../../teamwork/coordination.js";
@@ -30,7 +30,7 @@ export async function handleLoot(bot: Bot, step: { params?: Record<string, unkno
     const lockKey = buildLockKey("chest", chestBlock.position);
     await withResourceLock(resourceLocks, lockKey, async () =>
     {
-        await moveToward(bot, chestBlock.position, 2.5, 15000);
+        await moveWithMovementPlugin(bot, chestBlock.position, 2.5, 15000);
 
         const chest = await bot.openContainer(chestBlock);
         const items = chest.containerItems().map((item) => ({ name: item.name, count: item.count ?? 0 }));

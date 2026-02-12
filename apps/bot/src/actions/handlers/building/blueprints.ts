@@ -32,7 +32,7 @@ export function generateRoof(origin: Vec3, w: number, l: number): Vec3[] {
     const blocks: Vec3[] = [];
     for (let x = 0; x < w; x++) {
         for (let z = 0; z < l; z++) {
-            blocks.push(origin.offset(x, 0, z));
+            blocks.push(origin.offset(x, 3, z));
         }
     }
     return blocks;
