@@ -181,6 +181,6 @@ describe("handleGather", () =>
 
         await handleGather(bot, { params: { item: "planks", timeoutMs: 6000 } });
 
-        expect(handleCraft).toHaveBeenCalledWith(bot, { recipe: "oak_planks" }, undefined);
+        expect(handleCraft).toHaveBeenCalledWith(bot, { params: { recipe: "oak_planks", count: 1 } }, undefined);
     });
 });

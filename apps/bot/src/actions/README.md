@@ -49,7 +49,10 @@ Same as `perceive`, just a different name.
 Walk to a position or toward an entity.
 ```
 !act move {"position":{"x":5,"y":64,"z":5}}
-!act move {"entityName":"cow","range":2}
+!act move {"position":{"x":-117,"y":216,"z":-19}}
+!act move {"position":{"x":-131,"y":223,"z":-10}}
+!act move {"entityName":"player","range":32}
+!act move {"entityName":"cow","range":32}
 ```
 
 ### mine
@@ -57,11 +60,21 @@ Break a specific block.
 ```
 !act mine {"block":"oak_log"}
 !act mine {"position":{"x":3,"y":63,"z":-2}}
+!act mine {"block":"diamond_ore"}
+!act mine {"block":"iron_ore"}
+!act mine {"block":"coal_ore"}
+!act mine {"block":"cherry_fence"}
+!act move {"position":{"x":-133,"y":223,"z":-13}}
 ```
 
 ### gather
 Get an item by looting, mining, or picking up drops. (This is a key action for research testing.)
 ```
+!act gather {"item":"stick"}
+!act gather {"item":"coal"}
+!act gather {"item":"iron_ingot"}
+!act gather {"item":"wooden_pickaxe"}
+!act gather {"item":"oak_plank"}
 !act gather {"item":"log"}
 !act gather {"item":"iron_ingot","timeoutMs":60000}
 ```
@@ -69,6 +82,10 @@ Get an item by looting, mining, or picking up drops. (This is a key action for r
 ### pickup
 Pick up nearby dropped items.
 ```
+!act pickup {"item":"coal"}
+!act pickup {"item":"iron_ingot"}
+!act pickup {"item":"wooden_pickaxe"}
+!act pickup {"item":"oak_plank"}
 !act pickup {"item":"stick"}
 ```
 
@@ -76,6 +93,10 @@ Pick up nearby dropped items.
 Craft items in the crafting grid or at a crafting table.
 ```
 !act craft {"recipe":"stone_pickaxe","count":1}
+!act craft {"recipe":"iron_pickaxe","count":1}
+!act craft {"recipe":"iron_axe","count":1}
+!act craft {"recipe":"iron_sword","count":1}
+!act craft {"recipe":"iron_shovel","count":1}
 ```
 
 ### smelt
@@ -89,18 +110,26 @@ Place a simple structure.
 ```
 !act build {"structure":"wall","material":"oak_planks","width":4,"height":3}
 !act build {"structure":"platform","material":"cobblestone","width":5,"length":5}
+!act build {"structure":"roof","material":"cobblestone","width":5,"length":5}
 ```
 
 ### loot
 Open a chest and take items.
 ```
 !act loot {"item":"apple","maxDistance":8}
+!act loot {"item":"light_gray_terracotta","maxDistance":32}
+!act loot {"item":"oak_log","maxDistance":32}
+!act loot {"item":"oak_plank","maxDistance":32}
+!act loot {"item":"cobblestone","maxDistance":32}
 ```
 
 ### give
 Give items to a teammate.
 ```
 !act give {"target":"TeammateName","item":"oak_log","count":4,"method":"drop"}
+!act MineAgent1 give {"target":"MineAgent2","item":"oak_log","count":4,"method":"drop"}
+!act give MineAgent2 {"target":"MineAgent1","item":"oak_log","count":4,"method":"drop"}
+!act give {"target":"MineAgent3","item":"oak_log","count":4,"method":"drop"}
 ```
 
 ### drop

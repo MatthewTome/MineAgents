@@ -1,11 +1,12 @@
 import type { Bot } from "mineflayer";
 import type { Block } from "prismarine-block";
 import type { Item } from "prismarine-item";
-import { CraftingSystem } from "../crafting/craft.js";
+import { handleCraft } from "../crafting/craft.js";
 import { handleLoot } from "../looting/loot.js";
 import type { GatherParams, PickupParams  } from "../../types.js";
 import type { ResourceLockManager } from "../../../teamwork/coordination.js";
 import { collectBlocks, handleMine, resolveItemToBlock, resolveProductToRaw } from "../mining/mine.js";
+import { handleSmelt } from "../smelting/smelt.js";
 import { listChestMemory } from "../../../perception/chest-memory.js";
 import { moveWithMovementPlugin, findNearestEntity, waitForNextTick } from "../moving/move.js";
 import { resolveItemName, isItemMatch } from "../../utils.js";
@@ -17,49 +18,18 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
     const targetItem = resolveItemName(bot, rawTarget ?? "");
     const timeout = params.timeoutMs ?? 60000;
     const maxDistance = params.maxDistance ?? 32;
+    const requiredCount = Math.max(1, Math.floor(Number(params.count ?? 1)));
 
     if (!targetItem) throw new Error("Gather requires item name");
 
     console.log(`[gather] Requested "${rawTarget ?? "unknown"}" resolved to "${targetItem}" (timeout=${timeout}ms, maxDistance=${maxDistance})`);
 
     const existing = bot.inventory.items().find((item) => isItemMatch(item.name, targetItem));
-    if (existing)
+    if (existing && existing.count >= requiredCount)
     {
-        console.log(`[gather] Already have ${existing.name} (${existing.count}) which satisfies "${targetItem}", skipping gather.`);
+        console.log(`[gather] Already have ${existing.name} (${existing.count}) which satisfies "${targetItem}" x${requiredCount}, skipping gather.`);
         return;
     }
-
-    const chests = listChestMemory().filter((chest) =>
-        chest.status === "known" && chest.items && chest.items.some((item) => isItemMatch(item.name, targetItem))
-    );
-    
-    if (chests.length > 0)
-    {
-        const chest = chests[0];
-        const chestItem = chest.items?.find((item) => isItemMatch(item.name, targetItem));
-        console.log(`[gather] Found ${chestItem?.name ?? targetItem} in known chest at ${chest.position}`);
-        
-        await handleLoot(bot, { params: { position: chest.position, item: chestItem?.name ?? targetItem } }, resourceLocks);
-        
-        const nowHas = bot.inventory.items().find((item) => isItemMatch(item.name, targetItem));
-        if (nowHas)
-        {
-            console.log(`[gather] Retrieved ${nowHas.name} from chest.`);
-            return;
-        }
-    }
-
-    try
-    {
-        await handleLoot(bot, { params: { maxDistance, item: targetItem } }, resourceLocks);
-        const looted = bot.inventory.items().find((item) => isItemMatch(item.name, targetItem));
-        if (looted)
-        {
-            console.log(`[gather] Looted ${looted.name} from a nearby chest.`);
-            return;
-        }
-    }
-    catch (err: any) { /* Ignore loot failure */ }
 
     console.log(`[gather] Starting active gather cycle for: ${targetItem}`);
 
@@ -71,9 +41,9 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
         attempts++;
         
         const acquired = bot.inventory.items().find((item) => isItemMatch(item.name, targetItem));
-        if (acquired)
+        if (acquired && acquired.count >= requiredCount)
         {
-            console.log(`[gather] Successfully gathered ${acquired.name}.`);
+            console.log(`[gather] Successfully gathered ${acquired.name} x${acquired.count}.`);
             return;
         }
 
@@ -89,11 +59,67 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
         {
             const droppedItem = (dropped as any).getDroppedItem?.();
             console.log(`[gather] Found dropped ${droppedItem?.name ?? "item"} at ${dropped.position.floored()}. Collecting...`);
-            await moveWithMovementPlugin(bot, dropped.position, 1.0, 15000);
+            await moveWithMovementPlugin(bot, dropped.position, 32, 15000);
             continue; 
         }
 
-        const blockName = resolveItemToBlock(bot, targetItem);
+        try
+        {
+            const chests = listChestMemory().filter((chest) =>
+                chest.status === "known" && chest.items && chest.items.some((item) => isItemMatch(item.name, targetItem))
+            );
+
+            if (chests.length > 0)
+            {
+                const chest = chests[0];
+                const chestItem = chest.items?.find((item) => isItemMatch(item.name, targetItem));
+                await handleLoot(bot, { params: { position: chest.position, item: chestItem?.name ?? targetItem, count: requiredCount } }, resourceLocks);
+            }
+            else
+            {
+                await handleLoot(bot, { params: { maxDistance, item: targetItem, count: requiredCount } }, resourceLocks);
+            }
+
+            const looted = bot.inventory.items().find((item) => isItemMatch(item.name, targetItem));
+            if (looted && looted.count >= requiredCount)
+            {
+                console.log(`[gather] Looted ${looted.name} from chest.`);
+                return;
+            }
+        }
+        catch { }
+
+        const blockTarget = resolveItemToBlock(bot, targetItem);
+
+        const itemDef = bot.registry.itemsByName[targetItem];
+        if (itemDef && !blockTarget)
+        {
+            try
+            {
+                await handleCraft(bot, { params: { recipe: targetItem, count: requiredCount } }, resourceLocks);
+                return;
+            }
+            catch { }
+        }
+
+        const needsSmelting = targetItem.includes("ingot");
+        if (needsSmelting)
+        {
+            const oreItem = targetItem.replace("_ingot", "_ore").replace("raw_", "");
+            try
+            {
+                await handleSmelt(bot, { params: { item: oreItem, count: requiredCount } }, resourceLocks);
+                const smelted = bot.inventory.items().find((item) => isItemMatch(item.name, targetItem));
+                if (smelted && smelted.count >= requiredCount)
+                {
+                    console.log(`[gather] Smelted ${smelted.name}.`);
+                    return;
+                }
+            }
+            catch { }
+        }
+
+        const blockName = blockTarget;
         
         if (blockName)
         {
@@ -142,32 +168,8 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
                 const remaining = timeout - (Date.now() - start);
                 if (remaining > 5000) 
                 {
-                    console.log(`[gather] Crafting ${targetItem} from ${raw}...`);
-                    await handleGather(bot, { params: { item: raw, timeoutMs: remaining / 2, maxDistance } }, resourceLocks);
-                    
-                    const crafting = new CraftingSystem(bot);
-                    const itemDef = bot.registry.itemsByName[targetItem];
-                    
-                    if (itemDef)
-                    {
-                        const table = bot.findBlock({ matching: (b) => b.name === 'crafting_table', maxDistance: maxDistance });
-                        const recipes = crafting.recipesFor(itemDef.id, null, 1, table || null);
-
-                        if (recipes.length > 0)
-                        {
-                            const recipe = recipes[0];
-                            if (recipe.requiresTable)
-                            {
-                                if (!table) throw new Error("Crafting table required but not found.");
-                                await moveWithMovementPlugin(bot, table.position, 3, 10000);
-                            }
-
-                            await crafting.craft(recipe, 1, table || undefined);
-                        }
-                    }
-                    
-                    const crafted = bot.inventory.items().find((item) => isItemMatch(item.name, targetItem));
-                    if (crafted) return;
+                    console.log(`[gather] Mining prerequisites for ${targetItem} from ${raw}...`);
+                    await handleGather(bot, { params: { item: raw, count: requiredCount, timeoutMs: remaining / 2, maxDistance } }, resourceLocks);
                 }
             }
             catch (err) { }

@@ -13,7 +13,7 @@ import { loadBotConfig, ConfigError } from "./settings/config.js";
 import { PerceptionCollector } from "./perception/perception.js";
 import { PerceptionSnapshot } from "./settings/types.js";
 import { runSetupWizard } from "./startup/helpers.js";
-import { ActionExecutor } from "./actions/executor.js";
+import { ActionExecutor, type ActionStep } from "./actions/executor.js";
 import { createDefaultActionHandlers, clearInventory } from "./actions/handlers.js";
 import { wireChatBridge, PlanNarrator } from "./actions/handlers/chatting/chat.js";
 import { ReflectionLogger } from "./logger/reflection-log.js";
@@ -50,6 +50,84 @@ import { attemptRecovery } from "./startup/recovery.js";
 import { buildGoalMetadata, parseEnvBoolean, safeChat, toOptionalInt, type FeatureFlags } from "./startup/helpers.js";
 
 const { pathfinder, Movements } = pathfinderPkg;
+
+function estimateBuildMaterialCount(step: ActionStep): number
+{
+    const params = (step.params ?? {}) as Record<string, unknown>;
+    const width = Math.max(1, Number(params.width ?? 5));
+    const length = Math.max(1, Number(params.length ?? 5));
+    const height = Math.max(1, Number(params.height ?? 3));
+    const structure = String(params.structure ?? "platform");
+
+    if (structure === "platform") return width * length;
+    if (structure === "walls" || structure === "wall") return Math.max(1, (width * 2 + length * 2) * height);
+    if (structure === "roof") return width * length;
+    return Math.max(4, width + length);
+}
+
+function normalizePlanForAutonomy(steps: ActionStep[]): ActionStep[]
+{
+    const filtered = steps.filter((step) => step.action !== "move");
+    const required = new Map<string, number>();
+
+    const addRequired = (item: string, count: number) =>
+    {
+        if (!item || count <= 0) return;
+        required.set(item, (required.get(item) ?? 0) + count);
+    };
+
+    for (const step of filtered)
+    {
+        const params = ((step.params ?? {}) as Record<string, unknown>);
+
+        if (step.action === "build")
+        {
+            addRequired(String(params.material ?? "oak_planks"), estimateBuildMaterialCount(step));
+        }
+        else if (step.action === "place")
+        {
+            addRequired(String(params.item ?? ""), Math.max(1, Number(params.count ?? 1)));
+        }
+        else if (step.action === "craft")
+        {
+            const recipe = String(params.recipe ?? "");
+            const count = Math.max(1, Number(params.count ?? 1));
+            const rawMaterials = getRawMaterialsFor(recipe);
+            if (rawMaterials)
+            {
+                for (const material of rawMaterials)
+                {
+                    addRequired(material.material, material.count * count);
+                }
+            }
+        }
+        else if (step.action === "smelt")
+        {
+            const count = Math.max(1, Number(params.count ?? 1));
+            addRequired(String(params.item ?? ""), count);
+            addRequired(String(params.fuel ?? "coal"), count);
+        }
+    }
+
+    const gatherSteps: ActionStep[] = Array.from(required.entries()).map(([item, count], index) => ({
+        id: `auto-gather-${item}-${index}`,
+        action: "gather",
+        params: { item, count },
+        description: `Auto-gather prerequisites: ${count} ${item}`
+    }));
+
+    const sanitized = filtered.map((step) =>
+    {
+        const params = { ...(step.params ?? {}) } as Record<string, unknown>;
+        delete params.position;
+        delete params.origin;
+        delete params.craftingTable;
+        delete params.furnace;
+        return { ...step, params };
+    });
+
+    return [...gatherSteps, ...sanitized];
+}
 
 export async function createBot()
 {
@@ -1027,9 +1105,15 @@ export async function createBot()
                             }
                         }
 
+                        const autonomousSteps = normalizePlanForAutonomy(plan.steps);
+                        sessionLogger.info("planner.autonomy", "Plan normalized for autonomous execution", {
+                            originalSteps: plan.steps.length,
+                            finalSteps: autonomousSteps.length
+                        });
+
                         executor.reset();
 
-                        const results = await executor.executePlan(plan.steps, () =>
+                        const results = await executor.executePlan(autonomousSteps, () =>
                         {
                             const active = goalTracker.getActiveGoal();
                             if (!active || active.definition.name !== contextName)
