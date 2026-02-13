@@ -27,29 +27,75 @@ This folder contains the bot's action handlers. You can trigger **any action dir
 
 Below is a guide to each action, along with example chat commands.
 
-### chat
-Send a message as the bot.
-```
-!act chat {"message":"Hello from the bot!"}
-```
-
-### perceive
-Have the bot check nearby information or inventory.
-```
-!act perceive {"check":"inventory"}
-```
-
 ### analyzeInventory
 Same as `perceive`, just a different name.
 ```
 !act analyzeInventory {"check":"inventory"}
 ```
 
-### move
-Walk to a position or toward an entity.
+### build
+Place a simple structure.
 ```
-!act move {"position":{"x":-117,"y":216,"z":-19}}
-!act move {"position":{"x":-131,"y":223,"z":-10}}
+!act build {"structure":"shelter"}
+!act build {"structure":"wall","material":"oak_planks","width":4,"height":3}
+!act build {"structure":"platform","material":"cobblestone","width":5,"length":5}
+!act build {"structure":"roof","material":"cobblestone","width":5,"length":5}
+```
+
+### chat
+Send a message as the bot.
+```
+!act chat {"message":"Hello from the bot!"}
+```
+
+### craft
+Craft items in the crafting grid or at a crafting table.
+```
+!act craft {"recipe":"stone_pickaxe","count":1}
+!act craft {"recipe":"iron_pickaxe","count":1}
+!act craft {"recipe":"iron_axe","count":1}
+!act craft {"recipe":"iron_sword","count":1}
+!act craft {"recipe":"iron_shovel","count":1}
+```
+
+### drop
+Drop items on the ground.
+```
+!act drop {"item":"cobblestone","count":16}
+!act drop {"item":"all"}
+```
+
+
+### gather
+Get an item by looting, mining, or picking up drops. (This is a key action for research testing.)
+```
+!act gather {"item":"stick"}
+!act gather {"item":"coal"}
+!act gather {"item":"iron_ingot"}
+!act gather {"item":"wooden_pickaxe"}
+!act gather {"item":"oak_plank"}
+!act gather {"item":"log"}
+!act gather {"item":"iron_ingot","timeoutMs":60000}
+```
+
+### give
+Give items to a teammate.
+```
+!act give {"target":"TeammateName","item":"oak_log","count":4,"method":"drop"}
+!act id=MineAgent1 give {"target":"Swarles_Barkleyy","item":"oak_log","count":4,"method":"drop"}
+!act id=MineAgent1 give {"target":"MineAgent2","item":"oak_log","count":4,"method":"drop"}
+!act id=MineAgent2 give {"target":"MineAgent1","item":"oak_log","count":4,"method":"drop"}
+!act give {"target":"MineAgent3","item":"oak_log","count":4,"method":"drop"}
+```
+
+### loot
+Open a chest and take items.
+```
+!act loot {"item":"apple","maxDistance":8}
+!act loot {"item":"light_gray_terracotta","maxDistance":32}
+!act loot {"item":"oak_log","maxDistance":32}
+!act loot {"item":"oak_plank","maxDistance":32}
+!act loot {"item":"cobblestone","maxDistance":32}
 ```
 
 ### mine
@@ -64,16 +110,18 @@ Break a specific block.
 !act mine {"position":{"x":-132,"y":223,"z":-13}}
 ```
 
-### gather
-Get an item by looting, mining, or picking up drops. (This is a key action for research testing.)
+### move
+Walk to a position or toward an entity.
 ```
-!act gather {"item":"stick"}
-!act gather {"item":"coal"}
-!act gather {"item":"iron_ingot"}
-!act gather {"item":"wooden_pickaxe"}
-!act gather {"item":"oak_plank"}
-!act gather {"item":"log"}
-!act gather {"item":"iron_ingot","timeoutMs":60000}
+!act move {"position":{"x":-117,"y":216,"z":-19}}
+!act move {"position":{"x":-131,"y":223,"z":-10}}
+```
+
+
+### perceive
+Have the bot check nearby information or inventory.
+```
+!act perceive {"check":"inventory"}
 ```
 
 ### pickup
@@ -86,61 +134,16 @@ Pick up nearby dropped items.
 !act pickup {"item":"stick"}
 ```
 
-### craft
-Craft items in the crafting grid or at a crafting table.
+### requestResource
+Ask teammates for items via chat.
 ```
-!act craft {"recipe":"stone_pickaxe","count":1}
-!act craft {"recipe":"iron_pickaxe","count":1}
-!act craft {"recipe":"iron_axe","count":1}
-!act craft {"recipe":"iron_sword","count":1}
-!act craft {"recipe":"iron_shovel","count":1}
+!act requestResource {"item":"iron_ingot","count":3,"urgent":true}
 ```
 
 ### smelt
 Smelt items in a furnace.
 ```
 !act smelt {"item":"raw_iron","fuel":"coal","count":9}
-```
-
-### build
-Place a simple structure.
-```
-!act build {"structure":"wall","material":"oak_planks","width":4,"height":3}
-!act build {"structure":"platform","material":"cobblestone","width":5,"length":5}
-!act build {"structure":"roof","material":"cobblestone","width":5,"length":5}
-```
-
-### loot
-Open a chest and take items.
-```
-!act loot {"item":"apple","maxDistance":8}
-!act loot {"item":"light_gray_terracotta","maxDistance":32}
-!act loot {"item":"oak_log","maxDistance":32}
-!act loot {"item":"oak_plank","maxDistance":32}
-!act loot {"item":"cobblestone","maxDistance":32}
-```
-
-### give
-Give items to a teammate.
-```
-!act give {"target":"TeammateName","item":"oak_log","count":4,"method":"drop"}
-!act id=MineAgent1 give {"target":"Swarles_Barkleyy","item":"oak_log","count":4,"method":"drop"}
-!act id=MineAgent1 give {"target":"MineAgent2","item":"oak_log","count":4,"method":"drop"}
-!act id=MineAgent2 give {"target":"MineAgent1","item":"oak_log","count":4,"method":"drop"}
-!act give {"target":"MineAgent3","item":"oak_log","count":4,"method":"drop"}
-```
-
-### drop
-Drop items on the ground.
-```
-!act drop {"item":"cobblestone","count":16}
-!act drop {"item":"all"}
-```
-
-### requestResource
-Ask teammates for items via chat.
-```
-!act requestResource {"item":"iron_ingot","count":3,"urgent":true}
 ```
 
 ## Notes for research testing

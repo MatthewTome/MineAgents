@@ -1,37 +1,31 @@
 {
-  "name": "Build a wooden shelter",
-  "goal": "Safe shelter with foundation, walls, roof, and door",
-  "tags": ["shelter", "building", "safety", "house", "wooden shelter", "build", "build a wooden shelter"],
+  "name": "Build a Small Wooden Shelter",
+  "goal": "Construct a compact 5x5x3 safe house with foundation, walls, roof, and door",
+  "tags": ["shelter", "building", "safety", "house", "base", "wooden shelter", "build"],
   "steps": [
     {
-      "title": "Gather Materials",
-      "action": "gather",
-      "details": "Mine 20 oak logs, craft 90 oak planks, craft 1 crafting table, and use that crafting table to craft 1 oak door. See other RAG recipes "
+      "title": "Check Inventory",
+      "action": "perceive",
+      "details": "Check your inventory to see if you have 32 oak_logs or 128 oak_planks. You can skip gathering them if this is true."
     },
     {
-      "title": "Build Foundation",
-      "action": "build",
-      "details": "Choose a flat, clear area. Store this origin coordinate - ALL build steps must use the SAME origin. Place the floor platform. params: { \"structure\": \"platform\", \"width\": 5, \"length\": 5, \"material\": \"oak_planks\", \"origin\": {x, y, z} }"
+      "title": "Gather Materials (if needed)",
+      "action": "mine",
+      "details": "Collect 32 oak_logs or 128 oak_planks (if you do not have one of them already)."
     },
     {
-      "title": "Install Door",
-      "action": "build",
-      "details": "Place door BEFORE walls to ensure proper 2x1 gap. params: { \"structure\": \"door\", \"material\": \"oak_door\", \"origin\": {SAME origin as foundation} }"
+      "title": "Craft Supplies",
+      "action": "craft",
+      "details": "Craft them all your oak_logs into oak_planks. Then craft 1 crafting_table and use it to craft 1 oak_door."
     },
     {
-      "title": "Build Walls",
+      "title": "Construct Shelter",
       "action": "build",
-      "details": "Build perimeter walls around the foundation. params: { \"structure\": \"walls\", \"width\": 5, \"length\": 5, \"height\": 2, \"material\": \"oak_planks\", \"door\": true, \"origin\": {SAME origin as foundation} }"
-    },
-    {
-      "title": "Build Roof",
-      "action": "build",
-      "details": "Build roof on top of walls. The roof origin Y should be foundation_y + 4 (wall height). params: { \"structure\": \"roof\", \"width\": 5, \"length\": 5, \"material\": \"oak_planks\", \"origin\": {x: same, y: foundation_y + 3, z: same} }"
+      "details": "Build the complete shelter structure in one go. The bot will automatically handle the floor, walls, roof, and door placement. params: { \"structure\": \"shelter\", \"width\": 5, \"length\": 5, \"height\": 3, \"material\": \"oak_planks\" }"
     }
   ],
   "important_notes": [
-    "ALL build steps must use the SAME X and Z origin coordinates",
-    "Roof Y-coordinate = Foundation Y + 3",
-    "Door must be placed BEFORE walls to ensure proper gap"
+    "The 'shelter' structure automatically clears the area, builds the foundation, walls, roof, and installs the door.",
+    "Ensure you have the oak_door in your inventory before starting the build step."
   ]
 }

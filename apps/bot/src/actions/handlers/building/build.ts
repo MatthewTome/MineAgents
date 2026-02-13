@@ -11,45 +11,78 @@ import { placeBlockAt } from "../placing/place.js";
 const MOVE_REQUEST_WAIT_MS = 3000;
 const MAX_MOVE_REQUESTS = 2;
 
-export async function executeBuild(bot: Bot, params: BuildParams): Promise<void> {
-    const isSingleBlockPlacement = 
-        (params.structure === 'platform' && params.width === 1 && params.length === 1) ||
+type BuildTarget = { pos: Vec3; material: string };
+
+function resolveDoorPosition(origin: Vec3, width: number): Vec3
+{
+    const doorX = Math.floor(width / 2);
+    return origin.offset(doorX, 0, 0);
+}
+
+function generateShelterTargets(origin: Vec3, width: number, length: number, height: number, wallMaterial: string, doorMaterial: string): BuildTarget[]
+{
+    const wallOrigin = origin.offset(0, 1, 0);
+    const doorPos = resolveDoorPosition(wallOrigin, width);
+
+    const floor = generatePlatform(origin, width, length).map((pos) => ({ pos, material: wallMaterial }));
+    const walls = generateWalls(wallOrigin, width, length, height, doorPos).map((pos) => ({ pos, material: wallMaterial }));
+    const roof = generateRoof(wallOrigin, width, length).map((pos) => ({ pos, material: wallMaterial }));
+    const door = [{ pos: doorPos, material: doorMaterial }];
+
+    return [...floor, ...walls, ...roof, ...door];
+}
+
+export async function executeBuild(bot: Bot, params: BuildParams): Promise<void>
+{
+    const isSingleBlockPlacement =
+        (params.structure === "platform" && params.width === 1 && params.length === 1) ||
         (params.width === 1 && params.length === 1 && params.height === 1);
 
-    if (isSingleBlockPlacement) {
+    if (isSingleBlockPlacement) 
+    {
         return handleSingleBlockPlacement(bot, params);
     }
 
-    const material = resolveItemName(bot, params.material ?? "oak_planks");
-    const width = params.width ?? 7;
-    const length = params.length ?? 7;
-    const height = params.height ?? 4;
-    let origin = new Vec3(params.origin.x, params.origin.y, params.origin.z);
+    const isShelterBuild = params.structure === "shelter";
+    const width = params.width ?? (isShelterBuild ? 5 : 7);
+    const length = params.length ?? (isShelterBuild ? 5 : 7);
+    const height = params.height ?? (isShelterBuild ? 3 : 4);
+    const wallMaterial = resolveItemName(bot, isShelterBuild ? "oak_planks" : (params.material ?? "oak_planks"));
+    const doorMaterial = resolveItemName(bot, "oak_door");
+    let origin = params.origin ? new Vec3(params.origin.x, params.origin.y, params.origin.z) : bot.entity.position.floored();
 
-    if (['walls', 'door', 'door_frame'].includes(params.structure)) {
+    if (["walls", "door", "door_frame", "shelter"].includes(params.structure))
+    {
         const blockAtOrigin = bot.blockAt(origin);
-        if (blockAtOrigin && blockAtOrigin.boundingBox !== 'empty' && blockAtOrigin.name !== 'air') {
+        if (blockAtOrigin && blockAtOrigin.boundingBox !== "empty" && blockAtOrigin.name !== "air")
+        {
             console.log(`[building] Origin ${origin} occupied by ${blockAtOrigin.name}. Shifting Y+1.`);
             origin = origin.offset(0, 1, 0);
         }
     }
 
-    if (params.structure === 'roof') {
+    if (params.structure === "roof")
+    {
         console.log(`[building] Roof origin set to Y=${origin.y}. Ensure this is at the correct height (foundation Y + wall height).`);
     }
 
-    console.log(`[building] Starting ${params.structure} at ${origin} using ${material}`);
+    console.log(`[building] Starting ${params.structure} at ${origin} using ${wallMaterial}`);
 
-    let targets: Vec3[] = [];
+    let targets: BuildTarget[] = [];
     let doorPos: Vec3 | null = null;
 
-    if (params.structure === 'walls' && params.door) {
-        for (let x = 0; x < width; x++) {
-            for (let z = 0; z < length; z++) {
-                if (x === 0 || x === width - 1 || z === 0 || z === length - 1) {
+    if (params.structure === "walls" && params.door)
+    {
+        for (let x = 0; x < width; x++)
+        {
+            for (let z = 0; z < length; z++) 
+            {
+                if (x === 0 || x === width - 1 || z === 0 || z === length - 1)
+                {
                     const checkPos = origin.offset(x, 0, z);
                     const b = bot.blockAt(checkPos);
-                    if (b && b.name.includes("door") && !b.name.includes("trap")) {
+                    if (b && b.name.includes("door") && !b.name.includes("trap"))
+                    {
                         doorPos = checkPos;
                         console.log(`[building] Detected existing door at ${doorPos}, aligning wall gap.`);
                     }
@@ -57,55 +90,81 @@ export async function executeBuild(bot: Bot, params: BuildParams): Promise<void>
             }
         }
         
-        if (!doorPos) {
-            const doorX = Math.floor(width / 2);
-            doorPos = origin.offset(doorX, 0, 0);
+        if (!doorPos)
+        {
+            doorPos = resolveDoorPosition(origin, width);
         }
-    } else if (params.door || params.structure === 'door') {
-        const doorX = Math.floor(width / 2);
-        doorPos = origin.offset(doorX, 0, 0); 
+    }
+    else if (params.door || params.structure === "door")
+    {
+        doorPos = resolveDoorPosition(origin, width);
     }
 
-    switch (params.structure) {
-        case 'platform':
-            targets = generatePlatform(origin, width, length);
+    switch (params.structure)
+    {
+        case "platform":
+            targets = generatePlatform(origin, width, length).map((pos) => ({ pos, material: wallMaterial }));
             break;
-        case 'walls':
-            targets = generateWalls(origin, width, length, height, doorPos);
+        case "walls":
+            targets = generateWalls(origin, width, length, height, doorPos).map((pos) => ({ pos, material: wallMaterial }));
             break;
-        case 'roof':
-            targets = generateRoof(origin, width, length);
+        case "roof":
+            targets = generateRoof(origin, width, length).map((pos) => ({ pos, material: wallMaterial }));
             break;
-        case 'door_frame':
-            targets = generateDoorFrame(origin);
+        case "door_frame":
+            targets = generateDoorFrame(origin).map((pos) => ({ pos, material: wallMaterial }));
             break;
-        case 'door':
-            if (!doorPos) {
-                 const doorX = Math.floor(width / 2);
-                 doorPos = origin.offset(doorX, 0, 0);
+        case "door":
+            if (!doorPos)
+            {
+                doorPos = resolveDoorPosition(origin, width);
             }
-            targets = [doorPos];
+            targets = [{ pos: doorPos, material: doorMaterial }];
+            break;
+        case "shelter":
+            targets = generateShelterTargets(origin, width, length, height, wallMaterial, doorMaterial);
             break;
         default:
             throw new Error(`Unknown structure type: ${params.structure}`);
     }
 
-    await evacuateBuildArea(bot, targets);
-    await requestEntitiesClearArea(bot, targets, origin, width, length);
+    const targetPositions = targets.map((t) => t.pos);
+    await evacuateBuildArea(bot, targetPositions);
+    await requestEntitiesClearArea(bot, targetPositions, origin, width, length);
 
-    const inventoryCount = countInventoryItems(bot, material);
-    const actualNeeded = targets.filter(t => {
-        const b = bot.blockAt(t);
-        return !b || b.boundingBox === 'empty' || (b.name !== material && !b.name.includes(material));
-    }).length;
-
-    if (inventoryCount < actualNeeded) {
-        throw new Error(`Insufficient materials for ${params.structure}. Need ${actualNeeded} ${material}, but only have ${inventoryCount}.`);
+    const neededByMaterial = new Map<string, number>();
+    for (const target of targets)
+    {
+        const existing = bot.blockAt(target.pos);
+        const isDoorPlacement = target.material.includes("door") && !target.material.includes("trapdoor");
+        if (isDoorPlacement)
+        {
+            if (existing && existing.name.includes("door") && !existing.name.includes("trapdoor"))
+            {
+                continue;
+            }
+        }
+        else if (existing && existing.boundingBox !== "empty" && (existing.name === target.material || existing.name.includes(target.material)))
+        {
+            continue;
+        }
+        neededByMaterial.set(target.material, (neededByMaterial.get(target.material) ?? 0) + 1);
     }
 
-    targets.sort((a, b) => {
-        if (a.y !== b.y) return a.y - b.y;
-        return bot.entity.position.distanceTo(a) - bot.entity.position.distanceTo(b);
+    for (const [material, needed] of neededByMaterial.entries())
+    {
+        const inventoryCount = countInventoryItems(bot, material);
+        if (inventoryCount < needed)
+        {
+            throw new Error(`Insufficient materials for ${params.structure}. Need ${needed} ${material}, but only have ${inventoryCount}.`);
+        }
+    }
+
+    targets.sort((a, b) =>
+    {
+        if (a.pos.y !== b.pos.y) return a.pos.y - b.pos.y;
+
+        return bot.entity.position.distanceTo(a.pos) - bot.entity.position.distanceTo(b.pos);
     });
 
     const replaceableBlocks = getReplaceableBlocks();
@@ -113,92 +172,119 @@ export async function executeBuild(bot: Bot, params: BuildParams): Promise<void>
 
     const requestedMoves = new Map<string, number>();
 
-    for (const target of targets) {
-        const obstructer = findNearestEntity(bot, (e) => {
+    for (const targetInfo of targets)
+    {
+        const target = targetInfo.pos;
+        const targetMaterial = targetInfo.material;
+        const isDoorPlacement = targetMaterial.includes("door") && !targetMaterial.includes("trapdoor");
+        const obstructer = findNearestEntity(bot, (e) =>
+        {
             if (!e || !e.position) return false;
+
             const entityPos = e.position.floored();
             return entityPos.equals(target) ||
-                   entityPos.equals(target.offset(0, 1, 0)) ||
-                   (Math.abs(e.position.x - target.x) < 1.5 &&
-                    Math.abs(e.position.z - target.z) < 1.5 &&
-                    Math.abs(e.position.y - target.y) < 2);
+                entityPos.equals(target.offset(0, 1, 0)) ||
+                (Math.abs(e.position.x - target.x) < 1.5 &&
+                Math.abs(e.position.z - target.z) < 1.5 &&
+                Math.abs(e.position.y - target.y) < 2);
         }, 3);
 
-        if (obstructer && obstructer.username && obstructer.username !== bot.username) {
+        if (obstructer && obstructer.username && obstructer.username !== bot.username)
+        {
             const entityKey = obstructer.username;
             const requestCount = requestedMoves.get(entityKey) ?? 0;
 
-            if (requestCount < MAX_MOVE_REQUESTS) {
+            if (requestCount < MAX_MOVE_REQUESTS)
+            {
                 bot.chat(`Hey @${obstructer.username}, you are in my build path at ${target}. Please move!`);
                 requestedMoves.set(entityKey, requestCount + 1);
 
                 console.log(`[building] Waiting for ${obstructer.username} to move from ${target}...`);
                 await new Promise(resolve => setTimeout(resolve, MOVE_REQUEST_WAIT_MS));
 
-                const stillBlocking = findNearestEntity(bot, (e) => {
+                const stillBlocking = findNearestEntity(bot, (e) =>
+                {
                     if (!e || !e.position || e.username !== obstructer.username) return false;
+
                     return Math.abs(e.position.x - target.x) < 1.5 &&
-                           Math.abs(e.position.z - target.z) < 1.5 &&
-                           Math.abs(e.position.y - target.y) < 2;
+                        Math.abs(e.position.z - target.z) < 1.5 &&
+                        Math.abs(e.position.y - target.y) < 2;
                 }, 3);
 
-                if (stillBlocking) {
+                if (stillBlocking)
+                {
                     console.warn(`[building] ${obstructer.username} did not move. Will try to work around them.`);
-                } else {
+                }
+                else
+                {
                     console.log(`[building] ${obstructer.username} moved. Continuing build.`);
                 }
             }
         }
 
         if (bot.entity.position.distanceTo(target) > 4.5) {
-             console.log(`[building] Target ${target} is too far (${bot.entity.position.distanceTo(target).toFixed(1)}m). Moving closer...`);
-             try {
-                 await moveWithMovementPlugin(bot, target, 4.0, 5000);
-             } catch (e) {
-                 console.warn(`[building] Failed to move closer: ${e}`);
-             }
+            console.log(`[building] Target ${target} is too far (${bot.entity.position.distanceTo(target).toFixed(1)}m). Moving closer...`);
+            try
+            {
+                await moveWithMovementPlugin(bot, target, 4.0, 5000);
+            }
+            catch (e)
+            {
+                console.warn(`[building] Failed to move closer: ${e}`);
+            }
         }
 
         if (bot.entity.position.floored().equals(target) ||
             (Math.abs(bot.entity.position.x - target.x) < 1 &&
-             Math.abs(bot.entity.position.z - target.z) < 1 &&
-             Math.abs(bot.entity.position.y - target.y) < 2)) {
-             await evacuateBuildArea(bot, targets);
+                Math.abs(bot.entity.position.z - target.z) < 1 &&
+                Math.abs(bot.entity.position.y - target.y) < 2))
+        {
+            await evacuateBuildArea(bot, targetPositions);
         }
 
         const existing = bot.blockAt(target);
         
-        if (params.structure === 'door') {
-             if (existing && existing.name.includes("door") && !existing.name.includes("trapdoor")) {
-                 console.log(`[building] Door already exists at ${target}`);
-                 continue;
-             }
-        } 
-        else {
-            if (existing && (existing.name === material || existing.name.includes(material))) continue;
+        if (isDoorPlacement)
+        {
+            if (existing && existing.name.includes("door") && !existing.name.includes("trapdoor"))
+            {
+                console.log(`[building] Door already exists at ${target}`);
+                continue;
+            }
+        }
+        else
+        {
+            if (existing && (existing.name === targetMaterial || existing.name.includes(targetMaterial))) continue;
 
-            if (existing && existing.boundingBox !== 'empty') { 
-                 if (!replaceableBlocks.includes(existing.name)) {
-                     console.log(`[building] Skipping occupied block at ${target} (${existing.name})`);
-                     continue;
-                 }
+            if (existing && existing.boundingBox !== "empty")
+            {
+                if (!replaceableBlocks.includes(existing.name))
+                {
+                    console.log(`[building] Skipping occupied block at ${target} (${existing.name})`);
+                    continue;
+                }
             }
         }
         
-        try {
-            const item = requireInventoryItem(bot, material);
-            await bot.equip(item, 'hand');
-        } catch (err) {
-            throw new Error(`Out of building materials: ${material}`);
+        try
+        {
+            const item = requireInventoryItem(bot, targetMaterial);
+            await bot.equip(item, "hand");
+        } 
+        catch (err)
+        {
+            throw new Error(`Out of building materials: ${targetMaterial}`);
         }
 
         const success = await placeBlockAt(bot, target);
-        if (!success) {
+        if (!success)
+        {
             failures++;
         }
     }
     
-    if (failures > 0) {
+    if (failures > 0)
+    {
         const msg = `[building] Finished ${params.structure} but failed to place ${failures} blocks. Structure incomplete.`;
         console.warn(msg);
         throw new Error(msg);
@@ -207,17 +293,20 @@ export async function executeBuild(bot: Bot, params: BuildParams): Promise<void>
     console.log(`[building] Finished ${params.structure}`);
 }
 
-async function handleSingleBlockPlacement(bot: Bot, params: BuildParams): Promise<void> {
+async function handleSingleBlockPlacement(bot: Bot, params: BuildParams): Promise<void>
+{
     console.log("[building] Detected single-block placement (1x1 platform). Switching to smart place mode.");
 
     let itemName = params.material;
     
     const hasPlanks = countInventoryItems(bot, params.material ?? "oak_planks") > 0;
     
-    if (!hasPlanks) {
+    if (!hasPlanks)
+    {
         const utilityBlocks = ["crafting_table", "furnace", "chest"];
         for (const util of utilityBlocks) {
-            if (countInventoryItems(bot, util) > 0) {
+            if (countInventoryItems(bot, util) > 0)
+            {
                 console.log(`[building] Implicit override: No planks found, but found ${util}. Using ${util} instead.`);
                 itemName = util;
                 break;
@@ -226,21 +315,25 @@ async function handleSingleBlockPlacement(bot: Bot, params: BuildParams): Promis
     }
 
     const material = resolveItemName(bot, itemName ?? "oak_planks");
-    const origin = new Vec3(params.origin.x, params.origin.y, params.origin.z);
+    const origin = params.origin ? new Vec3(params.origin.x, params.origin.y, params.origin.z) : bot.entity.position.floored();
 
     console.log(`[building] Single block placement: ${material} at ${origin}`);
     
     await evacuateBuildArea(bot, [origin]);
     
-    try {
+    try
+    {
         const item = requireInventoryItem(bot, material);
-        await bot.equip(item, 'hand');
-    } catch (err) {
+        await bot.equip(item, "hand");
+    }
+    catch (err)
+    {
         throw new Error(`Missing item for placement: ${material}`);
     }
 
     const success = await placeBlockAt(bot, origin);
-    if (!success) {
+    if (!success)
+    {
         throw new Error(`Failed to place ${material} at ${origin}`);
     }
     

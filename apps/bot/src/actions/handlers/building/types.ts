@@ -1,7 +1,7 @@
 import { Vec3 } from "vec3";
 
 export interface BuildParams {
-    structure: 'platform' | 'wall' | 'walls' | 'tower' | 'roof' | 'door_frame' | 'door';
+    structure: 'platform' | 'wall' | 'walls' | 'tower' | 'roof' | 'door_frame' | 'door' | 'shelter';
     origin: { x: number, y: number, z: number };
     material?: string;
     width?: number;

@@ -62,6 +62,16 @@ function estimateBuildMaterialCount(step: ActionStep): number
     if (structure === "platform") return width * length;
     if (structure === "walls" || structure === "wall") return Math.max(1, (width * 2 + length * 2) * height);
     if (structure === "roof") return width * length;
+    if (structure === "shelter") {
+        const shelterWidth = 5;
+        const shelterLength = 5;
+        const shelterHeight = 3;
+        const floor = shelterWidth * shelterLength;
+        const walls = (shelterWidth * 2 + shelterLength * 2) * shelterHeight - 2;
+        const roof = shelterWidth * shelterLength;
+        const door = 1;
+        return floor + walls + roof + door;
+    }
     return Math.max(4, width + length);
 }
 
@@ -82,7 +92,16 @@ function normalizePlanForAutonomy(steps: ActionStep[]): ActionStep[]
 
         if (step.action === "build")
         {
-            addRequired(String(params.material ?? "oak_planks"), estimateBuildMaterialCount(step));
+            const structure = String(params.structure ?? "platform");
+            if (structure === "shelter")
+            {
+                addRequired("oak_planks", estimateBuildMaterialCount(step) - 1);
+                addRequired("oak_door", 1);
+            }
+            else
+            {
+                addRequired(String(params.material ?? "oak_planks"), estimateBuildMaterialCount(step));
+            }
         }
         else if (step.action === "place")
         {
@@ -1059,17 +1078,24 @@ export async function createBot()
                             for (const step of buildSteps)
                             {
                                 const params = (step as any).params ?? {};
-                                const material = params.material ?? "oak_planks";
-                                const width = params.width ?? 5;
-                                const length = params.length ?? 5;
-                                const height = params.height ?? 3;
                                 const structure = params.structure ?? "platform";
+                                const isShelterBuild = structure === "shelter";
+                                const material = isShelterBuild ? "oak_planks" : (params.material ?? "oak_planks");
+                                const width = isShelterBuild ? 7 : (params.width ?? 5);
+                                const length = isShelterBuild ? 7 : (params.length ?? 5);
+                                const height = isShelterBuild ? 4 : (params.height ?? 3);
 
                                 let estimatedNeeded = 0;
                                 if (structure === "platform") estimatedNeeded = width * length;
                                 else if (structure === "walls") estimatedNeeded = (width * 2 + length * 2) * height;
                                 else if (structure === "wall") estimatedNeeded = width * height;
                                 else if (structure === "roof") estimatedNeeded = width * length;
+                                else if (structure === "shelter") {
+                                    const floor = width * length;
+                                    const walls = (width * 2 + length * 2) * height - 2;
+                                    const roof = width * length;
+                                    estimatedNeeded = floor + walls + roof;
+                                }
                                 else estimatedNeeded = 20;
 
                                 const inventoryItems = bot.inventory.items();

@@ -74,7 +74,7 @@ export function buildPlannerPrompt(options: HuggingFacePlannerOptions, request: 
         "CRITICAL RULES:",
         "1. DO NOT emit low-level movement or coordinates. Never use move action and never provide x/y/z unless explicitly required by user.",
         "2. Use only high-level actions (gather, mine, craft, smelt, build, place, loot, etc). Runtime handles movement/pathing/ordering.",
-        "3. Be complete for multi-part builds (include roof, door).",
+        "3. For any house/shelter request, use a single build step with params: { structure: 'shelter' }. Do not split into platform/walls/roof/door.",
         "4. Include params.count with the exact quantity of needed items/blocks (especially for mine, gather, loot, craft, smelt, drop, give).",
         "5. If multiple agents are present (per Context or Perception), return JSON with team_plan and individual_plan fields. team_plan should list shared steps with role assignments, and individual_plan should include intent and steps for this agent plus any chat announcements. If only one agent is present, return intent and steps as usual.",
         "6. Include params.count with the exact quantity of needed items/blocks (especially for mine, gather, loot, craft, smelt, drop, give).",
