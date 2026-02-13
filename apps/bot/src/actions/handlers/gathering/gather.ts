@@ -1,5 +1,4 @@
 import type { Bot } from "mineflayer";
-import type { Block } from "prismarine-block";
 import type { Item } from "prismarine-item";
 import { handleCraft } from "../crafting/craft.js";
 import { handleLoot } from "../looting/loot.js";
@@ -11,23 +10,41 @@ import { listChestMemory } from "../../../perception/chest-memory.js";
 import { moveWithMovementPlugin, findNearestEntity, waitForNextTick } from "../moving/move.js";
 import { resolveItemName, isItemMatch } from "../../utils.js";
 
+const MIN_TIMEOUT_MS = 1000;
+const MIN_RECURSIVE_TIMEOUT_MS = 3000;
+const MAX_PREREQUISITE_DEPTH = 2;
+
+function getCurrentItemCount(bot: Bot, targetItem: string): number
+{
+    return bot.inventory
+        .items()
+        .filter((item) => isItemMatch(item.name, targetItem))
+        .reduce((total, item) => total + item.count, 0);
+}
+
+function getRemainingCount(bot: Bot, targetItem: string, requiredCount: number): number
+{
+    return Math.max(0, requiredCount - getCurrentItemCount(bot, targetItem));
+}
+
 export async function handleGather(bot: Bot, step: { params?: Record<string, unknown> }, resourceLocks?: ResourceLockManager): Promise<void>
 {
     const params = (step.params ?? {}) as unknown as GatherParams;
     const rawTarget = params.item?.toLowerCase();
     const targetItem = resolveItemName(bot, rawTarget ?? "");
-    const timeout = params.timeoutMs ?? 60000;
+    const timeout = Math.max(MIN_TIMEOUT_MS, params.timeoutMs ?? 60000);
     const maxDistance = params.maxDistance ?? 32;
     const requiredCount = Math.max(1, Math.floor(Number(params.count ?? 1)));
+    const prerequisiteDepth = Math.max(0, Math.floor(Number((step.params ?? {}).prerequisiteDepth ?? 0)));
 
     if (!targetItem) throw new Error("Gather requires item name");
 
     console.log(`[gather] Requested "${rawTarget ?? "unknown"}" resolved to "${targetItem}" (timeout=${timeout}ms, maxDistance=${maxDistance})`);
 
-    const existing = bot.inventory.items().find((item) => isItemMatch(item.name, targetItem));
-    if (existing && existing.count >= requiredCount)
+    const existingCount = getCurrentItemCount(bot, targetItem);
+    if (existingCount >= requiredCount)
     {
-        console.log(`[gather] Already have ${existing.name} (${existing.count}) which satisfies "${targetItem}" x${requiredCount}, skipping gather.`);
+        console.log(`[gather] Already have ${targetItem} x${existingCount}, skipping gather.`);
         return;
     }
 
@@ -40,10 +57,10 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
     {
         attempts++;
         
-        const acquired = bot.inventory.items().find((item) => isItemMatch(item.name, targetItem));
-        if (acquired && acquired.count >= requiredCount)
+        const remainingCount = getRemainingCount(bot, targetItem, requiredCount);
+        if (remainingCount <= 0)
         {
-            console.log(`[gather] Successfully gathered ${acquired.name} x${acquired.count}.`);
+            console.log(`[gather] Successfully gathered ${targetItem} x${requiredCount}.`);
             return;
         }
 
@@ -60,7 +77,7 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
             const droppedItem = (dropped as any).getDroppedItem?.();
             console.log(`[gather] Found dropped ${droppedItem?.name ?? "item"} at ${dropped.position.floored()}. Collecting...`);
             await moveWithMovementPlugin(bot, dropped.position, 1, 15000);
-            continue; 
+            continue;
         }
 
         try
@@ -73,17 +90,16 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
             {
                 const chest = chests[0];
                 const chestItem = chest.items?.find((item) => isItemMatch(item.name, targetItem));
-                await handleLoot(bot, { params: { position: chest.position, item: chestItem?.name ?? targetItem, count: requiredCount } }, resourceLocks);
+                await handleLoot(bot, { params: { position: chest.position, item: chestItem?.name ?? targetItem, count: remainingCount } }, resourceLocks);
             }
             else
             {
-                await handleLoot(bot, { params: { maxDistance, item: targetItem, count: requiredCount } }, resourceLocks);
+                await handleLoot(bot, { params: { maxDistance, item: targetItem, count: remainingCount } }, resourceLocks);
             }
 
-            const looted = bot.inventory.items().find((item) => isItemMatch(item.name, targetItem));
-            if (looted && looted.count >= requiredCount)
+            if (getRemainingCount(bot, targetItem, requiredCount) <= 0)
             {
-                console.log(`[gather] Looted ${looted.name} from chest.`);
+                console.log(`[gather] Looted ${targetItem} from chest.`);
                 return;
             }
         }
@@ -96,10 +112,11 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
         {
             try
             {
-                await handleCraft(bot, { params: { recipe: targetItem, count: requiredCount } }, resourceLocks);
-                return;
+                await handleCraft(bot, { params: { recipe: targetItem, count: remainingCount } }, resourceLocks);
+                if (getRemainingCount(bot, targetItem, requiredCount) <= 0) return;
             }
-            catch (err: any) {
+            catch (err: any)
+            {
                 if (attempts % 5 === 0) console.warn(`[gather] Crafting ${targetItem} failed: ${err.message}`);
             }
         }
@@ -110,15 +127,15 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
             const oreItem = targetItem.replace("_ingot", "_ore").replace("raw_", "");
             try
             {
-                await handleSmelt(bot, { params: { item: oreItem, count: requiredCount } }, resourceLocks);
-                const smelted = bot.inventory.items().find((item) => isItemMatch(item.name, targetItem));
-                if (smelted && smelted.count >= requiredCount)
+                await handleSmelt(bot, { params: { item: oreItem, count: remainingCount } }, resourceLocks);
+                if (getRemainingCount(bot, targetItem, requiredCount) <= 0)
                 {
-                    console.log(`[gather] Smelted ${smelted.name}.`);
+                    console.log(`[gather] Smelted ${targetItem}.`);
                     return;
                 }
             }
-            catch (err: any) {
+            catch (err: any)
+            {
                 if (attempts % 5 === 0) console.warn(`[gather] Smelting ${targetItem} failed: ${err.message}`);
             }
         }
@@ -165,31 +182,36 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
         }
 
         const raw = resolveProductToRaw(targetItem);
-        if (raw)
+        if (raw && raw !== targetItem && prerequisiteDepth < MAX_PREREQUISITE_DEPTH)
         {
             try 
             {
                 let quantityToGather = requiredCount;
 
-                if (itemDef) {
+                if (itemDef)
+                {
                     const recipes = bot.registry.recipes[itemDef.id] as any[];
                     const rawId = bot.registry.itemsByName[raw]?.id;
                     
-                    if (rawId && recipes && recipes.length > 0) {
-                        for (const recipe of recipes) {
+                    if (rawId && recipes && recipes.length > 0)
+                    {
+                        for (const recipe of recipes)
+                        {
                             let rawCount = 0;
                             
                             const candidates = [];
                             if (Array.isArray(recipe.ingredients)) candidates.push(...recipe.ingredients);
                             if (Array.isArray(recipe.inShape)) candidates.push(...recipe.inShape.flat());
                             
-                            for (const cand of candidates) {
+                            for (const cand of candidates)
+                            {
                                 if (!cand) continue;
                                 if (cand === rawId) rawCount++;
                                 else if (typeof cand === 'object' && cand.id === rawId) rawCount++;
                             }
                             
-                            if (rawCount > 0) {
+                            if (rawCount > 0)
+                            {
                                 let itemsProduced = 1;
                                 if (typeof recipe.result === 'object' && recipe.result !== null && 'count' in recipe.result) {
                                     itemsProduced = recipe.result.count;
@@ -206,20 +228,39 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
                 }
 
                 const remaining = timeout - (Date.now() - start);
-                if (remaining > 5000) 
+                if (remaining > MIN_RECURSIVE_TIMEOUT_MS)
                 {
+                    const recursiveTimeout = Math.max(
+                        MIN_RECURSIVE_TIMEOUT_MS,
+                        Math.floor(remaining / 2)
+                    );
                     console.log(`[gather] Mining prerequisites for ${targetItem} from ${raw} (need ${quantityToGather})...`);
-                    await handleGather(bot, { params: { item: raw, count: quantityToGather, timeoutMs: remaining / 2, maxDistance } }, resourceLocks);
+                    await handleGather(
+                        bot,
+                        {
+                            params:
+                            {
+                                item: raw,
+                                count: quantityToGather,
+                                timeoutMs: recursiveTimeout,
+                                maxDistance,
+                                prerequisiteDepth: prerequisiteDepth + 1
+                            }
+                        },
+                        resourceLocks
+                    );
                 }
             }
-            catch (err) { 
+            catch (err)
+            { 
                 console.warn(`[gather] Prerequisite gathering failed: ${String(err)}`);
             }
         }
 
         await new Promise(resolve => setTimeout(resolve, 1000));
         
-        if (attempts % 5 === 0) {
+        if (attempts % 5 === 0)
+        {
             console.log(`[gather] Scanning... (Attempt ${attempts})`);
         }
     }

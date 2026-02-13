@@ -1,10 +1,11 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bot } from "mineflayer";
 import { handleGather } from "../../../src/actions/handlers/gathering/gather.js";
 import { handleLoot } from "../../../src/actions/handlers/looting/loot.js";
 import { handleCraft } from "../../../src/actions/handlers/crafting/craft.js";
+import { handleSmelt } from "../../../src/actions/handlers/smelting/smelt.js";
 import { collectBlocks, resolveItemToBlock, resolveProductToRaw } from "../../../src/actions/handlers/mining/mine.js";
-import { moveWithMovementPlugin, findNearestEntity, waitForNextTick } from "../../../src/actions/handlers/moving/move.js";
+import { findNearestEntity, moveWithMovementPlugin, waitForNextTick } from "../../../src/actions/handlers/moving/move.js";
 import { listChestMemory } from "../../../src/perception/chest-memory.js";
 
 vi.mock("../../../src/actions/handlers/looting/loot.js", () => ({
@@ -13,6 +14,10 @@ vi.mock("../../../src/actions/handlers/looting/loot.js", () => ({
 
 vi.mock("../../../src/actions/handlers/crafting/craft.js", () => ({
     handleCraft: vi.fn()
+}));
+
+vi.mock("../../../src/actions/handlers/smelting/smelt.js", () => ({
+    handleSmelt: vi.fn()
 }));
 
 vi.mock("../../../src/actions/handlers/moving/move.js", () => ({
@@ -24,68 +29,60 @@ vi.mock("../../../src/actions/handlers/moving/move.js", () => ({
 vi.mock("../../../src/actions/handlers/mining/mine.js", () => ({
     collectBlocks: vi.fn(),
     resolveItemToBlock: vi.fn(),
-    resolveProductToRaw: vi.fn()
+    resolveProductToRaw: vi.fn(),
+    handleMine: vi.fn()
 }));
 
 vi.mock("../../../src/perception/chest-memory.js", () => ({
     listChestMemory: vi.fn()
 }));
 
-function makeVec3(x: number, y: number, z: number)
+type InventoryItem = { name: string; count: number };
+
+function vec3(x: number, y: number, z: number)
 {
     return {
         x,
         y,
         z,
-        offset(dx: number, dy: number, dz: number)
-        {
-            return makeVec3(x + dx, y + dy, z + dz);
-        },
-        toString()
-        {
-            return `${x},${y},${z}`;
-        },
-        floored() {
-            return makeVec3(Math.floor(x), Math.floor(y), Math.floor(z));
-        },
-        clone() {
-            return makeVec3(x, y, z);
-        }
+        floored: () => vec3(Math.floor(x), Math.floor(y), Math.floor(z)),
+        toString: () => `${x},${y},${z}`
     };
 }
 
-function makeBot(items: Array<{ name: string; count: number }> = [])
+function makeBot(items: InventoryItem[] = []): Bot
 {
-    const position = makeVec3(0, 64, 0);
     return {
         inventory: { items: () => items },
-        entity: { position },
+        entity: { position: vec3(0, 64, 0) },
         registry: {
-            itemsByName: { 
-                oak_log: { id: 1, name: "oak_log" }, 
+            itemsByName: {
+                oak_log: { id: 1, name: "oak_log" },
                 oak_planks: { id: 2, name: "oak_planks" },
-                planks: { id: 2, name: "oak_planks" },
-                cobblestone: { id: 3, name: "cobblestone" }
+                iron_ingot: { id: 3, name: "iron_ingot" },
+                raw_iron: { id: 4, name: "raw_iron" },
+                cobblestone: { id: 5, name: "cobblestone" }
             },
-            blocksByName: { 
-                log: { id: 1 }, 
-                oak_log: { id: 2 },
-                stone: { id: 3 }
+            blocksByName: {
+                oak_log: { id: 21, name: "oak_log" },
+                stone: { id: 22, name: "stone" }
+            },
+            recipes: {
+                2: [
+                    {
+                        ingredients: [{ id: 1 }],
+                        result: { count: 4 }
+                    }
+                ]
             }
         },
         findBlocks: vi.fn().mockReturnValue([]),
-        findBlock: vi.fn().mockReturnValue(null),
-        blockAt: vi.fn(),
-        canDigBlock: vi.fn().mockReturnValue(true),
-        pathfinder: { stop: vi.fn() },
-        recipesFor: vi.fn().mockReturnValue([{ delta: [] }]),
+        blockAt: vi.fn().mockReturnValue(null)
     } as unknown as Bot;
 }
 
-describe("handleGather", () =>
-{
-    beforeEach(() =>
-    {
+describe("handleGather", () => {
+    beforeEach(() => {
         vi.useRealTimers();
         vi.clearAllMocks();
         vi.mocked(resolveItemToBlock).mockReturnValue(null);
@@ -93,94 +90,166 @@ describe("handleGather", () =>
         vi.mocked(waitForNextTick).mockResolvedValue(undefined);
         vi.mocked(listChestMemory).mockReturnValue([]);
         vi.mocked(findNearestEntity).mockReturnValue(null);
-
         vi.mocked(handleLoot).mockResolvedValue(undefined);
         vi.mocked(handleCraft).mockResolvedValue(undefined);
-        vi.mocked(moveWithMovementPlugin).mockResolvedValue(undefined);
+        vi.mocked(handleSmelt).mockResolvedValue(undefined);
+        vi.mocked(moveWithMovementPlugin).mockResolvedValue(true);
         vi.mocked(collectBlocks).mockResolvedValue(false);
     });
 
-    afterEach(() =>
-    {
-        vi.clearAllMocks();
+    afterEach(() => {
         vi.useRealTimers();
+        vi.clearAllMocks();
     });
 
-    it("skips gathering when inventory already satisfies the request", async () =>
-    {
-        const bot = makeBot([{ name: "oak_log", count: 3 }]);
+    it("returns immediately when combined stacks already satisfy the requested count", async () => {
+        const bot = makeBot([
+            { name: "oak_log", count: 1 },
+            { name: "oak_logs", count: 1 }
+        ]);
 
-        await handleGather(bot, { params: { item: "log" } });
+        await handleGather(bot, { params: { item: "log", count: 2 } });
 
         expect(handleLoot).not.toHaveBeenCalled();
+        expect(handleCraft).not.toHaveBeenCalled();
         expect(collectBlocks).not.toHaveBeenCalled();
     });
 
-    it("prioritizes dropped items before mining", async () =>
-    {
-        const items: Array<{ name: string; count: number }> = [];
+    it("collects dropped items first and exits once target count is reached", async () => {
+        const items: InventoryItem[] = [];
         const bot = makeBot(items);
-        const dropPosition = makeVec3(5, 64, 5);
+        const droppedPosition = vec3(4, 64, 2);
 
         vi.mocked(findNearestEntity).mockReturnValue({
             name: "item",
-            position: dropPosition,
+            position: droppedPosition,
             getDroppedItem: () => ({ name: "oak_log" })
         } as any);
 
         vi.mocked(moveWithMovementPlugin).mockImplementation(async () => {
             items.push({ name: "oak_log", count: 1 });
+            // Fix: Must return boolean to match signature
+            return true;
         });
 
-        vi.mocked(resolveItemToBlock).mockReturnValue("oak_log");
+        await handleGather(bot, { params: { item: "log", count: 1, timeoutMs: 2000 } });
 
-        await handleGather(bot, { params: { item: "log", timeoutMs: 1000 } });
-
-        expect(moveWithMovementPlugin).toHaveBeenCalledWith(bot, dropPosition, 1.0, 15000);
-        expect(collectBlocks).not.toHaveBeenCalled(); 
+        expect(moveWithMovementPlugin).toHaveBeenCalledTimes(1);
+        expect(handleLoot).not.toHaveBeenCalled();
+        expect(collectBlocks).not.toHaveBeenCalled();
     });
 
-    it("falls back to mining if no dropped items found", async () =>
-    {
-        const items: Array<{ name: string; count: number }> = [];
+    it("passes only the remaining count to chest looting", async () => {
+        const items: InventoryItem[] = [{ name: "oak_log", count: 1 }];
         const bot = makeBot(items);
-        const blockPosition = makeVec3(3, 64, -1);
-        const targetBlock = { name: "oak_log", position: blockPosition };
 
-        vi.mocked(resolveItemToBlock).mockImplementation((_bot, name) => 
-            name.includes("log") ? "oak_log" : null
-        );
+        vi.mocked(listChestMemory).mockReturnValue([
+            {
+                status: "known",
+                position: vec3(10, 64, 10),
+                items: [{ name: "oak_log", count: 32 }]
+            }
+        ] as any);
 
-        vi.mocked(collectBlocks).mockImplementation(async () =>
-        {
+        vi.mocked(handleLoot).mockImplementation(async () => {
+            items.push({ name: "oak_log", count: 2 });
+        });
+
+        await handleGather(bot, { params: { item: "log", count: 3, timeoutMs: 2000 } });
+
+        const [lootBot, lootStep] = vi.mocked(handleLoot).mock.calls[0];
+        expect(lootBot).toBe(bot);
+        expect(lootStep?.params).toMatchObject({
+            item: "oak_log",
+            count: 2
+        });
+    });
+
+    it("mines when block mapping exists and stops once inventory goal is met", async () => {
+        const items: InventoryItem[] = [];
+        const bot = makeBot(items);
+        const blockPos = vec3(2, 64, 2);
+
+        vi.mocked(resolveItemToBlock).mockReturnValue("oak_log");
+        (bot.findBlocks as any).mockReturnValue([blockPos]);
+        (bot.blockAt as any).mockReturnValue({ name: "oak_log", position: blockPos });
+        vi.mocked(collectBlocks).mockImplementation(async () => {
             items.push({ name: "oak_log", count: 1 });
             return true;
         });
 
-        (bot.findBlocks as any).mockReturnValue([blockPosition]);
-        (bot.blockAt as any).mockReturnValue(targetBlock);
+        await handleGather(bot, { params: { item: "log", count: 1, timeoutMs: 2000 } });
 
-        await handleGather(bot, { params: { item: "log", timeoutMs: 1000 } });
-
-        expect(findNearestEntity).toHaveBeenCalled();
         expect(collectBlocks).toHaveBeenCalledTimes(1);
+        expect(waitForNextTick).toHaveBeenCalledTimes(1);
     });
 
-    it("crafts if mining fails or is not applicable", async () =>
-    {
-        const items = [{ name: "oak_log", count: 2 }];
+    it("crafts with remaining count and exits after crafting succeeds", async () => {
+        const items: InventoryItem[] = [{ name: "oak_planks", count: 1 }];
         const bot = makeBot(items);
 
-        vi.mocked(resolveProductToRaw).mockImplementation((product) =>
-            product.includes("planks") ? "oak_log" : null
-        );
-
         vi.mocked(handleCraft).mockImplementation(async () => {
-            items.push({ name: "oak_planks", count: 4 });
+            items.push({ name: "oak_planks", count: 2 });
         });
 
-        await handleGather(bot, { params: { item: "planks", timeoutMs: 6000 } });
+        await handleGather(bot, { params: { item: "oak_planks", count: 3, timeoutMs: 2000 } });
 
-        expect(handleCraft).toHaveBeenCalledWith(bot, { params: { recipe: "oak_planks", count: 1 } }, undefined);
+        expect(handleCraft).toHaveBeenCalledWith(
+            bot,
+            { params: { recipe: "oak_planks", count: 2 } },
+            undefined
+        );
+    });
+
+    it("smelts ingots with remaining count and exits after success", async () => {
+        const items: InventoryItem[] = [{ name: "iron_ingot", count: 1 }];
+        const bot = makeBot(items);
+
+        vi.mocked(handleSmelt).mockImplementation(async () => {
+            items.push({ name: "iron_ingot", count: 1 });
+        });
+
+        await handleGather(bot, { params: { item: "iron_ingot", count: 2, timeoutMs: 2000 } });
+
+        expect(handleSmelt).toHaveBeenCalledWith(
+            bot,
+            { params: { item: "iron_ore", count: 1 } },
+            undefined
+        );
+    });
+
+    it("gathers prerequisites with bounded recursion depth", async () => {
+        const items: InventoryItem[] = [];
+        const bot = makeBot(items);
+        const blockPos = vec3(1, 64, 1);
+
+        vi.mocked(resolveProductToRaw).mockReturnValue("oak_log");
+        vi.mocked(resolveItemToBlock).mockImplementation((_bot, item) => item === "oak_log" ? "oak_log" : null);
+        (bot.findBlocks as any).mockReturnValue([blockPos]);
+        (bot.blockAt as any).mockReturnValue({ name: "oak_log", position: blockPos });
+        vi.mocked(collectBlocks).mockImplementation(async () => {
+            items.push({ name: "oak_log", count: 1 });
+            return true;
+        });
+        vi.mocked(handleCraft).mockImplementation(async () => {
+            const logCount = items.filter((item) => item.name === "oak_log").reduce((sum, item) => sum + item.count, 0);
+            if (logCount > 0) {
+                items.push({ name: "oak_planks", count: 4 });
+                return;
+            }
+            throw new Error("not enough resources yet");
+        });
+
+        await handleGather(bot, { params: { item: "oak_planks", count: 4, timeoutMs: 6000 } });
+
+        expect(handleCraft).toHaveBeenCalled();
+    });
+
+    it("times out instead of looping forever when nothing is acquirable", async () => {
+        const bot = makeBot([]);
+
+        await expect(
+            handleGather(bot, { params: { item: "cobblestone", count: 1, timeoutMs: 1000 } })
+        ).rejects.toThrow("Gather cobblestone failed: Timeout or not found.");
     });
 });

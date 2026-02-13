@@ -1,12 +1,13 @@
 import { describe, it, expect, vi } from "vitest";
 import { handleDrop, clearInventory, handleGive } from "../../../src/actions/handlers/inventory-management/inventory-management.js";
-import { findNearestEntity } from "../../../src/actions/handlers/moving/move.js";
+import { findNearestEntity, moveWithMovementPlugin } from "../../../src/actions/handlers/moving/move.js";
 import { makeMockBot } from "../../test-helpers.js";
 
 vi.mock("../../../src/actions/handlers/moving/move.js", () => ({
   waitForNextTick: vi.fn().mockResolvedValue(undefined),
   moveToward: vi.fn(),
-  findNearestEntity: vi.fn()
+  findNearestEntity: vi.fn(),
+  moveWithMovementPlugin: vi.fn().mockResolvedValue(undefined)
 }));
 
 describe("actions/handlers/inventory-management.ts", () => {
@@ -53,5 +54,6 @@ describe("actions/handlers/inventory-management.ts", () => {
 
     expect(bot.toss).toHaveBeenCalledWith(9, undefined, 2);
     expect(bot.chat).toHaveBeenCalledWith("[team] Tossed 2 coal to friend");
+    expect(moveWithMovementPlugin).toHaveBeenCalled();
   });
 });
