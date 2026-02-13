@@ -11,19 +11,59 @@ export interface MoveParams { position?: Vec3Input; entityName?: string; range?:
 export async function moveWithMovementPlugin(bot: Bot, target: Vec3, range: number, timeout: number): Promise<boolean>
 {
     const movement = (bot as any).movement;
-    if (!movement) return false;
+    if (!movement && !bot.pathfinder) return false;
+
+    const moveWithinRange = async (): Promise<boolean> =>
+    {
+        const start = Date.now();
+        while (Date.now() - start < timeout)
+        {
+            if (bot.entity.position.distanceTo(target) <= range)
+            {
+                return true;
+            }
+            await waitForNextTick(bot);
+        }
+        return bot.entity.position.distanceTo(target) <= range;
+    };
+
+    const attemptMovementCall = async (result: unknown): Promise<boolean> =>
+    {
+        if (result && typeof (result as PromiseLike<unknown>).then === "function")
+        {
+            await raceWithTimeout(result as Promise<unknown>, timeout);
+            return bot.entity.position.distanceTo(target) <= range;
+        }
+
+        return moveWithinRange();
+    };
 
     try {
-        if (movement.goto) {
-            await raceWithTimeout(movement.goto(target, { range, timeout }), timeout);
-            return true;
+        if (movement?.goto) {
+            const arrived = await attemptMovementCall(movement.goto(target, { range, timeout }));
+            if (arrived) return true;
         }
-        if (movement.moveTo) {
-            await raceWithTimeout(movement.moveTo(target, { range, timeout }), timeout);
-            return true;
+        if (movement?.moveTo) {
+            const arrived = await attemptMovementCall(movement.moveTo(target, { range, timeout }));
+            if (arrived) return true;
         }
     } catch (err) {
         console.warn(`[move] Movement plugin failed (${err instanceof Error ? err.message : String(err)}).`);
+    }
+
+     try
+    {
+        if (!bot.pathfinder) return false;
+        const goal = range <= 1
+            ? new goals.GoalBlock(Math.floor(target.x), Math.floor(target.y), Math.floor(target.z))
+            : new goals.GoalNear(target.x, target.y, target.z, Math.max(1, Math.ceil(range)));
+
+        await raceWithTimeout(bot.pathfinder.goto(goal), timeout);
+        return bot.entity.position.distanceTo(target) <= Math.max(range, 2);
+    }
+    catch (err)
+    {
+        console.warn(`[move] Pathfinder fallback failed (${err instanceof Error ? err.message : String(err)}).`);
     }
 
     return false;

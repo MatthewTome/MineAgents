@@ -48,11 +48,8 @@ Same as `perceive`, just a different name.
 ### move
 Walk to a position or toward an entity.
 ```
-!act move {"position":{"x":5,"y":64,"z":5}}
 !act move {"position":{"x":-117,"y":216,"z":-19}}
 !act move {"position":{"x":-131,"y":223,"z":-10}}
-!act move {"entityName":"player","range":32}
-!act move {"entityName":"cow","range":32}
 ```
 
 ### mine
@@ -64,7 +61,7 @@ Break a specific block.
 !act mine {"block":"iron_ore"}
 !act mine {"block":"coal_ore"}
 !act mine {"block":"cherry_fence"}
-!act move {"position":{"x":-133,"y":223,"z":-13}}
+!act mine {"position":{"x":-132,"y":223,"z":-13}}
 ```
 
 ### gather
@@ -127,8 +124,9 @@ Open a chest and take items.
 Give items to a teammate.
 ```
 !act give {"target":"TeammateName","item":"oak_log","count":4,"method":"drop"}
-!act MineAgent1 give {"target":"MineAgent2","item":"oak_log","count":4,"method":"drop"}
-!act give MineAgent2 {"target":"MineAgent1","item":"oak_log","count":4,"method":"drop"}
+!act id=MineAgent1 give {"target":"Swarles_Barkleyy","item":"oak_log","count":4,"method":"drop"}
+!act id=MineAgent1 give {"target":"MineAgent2","item":"oak_log","count":4,"method":"drop"}
+!act id=MineAgent2 give {"target":"MineAgent1","item":"oak_log","count":4,"method":"drop"}
 !act give {"target":"MineAgent3","item":"oak_log","count":4,"method":"drop"}
 ```
 

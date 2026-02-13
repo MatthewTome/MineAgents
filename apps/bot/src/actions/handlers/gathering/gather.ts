@@ -59,7 +59,7 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
         {
             const droppedItem = (dropped as any).getDroppedItem?.();
             console.log(`[gather] Found dropped ${droppedItem?.name ?? "item"} at ${dropped.position.floored()}. Collecting...`);
-            await moveWithMovementPlugin(bot, dropped.position, 32, 15000);
+            await moveWithMovementPlugin(bot, dropped.position, 1, 15000);
             continue; 
         }
 
@@ -99,7 +99,9 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
                 await handleCraft(bot, { params: { recipe: targetItem, count: requiredCount } }, resourceLocks);
                 return;
             }
-            catch { }
+            catch (err: any) {
+                if (attempts % 5 === 0) console.warn(`[gather] Crafting ${targetItem} failed: ${err.message}`);
+            }
         }
 
         const needsSmelting = targetItem.includes("ingot");
@@ -116,7 +118,9 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
                     return;
                 }
             }
-            catch { }
+            catch (err: any) {
+                if (attempts % 5 === 0) console.warn(`[gather] Smelting ${targetItem} failed: ${err.message}`);
+            }
         }
 
         const blockName = blockTarget;
@@ -165,14 +169,52 @@ export async function handleGather(bot: Bot, step: { params?: Record<string, unk
         {
             try 
             {
+                let quantityToGather = requiredCount;
+
+                if (itemDef) {
+                    const recipes = bot.registry.recipes[itemDef.id] as any[];
+                    const rawId = bot.registry.itemsByName[raw]?.id;
+                    
+                    if (rawId && recipes && recipes.length > 0) {
+                        for (const recipe of recipes) {
+                            let rawCount = 0;
+                            
+                            const candidates = [];
+                            if (Array.isArray(recipe.ingredients)) candidates.push(...recipe.ingredients);
+                            if (Array.isArray(recipe.inShape)) candidates.push(...recipe.inShape.flat());
+                            
+                            for (const cand of candidates) {
+                                if (!cand) continue;
+                                if (cand === rawId) rawCount++;
+                                else if (typeof cand === 'object' && cand.id === rawId) rawCount++;
+                            }
+                            
+                            if (rawCount > 0) {
+                                let itemsProduced = 1;
+                                if (typeof recipe.result === 'object' && recipe.result !== null && 'count' in recipe.result) {
+                                    itemsProduced = recipe.result.count;
+                                } else if (Array.isArray(recipe.result) && recipe.result.length > 1) {
+                                    itemsProduced = recipe.result[1];
+                                }
+                                
+                                const batches = Math.ceil(requiredCount / itemsProduced);
+                                quantityToGather = rawCount * batches;
+                                break; 
+                            }
+                        }
+                    }
+                }
+
                 const remaining = timeout - (Date.now() - start);
                 if (remaining > 5000) 
                 {
-                    console.log(`[gather] Mining prerequisites for ${targetItem} from ${raw}...`);
-                    await handleGather(bot, { params: { item: raw, count: requiredCount, timeoutMs: remaining / 2, maxDistance } }, resourceLocks);
+                    console.log(`[gather] Mining prerequisites for ${targetItem} from ${raw} (need ${quantityToGather})...`);
+                    await handleGather(bot, { params: { item: raw, count: quantityToGather, timeoutMs: remaining / 2, maxDistance } }, resourceLocks);
                 }
             }
-            catch (err) { }
+            catch (err) { 
+                console.warn(`[gather] Prerequisite gathering failed: ${String(err)}`);
+            }
         }
 
         await new Promise(resolve => setTimeout(resolve, 1000));
@@ -206,7 +248,7 @@ export async function handlePickup(bot: Bot, step: { params?: Record<string, unk
     }
 
     console.log(`[pickup] Moving to collect dropped item at ${droppedItem.position}`);
-    await moveWithMovementPlugin(bot, droppedItem.position, 0.5, 15000);
+    await moveWithMovementPlugin(bot, droppedItem.position, 1, 15000);
     await waitForNextTick(bot);
     console.log("[pickup] Item collected");
 }
