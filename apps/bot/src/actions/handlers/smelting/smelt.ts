@@ -108,60 +108,88 @@ export async function handleSmelt(bot: Bot, step: { params?: Record<string, unkn
 
         const amountToSmelt = Math.min(count, input.count);
         
-        try {
+        try 
+        {
             await furnace.putFuel(fuel.type, null, fuel.count);
             await furnace.putInput(input.type, null, amountToSmelt);
-        } catch (err) {
+        } 
+        catch (err) 
+        {
             furnace.close();
             throw new Error(`Failed to put items in furnace: ${err}`);
         }
 
         console.log(`[smelt] Smelting ${amountToSmelt} ${rawItem}...`);
 
-        await new Promise<void>((resolve, reject) => {
-            
-            const onUpdate = async () => {
-                const inputLeft = furnace.inputItem();
-                const fuelLeft = furnace.fuelItem();
+        let smeltComplete = false;
+        let windowOpen = true;
 
-                const output = furnace.outputItem();
-                if (output && output.count > 0) {
-                    try {
-                        await furnace.takeOutput();
-                        console.log(`[smelt] Collected ${output.count} ${output.name}`);
-                    } catch (e) {
-                        console.log("[smelt] Failed to take output (inventory full?)");
-                    }
-                }
-
-                if (!inputLeft) {
-                    cleanup();
-                    resolve();
-                    return;
-                }
-
-                if (!fuelLeft && furnace.fuel === 0 && furnace.progress === 0) {
-                    cleanup();
-                    reject(new Error("Ran out of fuel during smelting"));
-                    return;
-                }
-            };
-
-            const cleanup = () => {
-                furnace.removeListener('update', onUpdate);
-                furnace.removeListener('close', onClose);
-            };
-
-            const onClose = () => {
-                cleanup();
-                resolve();
-            };
-
-            furnace.on('update', onUpdate);
-            furnace.on('close', onClose);
+        furnace.once('close', () => 
+        {
+            windowOpen = false;
         });
 
-        console.log("[smelt] Smelting complete.");
-        furnace.close();
+        while (windowOpen && !smeltComplete) 
+        {
+            const inputLeft = furnace.inputItem();
+            const fuelLeft = furnace.fuelItem();
+            const output = furnace.outputItem();
+
+            if (output && output.count > 0) 
+            {
+                try 
+                {
+                    await furnace.takeOutput();
+                    console.log(`[smelt] Collected ${output.count} ${output.name}`);
+                } 
+                catch (e) 
+                {
+                    console.log("[smelt] Failed to take output (inventory full?)");
+                }
+            }
+
+            if (!inputLeft) 
+            {
+                smeltComplete = true;
+                break;
+            }
+
+            if (!fuelLeft && furnace.fuel === 0 && furnace.progress === 0) 
+            {
+                furnace.close();
+                throw new Error("Ran out of fuel during smelting");
+            }
+
+            await new Promise<void>((resolve) => 
+            {
+                if (!windowOpen) return resolve();
+                
+                const onUpdate = () => { cleanup(); resolve(); };
+                const onClose = () => { cleanup(); resolve(); };
+                
+                const cleanup = () => 
+                {
+                    furnace.removeListener('update', onUpdate);
+                    furnace.removeListener('close', onClose);
+                };
+
+                furnace.on('update', onUpdate);
+                furnace.on('close', onClose);
+            });
+        }
+
+        if (windowOpen) 
+        {
+            furnace.close();
+        }
+        
+        if (smeltComplete) 
+        {
+            console.log("[smelt] Smelting complete.");
+        } 
+        else 
+        {
+            console.log("[smelt] Furnace window closed before completion.");
+        }
     });
 }
