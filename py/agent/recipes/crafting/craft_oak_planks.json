@@ -8,7 +8,7 @@
     {
       "title": "Craft Oak Planks",
       "action": "craft",
-      "details": "Craft 'X' amount of oak_plank from oak_log. (Every log crafts into 4 planks).",
+      "details": "Craft 'X' amount of oak_planks from oak_log. (Every log crafts into 4 planks).",
       "checks": ["Have 'X' oak_plank in inventory"]
     }
   ]

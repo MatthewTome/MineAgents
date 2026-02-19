@@ -123,7 +123,6 @@ export async function main() {
                     "craft",
                     "drop",
                     "equip",
-                    "gather",
                     "give",
                     "loot",
                     "mine",

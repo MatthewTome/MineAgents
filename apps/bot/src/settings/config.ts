@@ -83,7 +83,6 @@ const DEFAULTS = {
             "craft",
             "drop",
             "equip",
-            "gather",
             "give",
             "loot",
             "mine",

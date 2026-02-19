@@ -11,7 +11,7 @@ import { handleLoot } from "./handlers/looting/loot.js";
 import { handlePerceive } from "./handlers/perceiving/perceive.js";
 import { handleDrop, handleEquip, handleGive, clearInventory } from "./handlers/inventory-management/inventory-management.js";
 import { handleRequestResource } from "./handlers/teamwork/teamwork.js";
-import { handleGather, handlePickup } from "./handlers/gathering/gather.js";
+import { handlePickup } from "./handlers/gathering/pickup.js";
 
 export { clearInventory };
 
@@ -42,7 +42,6 @@ export function createDefaultActionHandlers(options?: { resourceLocks?: Resource
         craft: wrap("craft", (bot, step) => handleCraft(bot, step, resourceLocks)),
         drop: wrap("drop", handleDrop),
         equip: wrap("equip", handleEquip),
-        gather: wrap("gather", (bot, step) => handleGather(bot, step, resourceLocks)),
         give: wrap("give", handleGive),
         loot: wrap("loot", (bot, step) => handleLoot(bot, step, resourceLocks)),
         mine: wrap("mine", handleMine),

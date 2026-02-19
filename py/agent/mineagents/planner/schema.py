@@ -131,7 +131,7 @@ def validate_plan(plan: Dict[str, Any]) -> None:
 def allowed_tool_names() -> List[str]:
     return [tool.name for tool in TOOLS]
 
-def example_plan(goal: str = "gather oak wood") -> Dict[str, Any]:
+def example_plan(goal: str = "mine oak wood") -> Dict[str, Any]:
     """Return a minimal, schema-valid example plan."""
 
     return {
@@ -140,7 +140,7 @@ def example_plan(goal: str = "gather oak wood") -> Dict[str, Any]:
         "summary": "Collect nearby oak logs safely and prepare planks",
         "hazard_avoidance": ["lava", "deep_drop"],
         "team_plan": {
-            "summary": "Gather wood and craft planks while staying safe",
+            "summary": "Mine wood and craft planks while staying safe",
             "blueprint": "Shared woodland gathering; avoid hazardous drops.",
             "steps": [
                 {
@@ -243,7 +243,7 @@ def example_plan(goal: str = "gather oak wood") -> Dict[str, Any]:
         ],
         "post_conditions": [
             "Inventory has >=16 oak_planks",
-            "No damage taken during gathering"
+            "No damage taken during wood harvesting"
         ],
         "stop_condition": "Stop early if inventory is full or hostile mob approaches",
         "metadata": {"planner": "Qwen3-VL-2B-Instruct"}

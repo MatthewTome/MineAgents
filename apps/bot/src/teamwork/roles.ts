@@ -17,8 +17,8 @@ const ROLE_DEFINITIONS: Record<AgentRole, RoleDefinition> =
     gatherer: {
         id: "gatherer",
         label: "Gatherer",
-        description: "Always ready to gather supplies and provide them to the team.",
-        planningFocus: "Listen for '[team] X needs Y' resource requests in chat. When a teammate announces they need materials, use the 'give' action to deliver items. Gather resources proactively and maintain inventory buffer. When idle with no goal, enter standby and wait for team requests."
+        description: "Always ready to collect supplies and provide them to the team.",
+        planningFocus: "Listen for '[team] X needs Y' resource requests in chat. When a teammate announces they need materials, use the 'give' action to deliver items. Collect resources proactively and maintain inventory buffer. When idle with no goal, enter standby and wait for team requests."
     },
     builder: {
         id: "builder",

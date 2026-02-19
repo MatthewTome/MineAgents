@@ -18,7 +18,6 @@ This folder contains the bot's action handlers. You can trigger **any action dir
 
 ```
 !act move {"position":{"x":10,"y":64,"z":-5}}
-!act gather {"item":"log"}
 !act craft {"recipe":"wooden_pickaxe","count":1}
 !act build {"structure":"wall","material":"oak_planks","width":5,"height":3}
 ```
@@ -63,19 +62,6 @@ Drop items on the ground.
 ```
 !act drop {"item":"cobblestone","count":16}
 !act drop {"item":"all"}
-```
-
-
-### gather
-Get an item by looting, mining, or picking up drops. (This is a key action for research testing.)
-```
-!act gather {"item":"stick"}
-!act gather {"item":"coal"}
-!act gather {"item":"iron_ingot"}
-!act gather {"item":"wooden_pickaxe"}
-!act gather {"item":"oak_plank"}
-!act gather {"item":"log"}
-!act gather {"item":"iron_ingot","timeoutMs":60000}
 ```
 
 ### give

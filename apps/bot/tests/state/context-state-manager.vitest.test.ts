@@ -8,7 +8,7 @@ describe("ContextStateManager", () =>
         const manager = new ContextStateManager();
         manager.setMainGoal("goal-123");
 
-        const actions = ["scan area", "gather wood", "craft tools", "build shelter", "place torch", "rest"];
+        const actions = ["scan area", "mine wood", "craft tools", "build shelter", "place torch", "rest"];
         for (const action of actions)
         {
             manager.setCurrentAction(action);

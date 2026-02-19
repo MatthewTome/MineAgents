@@ -1,7 +1,7 @@
 {
   "name": "Mine Oak Logs",
   "goal": "Acquire oak logs.",
-  "tags": ["mine", "oak_log", "wood", "iron_tools_pipeline", "build wooden shelter", "gather wood"],
+  "tags": ["mine", "oak_log", "wood", "iron_tools_pipeline", "build wooden shelter", "mine wood"],
   "notes": "Use (params.count) to determine what 'X' item count should be. Verify inventory ensures items are actually picked up.",
   "steps": [
     {

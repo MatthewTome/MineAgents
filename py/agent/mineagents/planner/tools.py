@@ -163,31 +163,6 @@ def make_tools() -> list[ToolSpec]:
             }
         ),
         ToolSpec(
-            name="gather",
-            description="Collect loose items on the ground",
-            args_schema={
-                "type": "object",
-                "required": ["item", "count"],
-                "additionalProperties": False,
-                "properties": {
-                    "item": {"type": "string", "description": "Item name"},
-                    "count": {
-                        "type": "integer",
-                        "minimum": 1
-                    },
-                    "area": {
-                        "type": "object",
-                        "required": ["center", "radius"],
-                        "additionalProperties": False,
-                        "properties": {
-                            "center": PositionSchema,
-                            "radius": {"type": "number", "minimum": 1}
-                        }
-                    }
-                }
-            }
-        ),
-        ToolSpec(
             name="equip",
             description="Equip an item into hand or armor slot",
             args_schema={

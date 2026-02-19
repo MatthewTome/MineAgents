@@ -115,12 +115,12 @@ describe("PlanNarrator", () =>
                 plan: {
                     goal: "secure base",
                     steps: [
-                        { id: "s-1", action: "gather", description: "wood" },
+                        { id: "s-1", action: "mine", description: "wood" },
                         { id: "s-2", action: "craft", description: "planks" },
                         { id: "s-3", action: "build", description: "walls & roof" },
                     ]
                 },
-                expectation: /^gather: wood for secure base \(3 steps\)$/,
+                expectation: /^mine: wood for secure base \(3 steps\)$/,
             },
             {
                 title: "unusual characters stay readable and deduped",

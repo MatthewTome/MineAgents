@@ -33,7 +33,7 @@ def planner_system_prompt() -> str:
         - 7x7 platform = 49 blocks
         - 7x7x4 walls (perimeter only) = ~96 blocks
         - 7x7 roof = 49 blocks
-        - Total for 7x7 shelter ≈ 200 planks (gather ~50 logs, craft into planks)
+        - Total for 7x7 shelter ≈ 200 planks (mine ~50 logs, craft into planks)
 
         Schema (Draft-07):
         {plan_schema_json(indent=2)}

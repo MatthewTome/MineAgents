@@ -128,11 +128,11 @@ function normalizePlanForAutonomy(steps: ActionStep[]): ActionStep[]
         }
     }
 
-    const gatherSteps: ActionStep[] = Array.from(required.entries()).map(([item, count], index) => ({
-        id: `auto-gather-${item}-${index}`,
-        action: "gather",
+    const prerequisiteSteps: ActionStep[] = Array.from(required.entries()).map(([item, count], index) => ({
+        id: `auto-mine-${item}-${index}`,
+        action: "mine",
         params: { item, count },
-        description: `Auto-gather prerequisites: ${count} ${item}`
+        description: `Auto-mine prerequisites: ${count} ${item}`
     }));
 
     const sanitized = filtered.map((step) =>
@@ -145,7 +145,7 @@ function normalizePlanForAutonomy(steps: ActionStep[]): ActionStep[]
         return { ...step, params };
     });
 
-    return [...gatherSteps, ...sanitized];
+    return [...prerequisiteSteps, ...sanitized];
 }
 
 export async function createBot()
@@ -540,14 +540,14 @@ export async function createBot()
                                         {
                                             if (!teamHasItem(roster, mat.material, mat.count))
                                             {
-                                                console.log(`[planner] Team missing ${mat.count} ${mat.material} for crafting ${recipe} - injecting gather step`);
+                                                console.log(`[planner] Team missing ${mat.count} ${mat.material} for crafting ${recipe} - injecting mine step`);
                                                 stepsToInsert.push({
                                                     index: i,
                                                     step: {
-                                                        id: `gather-${mat.material}-${Date.now()}`,
-                                                        action: "gather",
+                                                        id: `mine-${mat.material}-${Date.now()}`,
+                                                        action: "mine",
                                                         params: { item: mat.material },
-                                                        description: `Gather ${mat.material} for crafting ${recipe}`,
+                                                        description: `Mine ${mat.material} for crafting ${recipe}`,
                                                         owner_role: "gatherer"
                                                     }
                                                 });
@@ -564,7 +564,7 @@ export async function createBot()
 
                             if (stepsToInsert.length > 0)
                             {
-                                console.log(`[planner] Injected ${stepsToInsert.length} gather steps for missing materials`);
+                                console.log(`[planner] Injected ${stepsToInsert.length} mine steps for missing materials`);
                                 (resolvedTeamPlan as any).steps = steps;
                             }
 

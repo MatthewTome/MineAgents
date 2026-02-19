@@ -7,7 +7,7 @@ export class GoalFactory
     {
         const lower = description.toLowerCase().trim();
 
-        const gatherMatch = lower.match(/^(?:mine|gather|collect|get|acquire)\s+(\d+)\s+(.+?)(?:s)?$/);
+        const gatherMatch = lower.match(/^(?:mine|collect|get|acquire)\s+(\d+)\s+(.+?)(?:s)?$/);
         if (gatherMatch)
         {
             const count = parseInt(gatherMatch[1], 10);
