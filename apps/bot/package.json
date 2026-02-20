@@ -14,7 +14,8 @@
     "start": "node dist/index.js",
     "test": "vitest",
     "test:watch": "vitest --watch",
-    "coverage": "vitest run --coverage"
+    "coverage": "vitest run --coverage",
+    "eval:llm": "node --import tsx src/research/evaluators/llm-plan-eval.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",

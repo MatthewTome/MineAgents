@@ -38,6 +38,7 @@ export interface TrialSummary {
   actionAttempts?: number;
   planSteps?: number;
   memoryRetrievals?: number;
+  evaluationRun?: boolean;
 }
 
 export interface MetricsResponse {

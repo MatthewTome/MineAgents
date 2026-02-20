@@ -45,6 +45,7 @@ interface TrialSummary {
   actionAttempts?: number;
   planSteps?: number;
   memoryRetrievals?: number;
+  evaluationRun: boolean;
 }
 
 const app = express();
@@ -61,6 +62,7 @@ const io = new Server(server, {
 const port = Number(process.env.DASHBOARD_PORT ?? 4000);
 const logDir = process.env.DASHBOARD_LOG_DIR ?? path.resolve(process.cwd(), "..", "bot", "logs");
 const sessionsRoot = path.join(logDir, "sessions");
+const evaluationSessionsRoot = path.join(logDir, "evaluations", "test-runs");
 const exportsRoot = path.join(logDir, "exports");
 const agentStatuses = new Map<string, AgentStatus>();
 const narrations: NarrationEvent[] = [];
@@ -82,7 +84,8 @@ const TRIAL_EXPORT_COLUMNS: Array<{ key: keyof TrialSummary | "actionSteps"; hea
   { key: "actionSteps", header: "action_steps" },
   { key: "actionAttempts", header: "action_attempts" },
   { key: "planSteps", header: "plan_steps" },
-  { key: "memoryRetrievals", header: "memory_retrievals" }
+  { key: "memoryRetrievals", header: "memory_retrievals" },
+  { key: "evaluationRun", header: "evaluation_run" }
 ];
 
 function ensureExportsDir(): void
@@ -130,8 +133,37 @@ function buildTrialExportRows(trials: TrialSummary[]): Array<Record<string, unkn
     action_steps: trial.actionCount ?? "",
     action_attempts: trial.actionAttempts ?? "",
     plan_steps: trial.planSteps ?? "",
-    memory_retrievals: trial.memoryRetrievals ?? ""
+    memory_retrievals: trial.memoryRetrievals ?? "",
+    evaluation_run: trial.evaluationRun
   }));
+}
+
+function resolveSessionDirectory(sessionPath: string): string
+{
+  const stats = safeStat(sessionPath);
+  if (!stats?.isDirectory())
+  {
+    return "";
+  }
+
+  const nestedSessionLog = path.join(sessionPath, "session.log");
+  if (safeStat(nestedSessionLog)?.isFile())
+  {
+    return sessionPath;
+  }
+
+  const children = fs.readdirSync(sessionPath);
+  for (const child of children)
+  {
+    const candidate = path.join(sessionPath, child);
+    const childSessionLog = path.join(candidate, "session.log");
+    if (safeStat(candidate)?.isDirectory() && safeStat(childSessionLog)?.isFile())
+    {
+      return candidate;
+    }
+  }
+
+  return "";
 }
 
 function exportTrials(format: "csv" | "json", trials: TrialSummary[]): { filePath: string; fileName: string }
@@ -230,6 +262,26 @@ export function discoverSessions(): string[] {
       }
     }
   }
+  return directories;
+}
+
+export function discoverEvaluationSessions(): string[] {
+  const directories: string[] = [];
+  if (!fs.existsSync(evaluationSessionsRoot)) {
+    return directories;
+  }
+
+  const candidates = fs.readdirSync(evaluationSessionsRoot);
+  for (const candidateName of candidates)
+  {
+    const candidatePath = path.join(evaluationSessionsRoot, candidateName);
+    const resolved = resolveSessionDirectory(candidatePath);
+    if (resolved)
+    {
+      directories.push(resolved);
+    }
+  }
+
   return directories;
 }
 
@@ -427,7 +479,9 @@ function handleLogEntry(sessionId: string, name: string, file: string, entry: an
   }
 }
 
-function loadTrials(): TrialSummary[] {
+function loadTrials(options?: { onlyEvaluationRuns?: boolean }): TrialSummary[] {
+  const onlyEvaluationRuns = options?.onlyEvaluationRuns ?? true;
+  const evaluationSessions = new Set(discoverEvaluationSessions().map(session => path.resolve(session)));
   const sessions = discoverSessions();
   const trials: TrialSummary[] = [];
 
@@ -495,6 +549,13 @@ function loadTrials(): TrialSummary[] {
         ? false
         : undefined;
 
+    const normalizedSessionDir = path.resolve(sessionDir);
+    const evaluationRun = evaluationSessions.has(normalizedSessionDir);
+    if (onlyEvaluationRuns && !evaluationRun)
+    {
+      continue;
+    }
+
     trials.push({
       sessionId,
       name,
@@ -510,7 +571,8 @@ function loadTrials(): TrialSummary[] {
       actionCount,
       actionAttempts,
       planSteps,
-      memoryRetrievals
+      memoryRetrievals,
+      evaluationRun
     });
   }
 
@@ -601,7 +663,8 @@ app.get("/trials", (_, res) => {
     res.status(404).json({ message: "Missing Trial Data: sessions directory not found." });
     return;
   }
-  const trials = loadTrials();
+  const includeAll = _.query.includeAll === "1";
+  const trials = loadTrials({ onlyEvaluationRuns: !includeAll });
   if (trials.length === 0) {
     res.status(404).json({ message: "Missing Trial Data: no sessions available." });
     return;
@@ -614,7 +677,8 @@ app.get("/metrics", (_, res) => {
     res.status(404).json({ message: "Missing Trial Data: sessions directory not found." });
     return;
   }
-  const trials = loadTrials();
+  const includeAll = _.query.includeAll === "1";
+  const trials = loadTrials({ onlyEvaluationRuns: !includeAll });
   if (trials.length === 0) {
     res.status(404).json({ message: "Missing Trial Data: no sessions available." });
     return;
@@ -630,7 +694,8 @@ app.get("/exports/trials.csv", (_, res) =>
     res.status(404).json({ message: "Missing Trial Data: sessions directory not found." });
     return;
   }
-  const trials = loadTrials();
+  const includeAll = _.query.includeAll === "1";
+  const trials = loadTrials({ onlyEvaluationRuns: !includeAll });
   if (trials.length === 0)
   {
     res.status(404).json({ message: "Missing Trial Data: no sessions available." });
@@ -647,7 +712,8 @@ app.get("/exports/trials.json", (_, res) =>
     res.status(404).json({ message: "Missing Trial Data: sessions directory not found." });
     return;
   }
-  const trials = loadTrials();
+  const includeAll = _.query.includeAll === "1";
+  const trials = loadTrials({ onlyEvaluationRuns: !includeAll });
   if (trials.length === 0)
   {
     res.status(404).json({ message: "Missing Trial Data: no sessions available." });

@@ -1,0 +1,14 @@
+[
+  {
+    "id": "prompt-wood-shelter",
+    "prompt": "Prompt 1: Build a shelter before night with oak wood.",
+    "expect_good": ["Build a Small Wooden Shelter", "safe_night_ops_checklist", "Make Oak Planks"],
+    "expect_bad": ["smelt_iron_ingots", "Make a set of Iron Tools"]
+  },
+  {
+    "id": "prompt-iron-tools",
+    "prompt": "Prompt 2: Complete the iron tools pipeline and equip all iron tools.",
+    "expect_good": ["finalize_iron_tools_pipeline", "smelt_iron_ingots", "Mine Coal"],
+    "expect_bad": ["safe_night_ops_checklist"]
+  }
+]

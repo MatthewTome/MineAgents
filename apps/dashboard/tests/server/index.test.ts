@@ -2,9 +2,10 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 describe("dashboard server helpers", () => {
   it("round-trips session ids and names", async () => {
+    vi.resetModules();
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dash-"));
     process.env.DASHBOARD_LOG_DIR = dir;
     const { encodeSessionId, decodeSessionId, getSessionName } = await import("../../server/index");
@@ -15,9 +16,26 @@ describe("dashboard server helpers", () => {
     expect(decodeSessionId(encoded)).toBe(sessionDir);
   });
 
+  it("discovers explicitly tagged evaluation runs", async () => {
+    vi.resetModules();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dash-eval-"));
+    process.env.DASHBOARD_LOG_DIR = dir;
+
+    const runA = path.join(dir, "evaluations", "test-runs", "run-a");
+    const runB = path.join(dir, "evaluations", "test-runs", "run-b");
+    fs.mkdirSync(runA, { recursive: true });
+    fs.mkdirSync(path.join(runB, "nested"), { recursive: true });
+    fs.writeFileSync(path.join(runA, "session.log"), "{}\n", "utf-8");
+    fs.writeFileSync(path.join(runB, "nested", "session.log"), "{}\n", "utf-8");
+
+    const { discoverEvaluationSessions } = await import("../../server/index");
+    const sessions = discoverEvaluationSessions();
+    expect(sessions).toHaveLength(2);
+  });
+
   it("parses packets from JSON payloads", async () => {
     const { parsePacket } = await import("../../server/index");
-    expect(parsePacket("{\"type\":\"Plan\",\"data\":{\"intent\":\"test\"}}")?.type).toBe("Plan");
+    expect(parsePacket('{"type":"Plan","data":{"intent":"test"}}')?.type).toBe("Plan");
     expect(parsePacket("Narration text")?.type).toBe("Narration");
     expect(parsePacket(null)).toBeNull();
   });
@@ -38,7 +56,8 @@ describe("dashboard server helpers", () => {
         success: true,
         actionCount: 4,
         actionAttempts: 6,
-        planSteps: 5
+        planSteps: 5,
+        evaluationRun: true
       }
     ] as any);
 

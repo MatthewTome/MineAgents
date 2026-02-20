@@ -11,5 +11,6 @@
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,
 
-    "vitest.enable": true
+    "vitest.enable": true,
+    "python-envs.pythonProjects": []
 }

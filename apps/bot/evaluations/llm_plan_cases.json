@@ -1,0 +1,23 @@
+[
+  {
+    "id": "valid-single-step",
+    "model": "fixture-model",
+    "raw": "{\"intent\":\"Say hello\",\"steps\":[{\"id\":\"s1\",\"action\":\"chat\",\"params\":{\"message\":\"hello\"}}]}",
+    "expectValid": true,
+    "expectedActions": ["chat"]
+  },
+  {
+    "id": "unsupported-action",
+    "model": "fixture-model",
+    "raw": "{\"intent\":\"Fly away\",\"steps\":[{\"id\":\"s1\",\"action\":\"fly\",\"params\":{}}]}",
+    "expectValid": false,
+    "expectedActions": ["fly"]
+  },
+  {
+    "id": "json-with-think",
+    "model": "fixture-model",
+    "raw": "<think>deliberating</think>{\"intent\":\"Gather wood\",\"steps\":[{\"id\":\"s1\",\"action\":\"mine\",\"params\":{\"block\":\"oak_log\",\"count\":8}}]}",
+    "expectValid": true,
+    "expectedActions": ["mine"]
+  }
+]

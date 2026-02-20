@@ -101,8 +101,8 @@ def _parse_recipe(data: Dict, path: Path) -> Recipe:
     if not isinstance(goal, str) or not goal.strip():
         raise RecipeValidationError(f"Invalid recipe {path}: goal must be a non-empty string")
 
-    if not isinstance(steps_raw, list) or not steps_raw:
-        raise RecipeValidationError(f"Invalid recipe {path}: steps must be a non-empty list")
+    if not isinstance(steps_raw, list):
+        raise RecipeValidationError(f"Invalid recipe {path}: steps must be a list")
 
     steps = [_parse_step(step_data, path) for step_data in steps_raw]
 
@@ -154,7 +154,7 @@ def load_recipes_from_dir(directory: Path) -> List[Recipe]:
         raise FileNotFoundError(f"Recipe directory does not exist: {directory}")
 
     recipes: List[Recipe] = []
-    for path in sorted(directory.glob("*.json")):
+    for path in sorted(directory.rglob("*.json")):
         recipes.append(load_recipe_file(path))
     return recipes
 
