@@ -1,0 +1,70 @@
+{
+  "name": "resource_progression_order_of_operations",
+  "goal": "Use this dependency checklist to plan any tool- or weapon-related objective from an empty inventory.",
+  "tags": [
+    "order_of_operations",
+    "dependency_chain",
+    "progression",
+    "generalized",
+    "checklist",
+    "planning",
+    "prerequisites",
+    "craft",
+    "mine",
+    "smelt"
+  ],
+  "required_items": [
+    "A nearby tree or other wood source",
+    "A mineable stone source",
+    "A mineable iron ore source",
+    "Fuel for smelting (coal, charcoal, or equivalent)"
+  ],
+  "notes": "General rule: always satisfy material/tool prerequisites first. If a requested target is missing prerequisites, expand the plan backward until all dependencies can be completed from current inventory and nearby resources.",
+  "steps": [
+    {
+      "title": "Resolve target into prerequisite chain",
+      "action": "perceive",
+      "details": "Identify the requested end item/action, then build a backward dependency chain. Example pattern: target item -> required tier tool -> required smelted materials -> required ore -> required lower tier tool -> required base wood materials.",
+      "checks": [
+        "Dependency chain written before execution",
+        "Each dependency mapped to a supported action"
+      ]
+    },
+    {
+      "title": "Establish base crafting materials",
+      "action": "mine",
+      "details": "Gather wood first. Convert logs into planks and sticks, and craft a crafting table if needed. Ensure enough base materials exist for all intermediate tools, not only the final target.",
+      "checks": [
+        "Have planks and sticks for intermediate and final crafts",
+        "Crafting table available when required"
+      ]
+    },
+    {
+      "title": "Progress tool tiers in order",
+      "action": "craft",
+      "details": "Craft and equip lower-tier tools before attempting higher-tier resources. Generic progression: wooden pickaxe -> stone pickaxe -> iron pickaxe -> diamond mining capability.",
+      "checks": [
+        "Current tool tier can harvest the next required resource",
+        "Tool equipped before mining gated resource"
+      ]
+    },
+    {
+      "title": "Gather ores and smelt before gated crafts",
+      "action": "smelt",
+      "details": "Mine required ore with the correct tool tier, then smelt into ingots/materials before attempting recipes that require processed materials.",
+      "checks": [
+        "All raw ores converted to required processed materials",
+        "Smelting fuel and furnace availability confirmed"
+      ]
+    },
+    {
+      "title": "Craft final target and verify completion",
+      "action": "craft",
+      "details": "After prerequisites are complete, craft the requested final item(s), equip or place as needed, and verify objective completion against the original request.",
+      "checks": [
+        "Final requested item/action completed",
+        "Inventory/equipment verification passed"
+      ]
+    }
+  ]
+}

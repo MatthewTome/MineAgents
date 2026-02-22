@@ -462,3 +462,4 @@ logs
 /extras
 /apps/bot/config/
 apps/bot/src/teamwork/.data/
+results/

@@ -8,7 +8,7 @@
     {
       "title": "Craft Stone Pickaxe",
       "action": "craft",
-      "details": "Using a crafting_table, craft 'X' amount of stone_pickaxe (3 cobblestone + 2 stick per pickaxe) and equip it. (Recommended for pipeline: 1 stone pickaxe).",
+      "details": "Using a crafting_table, craft 'X' amount of stone_pickaxe (3 cobblestone + 2 stick per pickaxe) and equip it.",
       "checks": ["Have stone_pickaxe in inventory"]
     }
   ]

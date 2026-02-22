@@ -8,7 +8,7 @@
     {
       "title": "Check Inventory for needed ingredients",
       "action": "perceive",
-      "details": "Check inventory to confirm you have at least '3 oak_plank' and at least '2 stick'. Craft them if you don't (check other RAG recipes). (Recommended for pipeline: 1 wooden pickaxe).",
+      "details": "Check inventory to confirm you have at least '3 oak_plank' and at least '2 stick'. Craft them if you don't.",
       "checks": ["Inventory check passed"]
     },
     {

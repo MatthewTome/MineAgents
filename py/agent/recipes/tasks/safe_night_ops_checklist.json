@@ -1,0 +1,27 @@
+{
+  "name": "safe_night_ops_checklist",
+  "goal": "Stay safe when operating at night while building or gathering",
+  "tags": ["night", "safety", "shelter", "lighting", "survival"],
+  "required_items": ["wooden_sword or better", "torches"],
+  "steps": [
+    {
+      "title": "Check Time and Threats",
+      "action": "perceive",
+      "details": "If time_of_day is sunset/night, scan nearby hostiles and terrain hazards before committing to long tasks.",
+      "checks": ["No nearby hostile mobs within immediate range"]
+    },
+    {
+      "title": "Secure Temporary Cover",
+      "action": "build",
+      "details": "Place a quick 3-block high wall or enter shelter before continuing collection or crafting.",
+      "checks": ["Agent has protected position"]
+    },
+    {
+      "title": "Maintain Lighting",
+      "action": "place",
+      "details": "Place torches around the active work zone to reduce hostile spawn pressure.",
+      "checks": ["Work zone lit"]
+    }
+  ],
+  "notes": "Use this checklist as a safety preflight when a task spans into nighttime."
+}

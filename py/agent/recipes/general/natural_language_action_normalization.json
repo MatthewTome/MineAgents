@@ -1,0 +1,61 @@
+{
+  "name": "natural_language_action_normalization",
+  "goal": "Translate user phrasing into the bot's supported action verbs and concrete executable intent.",
+  "tags": [
+    "nlp",
+    "normalization",
+    "intent_translation",
+    "generalized",
+    "synonyms",
+    "planner",
+    "actions"
+  ],
+  "notes": "Interpret user language by meaning, not wording. Normalize vague or figurative requests into supported actions (move, mine, craft, smelt, place, perceive, chat). If ambiguous, choose the safest executable interpretation and add a verification step.",
+  "steps": [
+    {
+      "title": "Extract intent and object from user request",
+      "action": "perceive",
+      "details": "Parse what outcome the user wants (navigate, collect, create, modify terrain, communicate, inspect). Separate verbs from target objects/locations.",
+      "checks": [
+        "Primary intent identified",
+        "Target object/location identified"
+      ]
+    },
+    {
+      "title": "Map natural language to canonical action verbs",
+      "action": "perceive",
+      "details": "Use semantic mapping rules: 'scale/climb/reach/go to' -> move. 'gather/collect/harvest/extract' -> mine or pickup depending on source. 'create/make/forge/build weapon/tool' -> craft. 'create underground passage/tunnel' -> mine forward/down by terrain constraints. 'process ore/refine' -> smelt. 'set/deploy/put down' -> place.",
+      "checks": [
+        "Every user verb mapped to at least one supported action",
+        "No unsupported action verbs remain"
+      ]
+    },
+    {
+      "title": "Expand abstract requests into concrete subgoals",
+      "action": "perceive",
+      "details": "Convert broad requests into explicit outcomes and materials. Example: 'create a weapon' -> choose weapon class (default sword if unspecified), then plan prerequisite materials and crafting steps. Example: 'gather resources' -> identify nearby mineable targets and execute mine/pickup loops.",
+      "checks": [
+        "Abstract request converted into concrete result",
+        "Needed materials and dependencies listed"
+      ]
+    },
+    {
+      "title": "Apply dependency-aware planning before execution",
+      "action": "perceive",
+      "details": "Before running mapped actions, ensure prerequisite tool/material dependencies are satisfied using the generalized order-of-operations checklist.",
+      "checks": [
+        "Prerequisite validation completed",
+        "No step requires unavailable tool tier without remediation"
+      ]
+    },
+    {
+      "title": "Execute normalized actions with progress verification",
+      "action": "perceive",
+      "details": "Issue executable actions in sequence and validate after each stage. If action mapping fails to satisfy intent, re-normalize using alternative synonym mapping and continue.",
+      "checks": [
+        "Execution progress confirmed after each stage",
+        "Final outcome matches original user intent"
+      ]
+    }
+  ]
+}

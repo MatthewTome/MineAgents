@@ -42,3 +42,16 @@ def test_sample_query_returns_expected_top_hits() -> None:
     iron_results = library.search("iron tools pipeline", top_k=3)
     assert iron_results
     assert any(r.entry.key == "finalize_iron_tools_pipeline" for r in iron_results)
+
+
+def test_generalized_order_and_normalization_recipes_are_retrievable() -> None:
+    data_dir = ROOT / "recipes"
+    library = RecipeLibrary.from_directory(data_dir)
+
+    order_results = library.search("what order should I follow from wood to diamonds", top_k=5)
+    assert order_results
+    assert any(r.entry.key == "resource_progression_order_of_operations" for r in order_results)
+
+    normalization_results = library.search("scale the wall and create a weapon", top_k=5)
+    assert normalization_results
+    assert any(r.entry.key == "natural_language_action_normalization" for r in normalization_results)
