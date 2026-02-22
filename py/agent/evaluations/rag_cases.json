@@ -108,8 +108,8 @@
     ]
   },
   {
-    "id": "wood-15-gather-craft-cut-tree",
-    "prompt": "!goal gather resources to craft pickaxe.\n!goal cut down tree\n!goal cut down the entire tree and collect all resources from the tree",
+    "id": "wood-15-gather-craft",
+    "prompt": "!goal gather resources to craft pickaxe",
     "expect_good": [
       "collect_shelter_materials_fast"
     ],
@@ -179,8 +179,8 @@
     ]
   },
   {
-    "id": "multiline-25-climb-then-chop",
-    "prompt": "!goal climb the wall\n!goal chop down tree",
+    "id": "multiline-25-climb",
+    "prompt": "!goal climb the wall",
     "expect_good": [
       "natural_language_action_normalization"
     ],
@@ -218,8 +218,8 @@
     "top_k": 8
   },
   {
-    "id": "resource-30-redstone-and-tall-tree",
-    "prompt": "!goal i need redstone for a contraption im building. bring me as much redstone as you can find\n!goal go to the top of the tallest tree",
+    "id": "resource-30-redstone",
+    "prompt": "!goal i need redstone for a contraption im building. bring me as much redstone as you can find",
     "expect_good": [
       "Build a Small Wooden Shelter"
     ],

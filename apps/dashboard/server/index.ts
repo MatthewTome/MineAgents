@@ -481,8 +481,9 @@ function handleLogEntry(sessionId: string, name: string, file: string, entry: an
 
 function loadTrials(options?: { onlyEvaluationRuns?: boolean }): TrialSummary[] {
   const onlyEvaluationRuns = options?.onlyEvaluationRuns ?? true;
-  const evaluationSessions = new Set(discoverEvaluationSessions().map(session => path.resolve(session)));
-  const sessions = discoverSessions();
+  const evalPaths = discoverEvaluationSessions();
+  const evaluationSessions = new Set(evalPaths.map(session => path.resolve(session)));
+  const sessions = Array.from(new Set([...discoverSessions(), ...evalPaths]));
   const trials: TrialSummary[] = [];
 
   for (const sessionDir of sessions) {
