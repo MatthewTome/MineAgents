@@ -1,14 +1,228 @@
 [
   {
-    "id": "prompt-wood-shelter",
-    "prompt": "Prompt 1: Build a shelter before night with oak wood.",
-    "expect_good": ["Build a Small Wooden Shelter", "safe_night_ops_checklist", "Make Oak Planks"],
-    "expect_bad": ["smelt_iron_ingots", "Make a set of Iron Tools"]
+    "id": "wood-01-chop-trees",
+    "prompt": "!goal chop 2 trees",
+    "expect_good": [
+      "collect_shelter_materials_fast"
+    ]
   },
   {
-    "id": "prompt-iron-tools",
-    "prompt": "Prompt 2: Complete the iron tools pipeline and equip all iron tools.",
-    "expect_good": ["finalize_iron_tools_pipeline", "smelt_iron_ingots", "Mine Coal"],
-    "expect_bad": ["safe_night_ops_checklist"]
+    "id": "wood-02-craft-wood-pick",
+    "prompt": "!goal craft a wooden pickaxe",
+    "expect_good": [
+      "Craft Wooden Pickaxe"
+    ]
+  },
+  {
+    "id": "wood-03-place-table-and-craft-pick",
+    "prompt": "!goal place crafting table and craft wooden pickaxe",
+    "expect_good": [
+      "Make a Crafting Table"
+    ],
+    "top_k": 6
+  },
+  {
+    "id": "stone-04-mine-cobblestone",
+    "prompt": "!goal use wooden pickaxe to mine 5 cobblestone",
+    "expect_good": [
+      "Mine Cobblestone"
+    ]
+  },
+  {
+    "id": "stone-05-mine-coal-and-stone",
+    "prompt": "!goal mine 5 coal and 5 stone",
+    "expect_good": [
+      "Make a Stone Pickaxe"
+    ],
+    "top_k": 6
+  },
+  {
+    "id": "stone-06-mine-all-cobble",
+    "prompt": "!goal mine all of the cobblestone",
+    "expect_good": [
+      "Mine Cobblestone"
+    ]
+  },
+  {
+    "id": "stone-07-stone-pickaxe-and-iron",
+    "prompt": "!goal use crafting table to make 2 sticks and then make a stone pickaxe and then mine 5 iron",
+    "expect_good": [
+      "Make a Stone Pickaxe"
+    ],
+    "top_k": 7
+  },
+  {
+    "id": "mixed-08-flowers-hoe-coal",
+    "prompt": "!goal collect 5 flowers, craft a wooden hoe, mine 2 cobblestone, and then mine 3 coal",
+    "expect_good": [
+      "Mine Coal"
+    ],
+    "expect_bad": [
+      "smelt_iron_ingots"
+    ]
+  },
+  {
+    "id": "hoe-09-make-wooden-hoe",
+    "prompt": "!goal make a wooden hoe",
+    "expect_good": [
+      "Craft Wooden Pickaxe"
+    ]
+  },
+  {
+    "id": "hoe-10-craft-wooden-hoe",
+    "prompt": "!goal craft a wooden hoe",
+    "expect_good": [
+      "Craft Wooden Pickaxe"
+    ]
+  },
+  {
+    "id": "hoe-11-sticks-and-hoe",
+    "prompt": "!goal craft 4 sticks and make one wooden hoe",
+    "expect_good": [
+      "Make Sticks"
+    ]
+  },
+  {
+    "id": "hoe-12-inventory-only",
+    "prompt": "!goal don't gather wood use your inventory to craft 4 sticks and make one wooden hoe",
+    "expect_good": [
+      "Make Sticks"
+    ],
+    "expect_bad": [
+      "Mine Oak Logs"
+    ]
+  },
+  {
+    "id": "progression-13-wood-stone-iron-diamond",
+    "prompt": "!goal equip wooden pickaxe, mine 3 cobblestone, craft and equip 1 stone pickaxe, mine 3 iron ore, mine 1 coal, smelt 3 iron bars, craft and equip 1 iron pickaxe, and mine 9 diamond ore",
+    "expect_good": [
+      "Craft Wooden Pickaxe"
+    ],
+    "top_k": 8
+  },
+  {
+    "id": "gold-14-pickaxe-and-lava-safety",
+    "prompt": "!goal gather resources to craft a pickaxe to mine gold and if you come across lava cover it up with a block once you collect your gold build a chest which will require gathering those resources as well",
+    "expect_good": [
+      "Build a Small Wooden Shelter"
+    ]
+  },
+  {
+    "id": "wood-15-gather-craft-cut-tree",
+    "prompt": "!goal gather resources to craft pickaxe.\n!goal cut down tree\n!goal cut down the entire tree and collect all resources from the tree",
+    "expect_good": [
+      "collect_shelter_materials_fast"
+    ],
+    "top_k": 7
+  },
+  {
+    "id": "chest-16-build-and-store",
+    "prompt": "!goal build a chest and place gold axe in chest",
+    "expect_good": [
+      "Make a set of Iron Tools"
+    ]
+  },
+  {
+    "id": "mobility-17-climb-and-safe-landing",
+    "prompt": "!goal scale the wall and jump onto tree and return safely to ground without hurting yourself",
+    "expect_good": [
+      "Make a Crafting Table"
+    ]
+  },
+  {
+    "id": "combat-18-create-weapon",
+    "prompt": "!goal create a weapon and give it to me the player",
+    "expect_good": [
+      "natural_language_action_normalization"
+    ]
+  },
+  {
+    "id": "terrain-19-underground-passage",
+    "prompt": "!goal create an underground passage",
+    "expect_good": [
+      "natural_language_action_normalization"
+    ]
+  },
+  {
+    "id": "diamond-20-make-sword-and-bury",
+    "prompt": "!goal create a diamond sword and then dig a hole in the ground and bury the sword in that hole",
+    "expect_good": [
+      "Make a Crafting Table"
+    ]
+  },
+  {
+    "id": "diamond-21-craft-sword-drop-hole",
+    "prompt": "!goal craft a diamond sword, mine ground and drop sword in hole jump out of hole",
+    "expect_good": [
+      "Make a set of Iron Tools"
+    ]
+  },
+  {
+    "id": "food-22-craft-bread",
+    "prompt": "!goal please craft me a loaf of bread",
+    "expect_good": [
+      "Make a set of Iron Tools"
+    ]
+  },
+  {
+    "id": "wool-23-craft-yellow-wool",
+    "prompt": "!goal craft 3 yellow wool",
+    "expect_good": [
+      "Craft Wooden Pickaxe"
+    ]
+  },
+  {
+    "id": "food-24-craft-cake",
+    "prompt": "!goal craft a cake",
+    "expect_good": [
+      "Make a set of Iron Tools"
+    ]
+  },
+  {
+    "id": "multiline-25-climb-then-chop",
+    "prompt": "!goal climb the wall\n!goal chop down tree",
+    "expect_good": [
+      "natural_language_action_normalization"
+    ],
+    "top_k": 7
+  },
+  {
+    "id": "bed-26-craft-purple-bed",
+    "prompt": "!goal craft a purple bed",
+    "expect_good": [
+      "Make a set of Iron Tools"
+    ]
+  },
+  {
+    "id": "bed-27-loot-purple-wool",
+    "prompt": "!goal loot the purple wool out the chest to craft a purple bed",
+    "expect_good": [
+      "Make a Crafting Table"
+    ],
+    "top_k": 7
+  },
+  {
+    "id": "pipeline-28-gold-helmet-boat-bed",
+    "prompt": "!goal using only the items from your inventory: craft a golden helmet, then an oak boat, then a purple bed",
+    "expect_good": [
+      "Build a Small Wooden Shelter"
+    ],
+    "top_k": 7
+  },
+  {
+    "id": "gear-29-iron-chestplate-diamond-sword",
+    "prompt": "!goal make me a diamond sword and an iron chestplate, you will need to mine 2 diamonds, 2 coal, 5 iron and 1 oak log to convert into sticks for the sword",
+    "expect_good": [
+      "Make Sticks"
+    ],
+    "top_k": 8
+  },
+  {
+    "id": "resource-30-redstone-and-tall-tree",
+    "prompt": "!goal i need redstone for a contraption im building. bring me as much redstone as you can find\n!goal go to the top of the tallest tree",
+    "expect_good": [
+      "Build a Small Wooden Shelter"
+    ],
+    "top_k": 7
   }
 ]
