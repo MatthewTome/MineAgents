@@ -1,23 +1,268 @@
 [
   {
-    "id": "valid-single-step",
+    "id": "shelter-valid-basic-sequence",
     "model": "fixture-model",
-    "raw": "{\"intent\":\"Say hello\",\"steps\":[{\"id\":\"s1\",\"action\":\"chat\",\"params\":{\"message\":\"hello\"}}]}",
+    "raw": "{\"intent\":\"Shelter before nightfall\",\"steps\":[{\"id\":\"s1\",\"action\":\"mine\",\"params\":{\"block\":\"oak_log\",\"count\":12}},{\"id\":\"s2\",\"action\":\"craft\",\"params\":{\"recipe\":\"oak_planks\",\"count\":24}},{\"id\":\"s3\",\"action\":\"build\",\"params\":{\"structure\":\"shelter\",\"material\":\"oak_planks\",\"door\":true}}]}",
     "expectValid": true,
-    "expectedActions": ["chat"]
+    "expectedActions": [
+      "mine",
+      "craft",
+      "build"
+    ]
   },
   {
-    "id": "unsupported-action",
+    "id": "shelter-valid-with-thinking-tags",
     "model": "fixture-model",
-    "raw": "{\"intent\":\"Fly away\",\"steps\":[{\"id\":\"s1\",\"action\":\"fly\",\"params\":{}}]}",
+    "raw": "<think>prioritize safety before sunset</think>{\"intent\":\"Secure temporary shelter\",\"steps\":[{\"id\":\"s1\",\"action\":\"perceive\",\"params\":{\"check\":\"time_of_day\"}},{\"id\":\"s2\",\"action\":\"build\",\"params\":{\"structure\":\"shelter\",\"material\":\"dirt\"}}]}",
+    "expectValid": true,
+    "expectedActions": [
+      "perceive",
+      "build"
+    ]
+  },
+  {
+    "id": "shelter-valid-fenced-json",
+    "model": "fixture-model",
+    "raw": "```json\n{\"intent\":\"Emergency dusk shelter\",\"steps\":[{\"id\":\"s1\",\"action\":\"build\",\"params\":{\"structure\":\"wall\",\"material\":\"cobblestone\",\"height\":2}},{\"id\":\"s2\",\"action\":\"place\",\"params\":{\"item\":\"torch\"}}]}\n```",
+    "expectValid": true,
+    "expectedActions": [
+      "build",
+      "place"
+    ]
+  },
+  {
+    "id": "shelter-invalid-unsupported-action-flee",
+    "model": "fixture-model",
+    "raw": "{\"intent\":\"Escape mobs\",\"steps\":[{\"id\":\"s1\",\"action\":\"flee\",\"params\":{\"direction\":\"north\"}}]}",
     "expectValid": false,
-    "expectedActions": ["fly"]
+    "expectedActions": [
+      "flee"
+    ]
   },
   {
-    "id": "json-with-think",
+    "id": "shelter-invalid-missing-steps",
     "model": "fixture-model",
-    "raw": "<think>deliberating</think>{\"intent\":\"Gather wood\",\"steps\":[{\"id\":\"s1\",\"action\":\"mine\",\"params\":{\"block\":\"oak_log\",\"count\":8}}]}",
+    "raw": "{\"intent\":\"Build shelter now\"}",
+    "expectValid": false,
+    "expectedActions": []
+  },
+  {
+    "id": "shelter-invalid-plain-text",
+    "model": "fixture-model",
+    "raw": "Gather logs and build a house before dark.",
+    "expectValid": false,
+    "expectedActions": []
+  },
+  {
+    "id": "iron-valid-end-to-end-tools",
+    "model": "fixture-model",
+    "raw": "{\"intent\":\"Complete iron tools pipeline\",\"steps\":[{\"id\":\"s1\",\"action\":\"mine\",\"params\":{\"block\":\"stone\",\"count\":20}},{\"id\":\"s2\",\"action\":\"craft\",\"params\":{\"recipe\":\"stone_pickaxe\",\"count\":1}},{\"id\":\"s3\",\"action\":\"mine\",\"params\":{\"block\":\"iron_ore\",\"count\":12}},{\"id\":\"s4\",\"action\":\"smelt\",\"params\":{\"item\":\"iron_ingot\",\"count\":12}},{\"id\":\"s5\",\"action\":\"craft\",\"params\":{\"recipe\":\"iron_pickaxe\",\"count\":1}},{\"id\":\"s6\",\"action\":\"craft\",\"params\":{\"recipe\":\"iron_axe\",\"count\":1}},{\"id\":\"s7\",\"action\":\"craft\",\"params\":{\"recipe\":\"iron_shovel\",\"count\":1}}]}",
     "expectValid": true,
-    "expectedActions": ["mine"]
+    "expectedActions": [
+      "mine",
+      "craft",
+      "smelt"
+    ]
+  },
+  {
+    "id": "iron-valid-trailing-commas-repaired",
+    "model": "fixture-model",
+    "raw": "{\"intent\":\"Repairable iron plan\",\"steps\":[{\"id\":\"s1\",\"action\":\"mine\",\"params\":{\"block\":\"iron_ore\",\"count\":8,}},],}",
+    "expectValid": true,
+    "expectedActions": [
+      "mine"
+    ]
+  },
+  {
+    "id": "iron-valid-unquoted-keys-repaired",
+    "model": "fixture-model",
+    "raw": "{intent:\"Iron progression\",steps:[{\"id\":\"s1\",\"action\":\"mine\",\"params\":{\"block\":\"iron_ore\",\"count\":6}},{\"id\":\"s2\",\"action\":\"smelt\",\"params\":{\"item\":\"iron_ingot\",\"count\":6}}]}",
+    "expectValid": true,
+    "expectedActions": [
+      "mine",
+      "smelt"
+    ]
+  },
+  {
+    "id": "iron-invalid-unsupported-action-enchant",
+    "model": "fixture-model",
+    "raw": "{\"intent\":\"Upgrade tools\",\"steps\":[{\"id\":\"s1\",\"action\":\"enchant\",\"params\":{\"item\":\"iron_pickaxe\"}}]}",
+    "expectValid": false,
+    "expectedActions": [
+      "enchant"
+    ]
+  },
+  {
+    "id": "iron-invalid-null-steps",
+    "model": "fixture-model",
+    "raw": "{\"intent\":\"iron tools\",\"steps\":null}",
+    "expectValid": false,
+    "expectedActions": []
+  },
+  {
+    "id": "iron-valid-unclosed-json-repaired",
+    "model": "fixture-model",
+    "raw": "{\"intent\":\"iron tools\",\"steps\":[{\"id\":\"s1\",\"action\":\"mine\",\"params\":{\"block\":\"iron_ore\",\"count\":6}}",
+    "expectValid": true,
+    "expectedActions": []
+  },
+  {
+    "id": "coordination-valid-team-plus-individual",
+    "model": "fixture-model",
+    "raw": "{\"team_plan\":{\"intent\":\"Split labor for shelter\",\"assignments\":[{\"agent\":\"miner\",\"task\":\"collect cobblestone\"},{\"agent\":\"builder\",\"task\":\"assemble walls\"}]},\"individual_plan\":{\"intent\":\"Builder executes shelter shell\",\"steps\":[{\"id\":\"s1\",\"action\":\"build\",\"params\":{\"structure\":\"walls\",\"material\":\"cobblestone\",\"height\":3}},{\"id\":\"s2\",\"action\":\"place\",\"params\":{\"item\":\"oak_door\"}}],\"claimed_step_ids\":[\"wall-a\",\"wall-b\"]}}",
+    "expectValid": true,
+    "expectedActions": [
+      "build",
+      "place"
+    ]
+  },
+  {
+    "id": "coordination-valid-team-only-fallback-chat",
+    "model": "fixture-model",
+    "raw": "{\"team_plan\":{\"intent\":\"Team craft iron set\",\"assignments\":[{\"agent\":\"smelter\",\"task\":\"produce ingots\"}]}}",
+    "expectValid": true,
+    "expectedActions": [
+      "chat"
+    ]
+  },
+  {
+    "id": "coordination-invalid-unsupported-action-broadcast",
+    "model": "fixture-model",
+    "raw": "{\"intent\":\"Coordinate rapidly\",\"steps\":[{\"id\":\"s1\",\"action\":\"broadcast\",\"params\":{\"message\":\"share status\"}}]}",
+    "expectValid": false,
+    "expectedActions": [
+      "broadcast"
+    ]
+  },
+  {
+    "id": "coordination-valid-resource-request",
+    "model": "fixture-model",
+    "raw": "{\"intent\":\"Request support for furnace fuel\",\"steps\":[{\"id\":\"s1\",\"action\":\"requestResource\",\"params\":{\"item\":\"coal\",\"count\":8,\"urgent\":true}},{\"id\":\"s2\",\"action\":\"chat\",\"params\":{\"message\":\"Need coal now for iron smelting.\"}}]}",
+    "expectValid": true,
+    "expectedActions": [
+      "requestResource",
+      "chat"
+    ]
+  },
+  {
+    "id": "coordination-valid-give-and-loot",
+    "model": "fixture-model",
+    "raw": "{\"intent\":\"Transfer and fetch resources\",\"steps\":[{\"id\":\"s1\",\"action\":\"give\",\"params\":{\"target\":\"builder\",\"item\":\"cobblestone\",\"count\":32,\"method\":\"drop\"}},{\"id\":\"s2\",\"action\":\"loot\",\"params\":{\"item\":\"stick\",\"count\":8}}]}",
+    "expectValid": true,
+    "expectedActions": [
+      "give",
+      "loot"
+    ]
+  },
+  {
+    "id": "memory-valid-contextual-perceive",
+    "model": "fixture-model",
+    "raw": "{\"intent\":\"Use memory to verify remaining needs\",\"steps\":[{\"id\":\"s1\",\"action\":\"perceive\",\"params\":{\"check\":\"inventory_for_shelter_materials\"}},{\"id\":\"s2\",\"action\":\"analyzeInventory\",\"params\":{\"check\":\"iron_ingot_shortfall\"}}]}",
+    "expectValid": true,
+    "expectedActions": [
+      "perceive",
+      "analyzeInventory"
+    ]
+  },
+  {
+    "id": "memory-valid-preamble-before-json",
+    "model": "fixture-model",
+    "raw": "Based on retrieved notes, prioritize tool progression. {\"intent\":\"Memory-informed iron plan\",\"steps\":[{\"id\":\"s1\",\"action\":\"mine\",\"params\":{\"block\":\"coal_ore\",\"count\":8}},{\"id\":\"s2\",\"action\":\"smelt\",\"params\":{\"item\":\"iron_ingot\",\"fuel\":\"coal\",\"count\":8}}]}",
+    "expectValid": true,
+    "expectedActions": [
+      "mine",
+      "smelt"
+    ]
+  },
+  {
+    "id": "memory-invalid-step-as-string",
+    "model": "fixture-model",
+    "raw": "{\"intent\":\"Use memory and execute\",\"steps\":[\"mine iron ore\"]}",
+    "expectValid": false,
+    "expectedActions": []
+  },
+  {
+    "id": "memory-invalid-unknown-action-recallMemory",
+    "model": "fixture-model",
+    "raw": "{\"intent\":\"Recall prior successful route\",\"steps\":[{\"id\":\"s1\",\"action\":\"recallMemory\",\"params\":{\"topic\":\"cave_route\"}}]}",
+    "expectValid": false,
+    "expectedActions": [
+      "recallMemory"
+    ]
+  },
+  {
+    "id": "safety-valid-non-harmful-plan",
+    "model": "fixture-model",
+    "raw": "{\"intent\":\"Stay safe at night\",\"steps\":[{\"id\":\"s1\",\"action\":\"build\",\"params\":{\"structure\":\"shelter\",\"material\":\"cobblestone\"}},{\"id\":\"s2\",\"action\":\"chat\",\"params\":{\"message\":\"Shelter secured before hostile spawn escalation.\"}}]}",
+    "expectValid": true,
+    "expectedActions": [
+      "build",
+      "chat"
+    ]
+  },
+  {
+    "id": "safety-valid-with-extra-fields",
+    "model": "fixture-model",
+    "raw": "{\"intent\":\"Compliant safe execution\",\"risk_level\":\"low\",\"steps\":[{\"id\":\"s1\",\"action\":\"pickup\",\"params\":{\"item\":\"dropped_iron_ingot\"},\"confidence\":0.92}]}",
+    "expectValid": true,
+    "expectedActions": [
+      "pickup"
+    ]
+  },
+  {
+    "id": "safety-invalid-unsupported-action-attackPlayer",
+    "model": "fixture-model",
+    "raw": "{\"intent\":\"Forcefully steal resources\",\"steps\":[{\"id\":\"s1\",\"action\":\"attackPlayer\",\"params\":{\"target\":\"teammate\"}}]}",
+    "expectValid": false,
+    "expectedActions": [
+      "attackPlayer"
+    ]
+  },
+  {
+    "id": "safety-invalid-empty-object",
+    "model": "fixture-model",
+    "raw": "{}",
+    "expectValid": false,
+    "expectedActions": []
+  },
+  {
+    "id": "format-invalid-array-generated-text-wrapper",
+    "model": "fixture-model",
+    "raw": "[{\"generated_text\":\"{\\\"intent\\\":\\\"Array wrapper output\\\",\\\"steps\\\":[{\\\"id\\\":\\\"s1\\\",\\\"action\\\":\\\"chat\\\",\\\"params\\\":{\\\"message\\\":\\\"ready\\\"}}]}\"}]",
+    "expectValid": false,
+    "expectedActions": []
+  },
+  {
+    "id": "format-invalid-object-generated-text-wrapper",
+    "model": "fixture-model",
+    "raw": "{\"generated_text\":\"{\\\"intent\\\":\\\"Object wrapper output\\\",\\\"steps\\\":[{\\\"id\\\":\\\"s1\\\",\\\"action\\\":\\\"equip\\\",\\\"params\\\":{\\\"item\\\":\\\"stone_pickaxe\\\",\\\"destination\\\":\\\"hand\\\"}}]}\"}",
+    "expectValid": false,
+    "expectedActions": []
+  },
+  {
+    "id": "format-valid-commented-json-repaired",
+    "model": "fixture-model",
+    "raw": "{\n// prioritize completion speed\n\"intent\":\"Fast benchmark completion\",\n\"steps\":[{\"id\":\"s1\",\"action\":\"mine\",\"params\":{\"block\":\"coal_ore\",\"count\":5}}]\n}",
+    "expectValid": true,
+    "expectedActions": [
+      "mine"
+    ]
+  },
+  {
+    "id": "format-invalid-no-json-anywhere",
+    "model": "fixture-model",
+    "raw": "Intent: gather resources. Step: do whatever is needed.",
+    "expectValid": false,
+    "expectedActions": []
+  },
+  {
+    "id": "research-valid-hypothesis-aware-metrics-chat",
+    "model": "fixture-model",
+    "raw": "{\"intent\":\"Run benchmark with research instrumentation\",\"steps\":[{\"id\":\"s1\",\"action\":\"chat\",\"params\":{\"message\":\"Tracking success rate and time-to-completion for shelter and iron pipeline.\"}},{\"id\":\"s2\",\"action\":\"perceive\",\"params\":{\"check\":\"current_goal_progress\"}}]}",
+    "expectValid": true,
+    "expectedActions": [
+      "chat",
+      "perceive"
+    ]
   }
 ]
