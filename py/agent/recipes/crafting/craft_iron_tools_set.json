@@ -1,33 +1,20 @@
 {
-  "name": "Make a set of Iron Tools",
-  "goal": "Craft a full set of iron tools",
-  "tags": ["craft", "iron_tools", "pickaxe", "sword", "axe", "shovel", "iron_tools_pipeline"],
-  "required_items": ["9 iron_ingot", "7 stick", "crafting_table"],
+  "name": "Make a Iron Pickaxe",
+  "goal": "Craft a Iron Pickaxe",
+  "tags": ["craft", "iron_tools", "iron pickaxe", "pickaxe", "iron_tools_pipeline"],
+  "required_items": ["3 iron_ingot", "2 stick", "crafting_table"],
   "notes": "Use (params.count) to determine what 'X' item count should be.",
   "steps": [
     {
+      "title": "Gather Materials (if needed)",
+      "action": "mine",
+      "details": "Collect 1 oak_log "
+    },
+    {
       "title": "Craft Iron Pickaxe",
       "action": "craft",
-      "details": "Using a crafting_table, craft 'X' amount of iron_pickaxe (3 iron_ingot + 2 stick per pickaxe). (Recommended for pipeline: 1 iron pickaxe).",
+      "details": "Using a crafting_table, craft 'X' amount of iron_pickaxe (3 iron_ingot + 2 stick per pickaxe).",
       "checks": ["Have iron_pickaxe in inventory"]
-    },
-    {
-      "title": "Craft Iron Sword",
-      "action": "craft",
-      "details": "Using a crafting_table, craft 'X' amount of iron_sword (2 iron_ingot + 1 stick per sword). (Recommended for pipeline: 1 iron sword).",
-      "checks": ["Have iron_sword in inventory"]
-    },
-    {
-      "title": "Craft Iron Axe",
-      "action": "craft",
-      "details": "Using a crafting_table, craft 'X' amount of iron_axe (3 iron_ingot + 2 stick per axe). (Recommended for pipeline: 1 iron axe).",
-      "checks": ["Have iron_axe in inventory"]
-    },
-    {
-      "title": "Craft Iron Shovel",
-      "action": "craft",
-      "details": "Using a crafting_table, craft 'X' amount of iron_shovel (1 iron_ingot + 2 stick per shovel). (Recommended for pipeline: 1 iron shovel).",
-      "checks": ["Have iron_shovel in inventory"]
     }
   ]
 }

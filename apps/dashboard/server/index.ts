@@ -544,11 +544,7 @@ function loadTrials(options?: { onlyEvaluationRuns?: boolean }): TrialSummary[] 
         return Math.max(max, steps);
       }, 0);
 
-    const success = sessionLog.some(entry => entry.event === "planner.execution.complete")
-      ? true
-      : sessionLog.some(entry => entry.event === "planner.execution.failed")
-        ? false
-        : undefined;
+    const success = determineTrialSuccess(sessionLog);
 
     const normalizedSessionDir = path.resolve(sessionDir);
     const evaluationRun = evaluationSessions.has(normalizedSessionDir);
@@ -578,6 +574,29 @@ function loadTrials(options?: { onlyEvaluationRuns?: boolean }): TrialSummary[] 
   }
 
   return trials.sort((a, b) => (b.startedAt ?? "").localeCompare(a.startedAt ?? ""));
+}
+
+export function determineTrialSuccess(sessionLog: any[]): boolean | undefined {
+  const latestGoalUpdate = [...sessionLog]
+    .reverse()
+    .find(entry => entry.event === "goal.update" && (entry.data?.status === "pass" || entry.data?.status === "fail"));
+
+  if (latestGoalUpdate)
+  {
+    return latestGoalUpdate.data.status === "pass";
+  }
+
+  if (sessionLog.some(entry => entry.event === "planner.execution.complete"))
+  {
+    return true;
+  }
+
+  if (sessionLog.some(entry => entry.event === "planner.execution.failed"))
+  {
+    return false;
+  }
+
+  return undefined;
 }
 
 export function computeBoxPlot(values: number[]): { min: number; q1: number; median: number; q3: number; max: number } {

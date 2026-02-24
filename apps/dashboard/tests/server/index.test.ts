@@ -66,4 +66,19 @@ describe("dashboard server helpers", () => {
     expect(metrics.conditions.baseline.averagePlanSteps).toBe(5);
     expect(computeBoxPlot([1, 2, 3]).median).toBe(2);
   });
+
+  it("prefers goal.update pass/fail as trial success source", async () => {
+    const { determineTrialSuccess } = await import("../../server/index");
+
+    expect(determineTrialSuccess([
+      { event: "planner.execution.complete" },
+      { event: "goal.update", data: { status: "fail" } }
+    ])).toBe(false);
+
+    expect(determineTrialSuccess([
+      { event: "planner.execution.failed" },
+      { event: "goal.update", data: { status: "pass" } }
+    ])).toBe(true);
+  });
+  
 });

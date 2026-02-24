@@ -24,6 +24,7 @@ import { goalNeedsBuildSite, scoutBuildSite } from "./actions/handlers/building/
 import { SafetyRails } from "./safety/safety-rails.js";
 import { RecipeLibrary } from "./planner/knowledge.js";
 import { GoalTracker, GoalDefinition, GoalFactory } from "./research/goals/index.js";
+import { classifyCurriculumGoal, evaluateCurriculumGoalSuccess } from "./research/evaluators/curriculum-goal-evaluator.js";
 import { RoleManager, resolveRole, listRoleNames, type AgentRole } from "./teamwork/roles.js";
 import { StandbyManager } from "./teamwork/standby-manager.js";
 import { ResourceLockManager, resolveLeaderForGoal } from "./teamwork/coordination.js";
@@ -155,50 +156,6 @@ function normalizePlanForAutonomy(steps: ActionStep[], inventoryItems: { name: s
     });
 
     return [...prerequisiteSteps, ...sanitized];
-}
-
-function isResearchBenchmarkGoal(goalName: string): boolean
-{
-    const normalizedGoal = goalName.toLowerCase();
-    return normalizedGoal.includes("shelter before nightfall") || normalizedGoal.includes("iron tools pipeline");
-}
-
-function evaluateResearchGoalThirdParty(goalName: string, steps: ActionStep[], results: { id: string; status: string }[], inventoryItems: { name: string; count: number }[]): boolean
-{
-    return isResearchGoalFactCheckedSuccess(goalName, steps, results, inventoryItems);
-}
-function getInventoryCountByName(items: { name: string; count: number }[], itemName: string): number
-{
-    const normalized = itemName.toLowerCase();
-    return items
-        .filter((item) => item.name.toLowerCase() === normalized)
-        .reduce((acc, item) => acc + item.count, 0);
-}
-
-function isResearchGoalFactCheckedSuccess(goalName: string, steps: ActionStep[], results: { id: string; status: string }[], inventoryItems: { name: string; count: number }[]): boolean
-{
-    const normalizedGoal = goalName.toLowerCase();
-
-    const isShelterGoal = normalizedGoal.includes("wooden shelter") || normalizedGoal.includes("shelter before nightfall");
-    if (isShelterGoal)
-    {
-        const shelterStepIds = new Set(
-            steps
-                .filter((step) => step.action === "build" && String((step.params ?? {}).structure ?? "") === "shelter")
-                .map((step) => step.id)
-        );
-
-        return results.some((result) => result.status === "success" && shelterStepIds.has(result.id));
-    }
-
-    const isIronPipelineGoal = normalizedGoal.includes("iron tools pipeline");
-    if (isIronPipelineGoal)
-    {
-        const requiredTools = ["iron_pickaxe", "iron_shovel", "iron_sword", "iron_axe"];
-        return requiredTools.every((tool) => getInventoryCountByName(inventoryItems, tool) >= 1);
-    }
-
-    return false;
 }
 
 export async function createBot()
@@ -1209,11 +1166,12 @@ export async function createBot()
                         const succeeded = results.filter(r => r.status === "success").map(r => r.id);
                         const failedIds = results.filter(r => r.status === "failed").map(r => r.id);
                         const postExecutionInventory = bot.inventory.items().map((item) => ({ name: item.name, count: item.count }));
-                        const benchmarkGoal = isResearchBenchmarkGoal(contextName);
-                        const ultimateGoalAchieved = isResearchGoalFactCheckedSuccess(contextName, plan.steps, results, postExecutionInventory);
-                        const thirdPartyVerifiedSuccess = benchmarkGoal
-                            ? evaluateResearchGoalThirdParty(contextName, plan.steps, results, postExecutionInventory)
+                        const curriculumGoal = classifyCurriculumGoal(contextName);
+                        const benchmarkGoal = curriculumGoal !== null;
+                        const ultimateGoalAchieved = benchmarkGoal
+                            ? evaluateCurriculumGoalSuccess(contextName, plan.steps, results, postExecutionInventory)
                             : false;
+                        const thirdPartyVerifiedSuccess = ultimateGoalAchieved;
 
                         if (benchmarkGoal)
                         {
@@ -1317,7 +1275,8 @@ export async function createBot()
                                 if (!benchmarkGoal || thirdPartyVerifiedSuccess)
                                 {
                                     safeChat(bot, safety, "I'm done with the plan!", "planner.complete");
-                                    goalTracker.notifyEvent("planner.success", benchmarkGoal ? { source: "third_party", goal: contextName } : {});
+                                    const events = goalTracker.notifyEvent("planner.success", benchmarkGoal ? { source: "third_party", goal: contextName } : {});
+                                    events.forEach(e => sessionLogger.info("goal.update", benchmarkGoal ? "Goal succeeded via third-party verification" : "Goal succeeded via execution", { ...e }));
                                 }
                                 else
                                 {
