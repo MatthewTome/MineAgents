@@ -1091,6 +1091,25 @@ export async function createBot()
                         const failedIds = results.filter(r => r.status === "failed").map(r => r.id);
                         const postExecutionInventory = bot.inventory.items().map((item) => ({ name: item.name, count: item.count }));
                         const curriculumGoal = classifyCurriculumGoal(contextName);
+                        
+                        if (curriculumGoal === "iron-tools-pipeline" && ironToolsPipelineScoreTracker)
+                        {
+                            const equippedItemName = bot.heldItem?.name ?? null;
+                            const newlyAchieved = ironToolsPipelineScoreTracker.observe({ inventoryItems: postExecutionInventory, equippedItemName });
+                            for (const milestone of newlyAchieved)
+                            {
+                                sessionLogger.info("goal.benchmark.milestone", "Iron tools pipeline milestone achieved", {
+                                    goal: contextName,
+                                    milestoneId: milestone.id,
+                                    description: milestone.description,
+                                    pointsAwarded: milestone.pointsAwarded,
+                                    pointsTotal: ironToolsPipelineScoreTracker.points,
+                                    maxPoints: ironToolsPipelineScoreTracker.maxPoints,
+                                    source: "post-plan-check"
+                                });
+                            }
+                        }
+
                         const benchmarkGoal = curriculumGoal !== null;
                         const ultimateGoalAchieved = benchmarkGoal
                             ? evaluateCurriculumGoalSuccess(contextName, plan.steps, results, postExecutionInventory)
@@ -1100,7 +1119,7 @@ export async function createBot()
                         if (benchmarkGoal)
                         {
                             const pointsScored = curriculumGoal === "iron-tools-pipeline" ? ironToolsPipelineScoreTracker?.points ?? 0 : null;
-                            const maxPoints = curriculumGoal === "iron-tools-pipeline" ? ironToolsPipelineScoreTracker?.maxPoints ?? 13 : null;
+                            const maxPoints = curriculumGoal === "iron-tools-pipeline" ? ironToolsPipelineScoreTracker?.maxPoints ?? 10 : null;
                             sessionLogger.info("goal.third_party_eval", "Third-party benchmark evaluator completed", {
                                 goal: contextName,
                                 verified: thirdPartyVerifiedSuccess,

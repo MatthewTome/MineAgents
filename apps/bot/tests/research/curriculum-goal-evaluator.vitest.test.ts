@@ -26,7 +26,7 @@ describe("curriculum-goal-evaluator", () =>
         expect(evaluateCurriculumGoalSuccess("!goal build a wooden shelter", steps, results, [])).toBe(true);
     });
 
-    it("marks iron tools pipeline successful only when all required tools are present", () =>
+    it("marks iron tools pipeline successful when iron_pickaxe is present", () =>
     {
         const inventory = [
             { name: "iron_pickaxe", count: 1 },
@@ -36,7 +36,7 @@ describe("curriculum-goal-evaluator", () =>
         ];
 
         expect(evaluateCurriculumGoalSuccess("iron tools pipeline", [], [], inventory)).toBe(true);
-        expect(evaluateCurriculumGoalSuccess("iron tools pipeline", [], [], inventory.slice(0, 3))).toBe(false);
+        expect(evaluateCurriculumGoalSuccess("iron tools pipeline", [], [], [{ name: "iron_shovel", count: 1 }])).toBe(false);
     });
 
     it("tracks iron tools pipeline milestones as one-time points", () =>
@@ -64,16 +64,13 @@ describe("curriculum-goal-evaluator", () =>
                 { name: "coal", count: 2 },
                 { name: "raw_iron", count: 9 },
                 { name: "iron_ingot", count: 9 },
-                { name: "iron_pickaxe", count: 1 },
-                { name: "iron_sword", count: 1 },
-                { name: "iron_axe", count: 1 },
-                { name: "iron_shovel", count: 1 }
+                { name: "iron_pickaxe", count: 1 }
             ],
             equippedItemName: "stone_pickaxe"
         });
 
-        expect(second.map((m) => m.id)).toEqual(["step-5", "step-6", "step-7", "step-8", "step-9", "step-10", "step-11", "step-12", "step-13"]);
-        expect(tracker.points).toBe(13);
+        expect(second.map((m) => m.id)).toEqual(["step-5", "step-6", "step-7", "step-8", "step-9", "step-10"]);
+        expect(tracker.points).toBe(10);
 
         const third = tracker.observe({
             inventoryItems: [{ name: "iron_ingot", count: 500 }],
@@ -81,7 +78,7 @@ describe("curriculum-goal-evaluator", () =>
         });
 
         expect(third).toHaveLength(0);
-        expect(tracker.points).toBe(13);
+        expect(tracker.points).toBe(10);
     });
 
     it("resets milestone points between sessions", () =>

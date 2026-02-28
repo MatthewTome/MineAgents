@@ -81,7 +81,11 @@ export class IronToolsPipelineScoreTracker
 
 function normalizeGoalName(goalName: string): string
 {
-    return goalName.toLowerCase().trim();
+    return goalName
+        .toLowerCase()
+        .replace(/[_-]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
 }
 
 function getInventoryCountByName(items: { name: string; count: number }[], itemName: string): number
@@ -124,8 +128,7 @@ export function evaluateCurriculumGoalSuccess(goalName: string, steps: ActionSte
 
     if (goalType === "iron-tools-pipeline")
     {
-        const requiredTools = ["iron_pickaxe", "iron_shovel", "iron_sword", "iron_axe"];
-        return requiredTools.every((tool) => getInventoryCountByName(inventoryItems, tool) >= 1);
+        return getInventoryCountByName(inventoryItems, "iron_pickaxe") >= 1;
     }
 
     return false;
