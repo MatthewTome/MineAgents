@@ -15,9 +15,9 @@
       "details": "Craft 12 oak_planks."
     },
     {
-      "title": "Step 3: Craft 6 Sticks",
+      "title": "Step 3: Craft 12 Sticks",
       "action": "craft",
-      "details": "Craft 6 stick."
+      "details": "Craft 12 stick."
     },
     {
       "title": "Step 4: Craft a Wooden Pickaxe",
@@ -25,9 +25,9 @@
       "details": "Craft 1 wooden_pickaxe."
     },
     {
-      "title": "Step 5: Mine 11 Stone",
+      "title": "Step 5: Mine 3 Stone",
       "action": "mine",
-      "details": "Mine 11 stone."
+      "details": "Mine 3 stone."
     },
     {
       "title": "Step 6: Craft a Stone Pickaxe",

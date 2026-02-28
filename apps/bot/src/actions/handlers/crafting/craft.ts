@@ -17,18 +17,20 @@ export class CraftingSystem
         this.bot = bot;
     }
 
-    public async craft(recipe: Recipe, count: number = 1, craftingTable?: Block): Promise<void>
+    public async craft(recipe: Recipe, targetCount: number = 1, craftingTable?: Block): Promise<void>
     {
         if (recipe.requiresTable && !craftingTable)
         {
             throw new Error("Recipe requires craftingTable but none provided");
         }
 
-        console.log(`[Intent] Starting crafting sequence: ${recipe.result.count * count}x (Recipe ID: ${recipe.result.id})`);
+        const operations = Math.ceil(targetCount / recipe.result.count);
+
+        console.log(`[Intent] Starting crafting sequence: ${recipe.result.count * operations}x (Recipe ID: ${recipe.result.id})`);
 
         try
         {
-            for (let i = 0; i < count; i++)
+            for (let i = 0; i < operations; i++)
             {
                 await this.craftOnce(recipe, craftingTable);
             }

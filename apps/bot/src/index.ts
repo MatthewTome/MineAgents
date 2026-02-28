@@ -52,112 +52,6 @@ import { buildGoalMetadata, parseEnvBoolean, safeChat, toOptionalInt, type Featu
 
 const { pathfinder, Movements } = pathfinderPkg;
 
-function estimateBuildMaterialCount(step: ActionStep): number
-{
-    const params = (step.params ?? {}) as Record<string, unknown>;
-    const width = Math.max(1, Number(params.width ?? 5));
-    const length = Math.max(1, Number(params.length ?? 5));
-    const height = Math.max(1, Number(params.height ?? 3));
-    const structure = String(params.structure ?? "platform");
-
-    if (structure === "platform") return width * length;
-    if (structure === "walls" || structure === "wall") return Math.max(1, (width * 2 + length * 2) * height);
-    if (structure === "roof") return width * length;
-    if (structure === "shelter") {
-        const shelterWidth = 5;
-        const shelterLength = 5;
-        const shelterHeight = 3;
-        const floor = shelterWidth * shelterLength;
-        const walls = (shelterWidth * 2 + shelterLength * 2) * shelterHeight - 2;
-        const roof = shelterWidth * shelterLength;
-        const door = 1;
-        return floor + walls + roof + door;
-    }
-    return Math.max(4, width + length);
-}
-
-function normalizePlanForAutonomy(steps: ActionStep[], inventoryItems: { name: string; count: number }[]): ActionStep[]
-{
-    const filtered = steps.filter((step) => step.action !== "move");
-    const required = new Map<string, number>();
-    const inventoryCounts = new Map<string, number>();
-
-    for (const item of inventoryItems)
-    {
-        inventoryCounts.set(item.name, (inventoryCounts.get(item.name) ?? 0) + item.count);
-    }
-
-    const addRequired = (item: string, count: number) =>
-    {
-        if (!item || count <= 0) return;
-        required.set(item, (required.get(item) ?? 0) + count);
-    };
-
-    for (const step of filtered)
-    {
-        const params = ((step.params ?? {}) as Record<string, unknown>);
-
-        if (step.action === "build")
-        {
-            const structure = String(params.structure ?? "platform");
-            if (structure === "shelter")
-            {
-                addRequired("oak_planks", estimateBuildMaterialCount(step) - 1);
-                addRequired("oak_door", 1);
-            }
-            else
-            {
-                addRequired(String(params.material ?? "oak_planks"), estimateBuildMaterialCount(step));
-            }
-        }
-        else if (step.action === "place")
-        {
-            addRequired(String(params.item ?? ""), Math.max(1, Number(params.count ?? 1)));
-        }
-        else if (step.action === "craft")
-        {
-            const recipe = String(params.recipe ?? "");
-            const count = Math.max(1, Number(params.count ?? 1));
-            const rawMaterials = getRawMaterialsFor(recipe);
-            if (rawMaterials)
-            {
-                for (const material of rawMaterials)
-                {
-                    addRequired(material.material, material.count * count);
-                }
-            }
-        }
-        else if (step.action === "smelt")
-        {
-            const count = Math.max(1, Number(params.count ?? 1));
-            addRequired(String(params.item ?? ""), count);
-            addRequired(String(params.fuel ?? "coal"), count);
-        }
-    }
-
-    const prerequisiteSteps: ActionStep[] = Array.from(required.entries())
-        .map(([item, count]) => ({ item, deficit: count - (inventoryCounts.get(item) ?? 0) }))
-        .filter(({ deficit }) => deficit > 0)
-        .map(({ item, deficit }, index) => ({
-        id: `auto-mine-${item}-${index}`,
-        action: "mine",
-        params: { item, count: deficit },
-        description: `Auto-mine prerequisites: ${deficit} ${item}`
-    }));
-
-    const sanitized = filtered.map((step) =>
-    {
-        const params = { ...(step.params ?? {}) } as Record<string, unknown>;
-        delete params.position;
-        delete params.origin;
-        delete params.craftingTable;
-        delete params.furnace;
-        return { ...step, params };
-    });
-
-    return [...prerequisiteSteps, ...sanitized];
-}
-
 export async function createBot()
 {
     const sessionLogger = new SessionLogger();
@@ -1173,11 +1067,9 @@ export async function createBot()
                             }
                         }
 
-                        const inventoryItems = bot.inventory.items().map((item) => ({ name: item.name, count: item.count }));
-                        const autonomousSteps = normalizePlanForAutonomy(plan.steps, inventoryItems);
-                        sessionLogger.info("planner.autonomy", "Plan normalized for autonomous execution", {
-                            originalSteps: plan.steps.length,
-                            finalSteps: autonomousSteps.length
+                        const autonomousSteps = plan.steps;
+                        sessionLogger.info("planner.autonomy", "Autonomy plan normalization disabled; using planner steps verbatim", {
+                            stepCount: autonomousSteps.length
                         });
 
                         executor.reset();
