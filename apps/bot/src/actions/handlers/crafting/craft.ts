@@ -271,8 +271,9 @@ export class CraftingSystem
 export async function handleCraft(bot: Bot, step: { params?: Record<string, unknown> }, resourceLocks?: ResourceLockManager): Promise<void>
 {
     const params = step.params as unknown as { recipe: string; count?: number };
-    const name = params.recipe;
-    const count = params.count ?? 1;
+    const parsed = parseCraftRequest(params.recipe, params.count);
+    const name = parsed.itemName;
+    const count = parsed.count;
     
     if (!name) throw new Error("Crafting requires a recipe name.");
     
@@ -305,4 +306,33 @@ export async function handleCraft(bot: Bot, step: { params?: Record<string, unkn
     }
     
     await system.craft(recipe, count, table || undefined);
+}
+
+function parseCraftRequest(rawRecipe: string, requestedCount?: number): { itemName: string; count: number }
+{
+    if (!rawRecipe)
+    {
+        return { itemName: rawRecipe, count: requestedCount ?? 1 };
+    }
+
+    const normalizedRecipe = rawRecipe.trim();
+
+    if (requestedCount !== undefined)
+    {
+        return { itemName: normalizedRecipe, count: requestedCount };
+    }
+
+    const prefixedCountMatch = normalizedRecipe.match(/^(\d+)\s+(.+)$/);
+    if (!prefixedCountMatch)
+    {
+        return { itemName: normalizedRecipe, count: 1 };
+    }
+
+    const parsedCount = parseInt(prefixedCountMatch[1], 10);
+    const itemName = prefixedCountMatch[2].trim();
+
+    return {
+        itemName,
+        count: Number.isFinite(parsedCount) && parsedCount > 0 ? parsedCount : 1
+    };
 }

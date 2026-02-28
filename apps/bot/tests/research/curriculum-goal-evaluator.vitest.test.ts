@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyCurriculumGoal, evaluateCurriculumGoalSuccess } from "../../src/research/evaluators/curriculum-goal-evaluator.js";
+import { classifyCurriculumGoal, evaluateCurriculumGoalSuccess, IronToolsPipelineScoreTracker } from "../../src/research/evaluators/curriculum-goal-evaluator.js";
 import type { ActionStep } from "../../src/actions/executor.js";
 
 describe("curriculum-goal-evaluator", () =>
@@ -38,4 +38,60 @@ describe("curriculum-goal-evaluator", () =>
         expect(evaluateCurriculumGoalSuccess("iron tools pipeline", [], [], inventory)).toBe(true);
         expect(evaluateCurriculumGoalSuccess("iron tools pipeline", [], [], inventory.slice(0, 3))).toBe(false);
     });
+
+    it("tracks iron tools pipeline milestones as one-time points", () =>
+    {
+        const tracker = new IronToolsPipelineScoreTracker();
+
+        const first = tracker.observe({
+            inventoryItems: [
+                { name: "oak_log", count: 3 },
+                { name: "oak_planks", count: 12 },
+                { name: "stick", count: 6 }
+            ],
+            equippedItemName: "wooden_pickaxe"
+        });
+
+        expect(first.map((m) => m.id)).toEqual(["step-1", "step-2", "step-3", "step-4"]);
+        expect(tracker.points).toBe(4);
+
+        const second = tracker.observe({
+            inventoryItems: [
+                { name: "oak_log", count: 99 },
+                { name: "oak_planks", count: 99 },
+                { name: "stick", count: 99 },
+                { name: "cobblestone", count: 11 },
+                { name: "coal", count: 2 },
+                { name: "raw_iron", count: 9 },
+                { name: "iron_ingot", count: 9 },
+                { name: "iron_pickaxe", count: 1 },
+                { name: "iron_sword", count: 1 },
+                { name: "iron_axe", count: 1 },
+                { name: "iron_shovel", count: 1 }
+            ],
+            equippedItemName: "stone_pickaxe"
+        });
+
+        expect(second.map((m) => m.id)).toEqual(["step-5", "step-6", "step-7", "step-8", "step-9", "step-10", "step-11", "step-12", "step-13"]);
+        expect(tracker.points).toBe(13);
+
+        const third = tracker.observe({
+            inventoryItems: [{ name: "iron_ingot", count: 500 }],
+            equippedItemName: "stone_pickaxe"
+        });
+
+        expect(third).toHaveLength(0);
+        expect(tracker.points).toBe(13);
+    });
+
+    it("resets milestone points between sessions", () =>
+    {
+        const tracker = new IronToolsPipelineScoreTracker();
+        tracker.observe({ inventoryItems: [{ name: "oak_log", count: 3 }], equippedItemName: null });
+        expect(tracker.points).toBe(1);
+
+        tracker.reset();
+        expect(tracker.points).toBe(0);
+    });
+
 });

@@ -24,7 +24,7 @@ import { goalNeedsBuildSite, scoutBuildSite } from "./actions/handlers/building/
 import { SafetyRails } from "./safety/safety-rails.js";
 import { RecipeLibrary } from "./planner/knowledge.js";
 import { GoalTracker, GoalDefinition, GoalFactory } from "./research/goals/index.js";
-import { classifyCurriculumGoal, evaluateCurriculumGoalSuccess } from "./research/evaluators/curriculum-goal-evaluator.js";
+import { classifyCurriculumGoal, evaluateCurriculumGoalSuccess, IronToolsPipelineScoreTracker } from "./research/evaluators/curriculum-goal-evaluator.js";
 import { RoleManager, resolveRole, listRoleNames, type AgentRole } from "./teamwork/roles.js";
 import { StandbyManager } from "./teamwork/standby-manager.js";
 import { ResourceLockManager, resolveLeaderForGoal } from "./teamwork/coordination.js";
@@ -366,6 +366,8 @@ export async function createBot()
         let nextPlanningAttempt = 0;
         let currentGoal: string | null = null;
         let teamPlanWaitCount = 0;
+        let ironToolsPipelineScoreTracker: IronToolsPipelineScoreTracker | null = null;
+        let ironToolsPipelineScoreGoalName: string | null = null;
 
         const agentKey = envAgentId !== null ? `agent-${envAgentId}` : `agent-${bot.username}`;
         const resourceLocks = new ResourceLockManager({
@@ -804,6 +806,36 @@ export async function createBot()
             const activeGoalObj = goalTracker.getActiveGoal();
             currentGoal = activeGoalObj ? activeGoalObj.definition.name : null;
 
+            const activeGoalType = currentGoal ? classifyCurriculumGoal(currentGoal) : null;
+            if (activeGoalType === "iron-tools-pipeline")
+            {
+                if (!ironToolsPipelineScoreTracker || ironToolsPipelineScoreGoalName !== currentGoal)
+                {
+                    ironToolsPipelineScoreTracker = new IronToolsPipelineScoreTracker();
+                    ironToolsPipelineScoreGoalName = currentGoal;
+                }
+
+                const inventoryItems = bot.inventory.items().map((item) => ({ name: item.name, count: item.count }));
+                const equippedItemName = bot.heldItem?.name ?? null;
+                const newlyAchieved = ironToolsPipelineScoreTracker.observe({ inventoryItems, equippedItemName });
+                for (const milestone of newlyAchieved)
+                {
+                    sessionLogger.info("goal.benchmark.milestone", "Iron tools pipeline milestone achieved", {
+                        goal: currentGoal,
+                        milestoneId: milestone.id,
+                        description: milestone.description,
+                        pointsAwarded: milestone.pointsAwarded,
+                        pointsTotal: ironToolsPipelineScoreTracker.points,
+                        maxPoints: ironToolsPipelineScoreTracker.maxPoints
+                    });
+                }
+            }
+            else
+            {
+                ironToolsPipelineScoreTracker = null;
+                ironToolsPipelineScoreGoalName = null;
+            }
+
             if (!currentGoal && !isPlanning && standbyManager.getState() !== "standby")
             {
                 standbyManager.enterStandby(bot, "No active goals");
@@ -1175,9 +1207,13 @@ export async function createBot()
 
                         if (benchmarkGoal)
                         {
+                            const pointsScored = curriculumGoal === "iron-tools-pipeline" ? ironToolsPipelineScoreTracker?.points ?? 0 : null;
+                            const maxPoints = curriculumGoal === "iron-tools-pipeline" ? ironToolsPipelineScoreTracker?.maxPoints ?? 13 : null;
                             sessionLogger.info("goal.third_party_eval", "Third-party benchmark evaluator completed", {
                                 goal: contextName,
-                                verified: thirdPartyVerifiedSuccess
+                                verified: thirdPartyVerifiedSuccess,
+                                pointsScored,
+                                maxPoints
                             });
                         }
 

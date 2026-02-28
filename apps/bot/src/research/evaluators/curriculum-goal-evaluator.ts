@@ -5,6 +5,83 @@ const IRON_PIPELINE_GOAL_PATTERNS = ["iron tools pipeline", "finalize_iron_tools
 
 export type CurriculumGoalType = "shelter" | "iron-tools-pipeline";
 
+export interface IronToolsPipelineEvaluationState
+{
+    inventoryItems: { name: string; count: number }[];
+    equippedItemName: string | null;
+}
+
+type IronToolsPipelineMilestone =
+{
+    id: string;
+    description: string;
+    isMet: (state: IronToolsPipelineEvaluationState) => boolean;
+};
+
+const IRON_TOOLS_PIPELINE_MILESTONES: IronToolsPipelineMilestone[] = [
+    { id: "step-1", description: "Inventory contains >= 3 oak_log", isMet: (state) => getInventoryCountByName(state.inventoryItems, "oak_log") >= 3 },
+    { id: "step-2", description: "Inventory contains >= 12 oak_planks", isMet: (state) => getInventoryCountByName(state.inventoryItems, "oak_planks") >= 12 },
+    { id: "step-3", description: "Inventory contains >= 6 stick", isMet: (state) => getInventoryCountByName(state.inventoryItems, "stick") >= 6 },
+    { id: "step-4", description: "Equipped item == wooden_pickaxe", isMet: (state) => state.equippedItemName === "wooden_pickaxe" },
+    { id: "step-5", description: "Inventory contains >= 11 cobblestone", isMet: (state) => getInventoryCountByName(state.inventoryItems, "cobblestone") >= 11 },
+    { id: "step-6", description: "Equipped item == stone_pickaxe", isMet: (state) => state.equippedItemName === "stone_pickaxe" },
+    { id: "step-7", description: "Inventory contains >= 2 coal", isMet: (state) => getInventoryCountByName(state.inventoryItems, "coal") >= 2 },
+    { id: "step-8", description: "Inventory contains >= 9 raw_iron", isMet: (state) => getInventoryCountByName(state.inventoryItems, "raw_iron") >= 9 },
+    { id: "step-9", description: "Inventory contains >= 9 iron_ingot", isMet: (state) => getInventoryCountByName(state.inventoryItems, "iron_ingot") >= 9 },
+    { id: "step-10", description: "Inventory contains >= 1 iron_pickaxe", isMet: (state) => getInventoryCountByName(state.inventoryItems, "iron_pickaxe") >= 1 },
+    { id: "step-11", description: "Inventory contains >= 1 iron_sword", isMet: (state) => getInventoryCountByName(state.inventoryItems, "iron_sword") >= 1 },
+    { id: "step-12", description: "Inventory contains >= 1 iron_axe", isMet: (state) => getInventoryCountByName(state.inventoryItems, "iron_axe") >= 1 },
+    { id: "step-13", description: "Inventory contains >= 1 iron_shovel", isMet: (state) => getInventoryCountByName(state.inventoryItems, "iron_shovel") >= 1 }
+];
+
+export type IronToolsPipelineMilestoneResult =
+{
+    id: string;
+    description: string;
+    pointsAwarded: number;
+};
+
+export class IronToolsPipelineScoreTracker
+{
+    private readonly achievedMilestones: Set<string> = new Set();
+
+    observe(state: IronToolsPipelineEvaluationState): IronToolsPipelineMilestoneResult[]
+    {
+        const newlyAchieved: IronToolsPipelineMilestoneResult[] = [];
+
+        for (const milestone of IRON_TOOLS_PIPELINE_MILESTONES)
+        {
+            if (this.achievedMilestones.has(milestone.id))
+            {
+                continue;
+            }
+
+            if (milestone.isMet(state))
+            {
+                this.achievedMilestones.add(milestone.id);
+                newlyAchieved.push({ id: milestone.id, description: milestone.description, pointsAwarded: 1 });
+            }
+        }
+
+        return newlyAchieved;
+    }
+
+    reset(): void
+    {
+        this.achievedMilestones.clear();
+    }
+
+    get points(): number
+    {
+        return this.achievedMilestones.size;
+    }
+
+    get maxPoints(): number
+    {
+        return IRON_TOOLS_PIPELINE_MILESTONES.length;
+    }
+}
+
 function normalizeGoalName(goalName: string): string
 {
     return goalName.toLowerCase().trim();

@@ -1,0 +1,73 @@
+{
+  "name": "Iron Tools Pipeline",
+  "goal": "Efficiently craft a full set of iron tools",
+  "tags": ["iron", "smelting", "tools", "iron tools pipeline", "craft", "pickaxe", "sword", "axe", "shovel"],
+  "notes": "It is very important to follow step-by-step.",
+  "steps": [
+    {
+      "title": "Step 1: Mine 3 Oak Logs",
+      "action": "mine",
+      "details": "Mine 3 oak_log."
+    },
+    {
+      "title": "Step 2: Craft 12 Oak Planks",
+      "action": "craft",
+      "details": "Craft 12 oak_planks."
+    },
+    {
+      "title": "Step 3: Craft 6 Sticks",
+      "action": "craft",
+      "details": "Craft 6 stick."
+    },
+    {
+      "title": "Step 4: Craft a Wooden Pickaxe",
+      "action": "craft",
+      "details": "Craft 1 wooden_pickaxe."
+    },
+    {
+      "title": "Step 5: Mine 11 Stone",
+      "action": "mine",
+      "details": "Mine 11 stone."
+    },
+    {
+      "title": "Step 6: Craft a Stone Pickaxe",
+      "action": "craft",
+      "details": "Craft 1 stone_pickaxe."
+    },
+    {
+      "title": "Step 7: Mine 2 Coal",
+      "action": "mine",
+      "details": "Mine 2 coal."
+    },
+    {
+      "title": "Step 8: Mine 9 Iron Ore",
+      "action": "mine",
+      "details": "Mine 9 iron_ore."
+    },
+    {
+      "title": "Step 9: Smelt 9 Iron Ingots",
+      "action": "smelt",
+      "details": "Smelt 9 raw_iron in a furnace."
+    },
+    {
+      "title": "Step 10: Craft Iron Pickaxe",
+      "action": "craft",
+      "details": "Craft 1 iron_pickaxe."
+    },
+    {
+      "title": "Step 11: Craft Iron Sword",
+      "action": "craft",
+      "details": "Craft 1 iron_sword."
+    },
+    {
+      "title": "Step 12: Craft Iron Axe",
+      "action": "craft",
+      "details": "Craft 1 iron_axe."
+    },
+    {
+      "title": "Step 13: Craft Iron Shovel",
+      "action": "craft",
+      "details": "Craft 1 iron_shovel."
+    }
+  ]
+}

@@ -17,6 +17,11 @@ export async function handleSmelt(bot: Bot, step: { params?: Record<string, unkn
     const rawItem = resolveItemName(bot, params.item);
     const fuelItem = resolveItemName(bot, params.fuel ?? "coal");
     const count = params.count ?? 1;
+    const inputCandidates = [rawItem];
+    if (rawItem === "iron_ore" || rawItem === "iron")
+    {
+        inputCandidates.push("raw_iron");
+    }
 
     let furnaceBlock = params.furnace
         ? bot.blockAt(new Vec3(params.furnace.x, params.furnace.y, params.furnace.z))
@@ -101,10 +106,12 @@ export async function handleSmelt(bot: Bot, step: { params?: Record<string, unkn
         const furnace = await bot.openFurnace(furnaceBlock!);
 
         const fuel = bot.inventory.items().find((item) => item.name === fuelItem);
-        const input = bot.inventory.items().find((item) => item.name.includes(rawItem));
+        const input = bot.inventory.items().find((item) =>
+            inputCandidates.some((candidate) => item.name === candidate || item.name.includes(candidate))
+        );
         
         if (!fuel) throw new Error(`No fuel found (${fuelItem})`);
-        if (!input) throw new Error(`No input found (${rawItem})`);
+        if (!input) throw new Error(`No input found (${inputCandidates.join(" or ")})`);
 
         const amountToSmelt = Math.min(count, input.count);
         
@@ -119,7 +126,7 @@ export async function handleSmelt(bot: Bot, step: { params?: Record<string, unkn
             throw new Error(`Failed to put items in furnace: ${err}`);
         }
 
-        console.log(`[smelt] Smelting ${amountToSmelt} ${rawItem}...`);
+        console.log(`[smelt] Smelting ${amountToSmelt} ${input.name} (requested: ${rawItem})...`);
 
         let smeltComplete = false;
         let windowOpen = true;

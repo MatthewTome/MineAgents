@@ -136,6 +136,30 @@ describe("handleSmelt", () =>
             expect(furnace.close).toHaveBeenCalled();
         });
 
+        it("falls back to raw_iron when asked to smelt iron_ore", async () => 
+        {
+            const furnaceBlock = { name: "furnace", position: new Vec3(10, 64, 10) };
+            bot.findBlock.mockReturnValue(furnaceBlock);
+            bot.blockAt.mockReturnValue(furnaceBlock);
+
+            bot.inventory.items.mockReturnValue([
+                { name: "coal", count: 1, type: 1 },
+                { name: "raw_iron", count: 2, type: 2 }
+            ]);
+
+            furnace.inputItem.mockReturnValue({ count: 2 });
+            furnace.outputItem.mockReturnValue(null);
+
+            const promise = handleSmelt(bot, { params: { item: "iron_ore", count: 2 } });
+
+            furnace.outputItem.mockReturnValue({ name: "iron_ingot", count: 2 });
+            await simulateSmelting(1, true);
+
+            await promise;
+
+            expect(furnace.putInput).toHaveBeenCalledWith(2, null, 2);
+        });
+
         it("throws error if item name is missing", async () => 
         {
             await expect(handleSmelt(bot, { params: {} }))
