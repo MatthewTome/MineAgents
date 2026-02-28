@@ -1,23 +1,23 @@
 {
   "name": "Iron Tools Pipeline",
   "goal": "Efficiently craft a full set of iron tools",
-  "tags": ["iron", "smelting", "tools", "iron tools pipeline", "craft", "pickaxe", "sword", "axe", "shovel"],
+  "tags": ["iron", "smelting", "tools", "iron tools pipeline", "craft", "pickaxe"],
   "notes": "It is very important to follow step-by-step.",
   "steps": [
     {
-      "title": "Step 1: Mine 3 Oak Logs",
+      "title": "Step 1: Mine 2 Oak Logs",
       "action": "mine",
-      "details": "Mine 3 oak_log."
+      "details": "Mine 2 oak_log."
     },
     {
-      "title": "Step 2: Craft 12 Oak Planks",
+      "title": "Step 2: Craft 6 Oak Planks",
       "action": "craft",
-      "details": "Craft 12 oak_planks."
+      "details": "Craft 6 oak_planks."
     },
     {
-      "title": "Step 3: Craft 12 Sticks",
+      "title": "Step 3: Craft 6 Sticks",
       "action": "craft",
-      "details": "Craft 12 stick."
+      "details": "Craft 6 stick."
     },
     {
       "title": "Step 4: Craft a Wooden Pickaxe",
@@ -40,34 +40,19 @@
       "details": "Mine 2 coal."
     },
     {
-      "title": "Step 8: Mine 9 Iron Ore",
+      "title": "Step 8: Mine 3 Iron Ore",
       "action": "mine",
-      "details": "Mine 9 iron_ore."
+      "details": "Mine 3 iron_ore."
     },
     {
-      "title": "Step 9: Smelt 9 Iron Ingots",
+      "title": "Step 9: Smelt 3 Iron Ingots",
       "action": "smelt",
-      "details": "Smelt 9 raw_iron in a furnace."
+      "details": "Smelt 3 raw_iron in a furnace."
     },
     {
       "title": "Step 10: Craft Iron Pickaxe",
       "action": "craft",
       "details": "Craft 1 iron_pickaxe."
-    },
-    {
-      "title": "Step 11: Craft Iron Sword",
-      "action": "craft",
-      "details": "Craft 1 iron_sword."
-    },
-    {
-      "title": "Step 12: Craft Iron Axe",
-      "action": "craft",
-      "details": "Craft 1 iron_axe."
-    },
-    {
-      "title": "Step 13: Craft Iron Shovel",
-      "action": "craft",
-      "details": "Craft 1 iron_shovel."
     }
   ]
 }

@@ -1,7 +1,7 @@
 import type { ActionStep } from "../../actions/executor.js";
 
 const SHELTER_GOAL_PATTERNS = ["wooden shelter", "shelter before nightfall", "build a small wooden shelter"];
-const IRON_PIPELINE_GOAL_PATTERNS = ["iron tools pipeline", "finalize_iron_tools_pipeline"];
+const IRON_PIPELINE_GOAL_PATTERNS = ["iron tools pipeline"];
 
 export type CurriculumGoalType = "shelter" | "iron-tools-pipeline";
 
@@ -19,19 +19,16 @@ type IronToolsPipelineMilestone =
 };
 
 const IRON_TOOLS_PIPELINE_MILESTONES: IronToolsPipelineMilestone[] = [
-    { id: "step-1", description: "Inventory contains >= 3 oak_log", isMet: (state) => getInventoryCountByName(state.inventoryItems, "oak_log") >= 3 },
-    { id: "step-2", description: "Inventory contains >= 12 oak_planks", isMet: (state) => getInventoryCountByName(state.inventoryItems, "oak_planks") >= 12 },
+    { id: "step-1", description: "Inventory contains >= 1 oak_log", isMet: (state) => getInventoryCountByName(state.inventoryItems, "oak_log") >= 1 },
+    { id: "step-2", description: "Inventory contains >= 3 oak_planks", isMet: (state) => getInventoryCountByName(state.inventoryItems, "oak_planks") >= 3 },
     { id: "step-3", description: "Inventory contains >= 6 stick", isMet: (state) => getInventoryCountByName(state.inventoryItems, "stick") >= 6 },
     { id: "step-4", description: "Equipped item == wooden_pickaxe", isMet: (state) => state.equippedItemName === "wooden_pickaxe" },
-    { id: "step-5", description: "Inventory contains >= 11 cobblestone", isMet: (state) => getInventoryCountByName(state.inventoryItems, "cobblestone") >= 11 },
+    { id: "step-5", description: "Inventory contains >= 3 cobblestone", isMet: (state) => getInventoryCountByName(state.inventoryItems, "cobblestone") >= 3 },
     { id: "step-6", description: "Equipped item == stone_pickaxe", isMet: (state) => state.equippedItemName === "stone_pickaxe" },
-    { id: "step-7", description: "Inventory contains >= 2 coal", isMet: (state) => getInventoryCountByName(state.inventoryItems, "coal") >= 2 },
-    { id: "step-8", description: "Inventory contains >= 9 raw_iron", isMet: (state) => getInventoryCountByName(state.inventoryItems, "raw_iron") >= 9 },
-    { id: "step-9", description: "Inventory contains >= 9 iron_ingot", isMet: (state) => getInventoryCountByName(state.inventoryItems, "iron_ingot") >= 9 },
+    { id: "step-7", description: "Inventory contains >= 1 coal", isMet: (state) => getInventoryCountByName(state.inventoryItems, "coal") >= 1 },
+    { id: "step-8", description: "Inventory contains >= 3 raw_iron", isMet: (state) => getInventoryCountByName(state.inventoryItems, "raw_iron") >= 3 },
+    { id: "step-9", description: "Inventory contains >= 3 iron_ingot", isMet: (state) => getInventoryCountByName(state.inventoryItems, "iron_ingot") >= 3 },
     { id: "step-10", description: "Inventory contains >= 1 iron_pickaxe", isMet: (state) => getInventoryCountByName(state.inventoryItems, "iron_pickaxe") >= 1 },
-    { id: "step-11", description: "Inventory contains >= 1 iron_sword", isMet: (state) => getInventoryCountByName(state.inventoryItems, "iron_sword") >= 1 },
-    { id: "step-12", description: "Inventory contains >= 1 iron_axe", isMet: (state) => getInventoryCountByName(state.inventoryItems, "iron_axe") >= 1 },
-    { id: "step-13", description: "Inventory contains >= 1 iron_shovel", isMet: (state) => getInventoryCountByName(state.inventoryItems, "iron_shovel") >= 1 }
 ];
 
 export type IronToolsPipelineMilestoneResult =
